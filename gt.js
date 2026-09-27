@@ -48,7 +48,7 @@ function gtRunStart(){
   const on=!G.daily&&(meta.tuto||0)<TUTO.length;
   G.gt={on,step:-1,T:null,tipT:0};
   /* les systèmes avancés attendent le deuxième cycle */
-  G.gc.dorm=meta.runs<1;G.gx.dorm=meta.runs<1;
+  G.gc.dorm=!G.daily&&meta.runs<1;G.gx.dorm=!G.daily&&meta.runs<1;
   if(on){G.help=0;G.banner=null;tutGo(meta.tuto||0);}
 }
 function tutGo(i){
@@ -61,7 +61,7 @@ function tutDone(){
   banner('Prologue terminé','+60 éclats · un objet rare',COL.gd,140);giDrop(G.p.x,G.p.y,'rift',1);SFX.ach();
   gsSay('Tu sais l’essentiel. Le reste, le rêve te l’apprendra. Je reste près de toi, dans chaque écho.',GUIDE,COL.gd,1);
 }
-function tip(id){if(!meta.tips)meta.tips={};if(meta.tips[id]||!TIPS[id]||G.daily)return false;meta.tips[id]=1;if(G.gt)G.gt.lastTip=G.time;saveMeta();gsSay(TIPS[id].split(/(?<=[.!])\s/)[0],'Astuce · détails dans le Guide',COL.gd,0,1);return true;}
+function tip(id){if(!meta.tips)meta.tips={};if(meta.tips[id]||!TIPS[id]||G.daily)return false;meta.tips[id]=1;if(G.gt)G.gt.lastTip=G.time;saveMeta();gsSay(TIPS[id].replace(/([.!])\s[\s\S]*$/,'$1'),'Astuce · détails dans le Guide',COL.gd,0,1);return true;}
 function gtTick(){
   const S=G.gt;if(!S)return;const P=G.p;
   if(S.on&&S.T){const T=S.T,st=TUTO[S.step];T.t++;

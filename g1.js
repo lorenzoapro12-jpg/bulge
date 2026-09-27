@@ -18,7 +18,7 @@ function R(){_seed=(_seed+0x6D2B79F5)>>>0;let t=_seed;t=Math.imul(t^(t>>>15),t|1
 const rr=(a,b)=>a+R()*(b-a);
 const pick=a=>a[Math.floor(R()*a.length)];
 const fr=(a,b)=>a+Math.random()*(b-a);
-function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(R()*(i+1));const t=a[i];a[i]=a[j];a[j]=t;}return a;}
+function shuffle(a,r){r=r||R;for(let i=a.length-1;i>0;i--){const j=Math.floor(r()*(i+1));const t=a[i];a[i]=a[j];a[j]=t;}return a;}
 function dist2(ax,ay,bx,by){const dx=ax-bx,dy=ay-by;return dx*dx+dy*dy;}
 function angDiff(a,b){let d=(b-a)%TAU;if(d>Math.PI)d-=TAU;else if(d<-Math.PI)d+=TAU;return d;}
 function fmt(n){return Math.round(n).toLocaleString('fr-FR');}

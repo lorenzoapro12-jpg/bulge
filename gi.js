@@ -270,7 +270,7 @@ function drawTankPreview(eq){
 }
 function giBindUI(){
   $('bHangar').onclick=()=>{SFX.ui();HG.sel=null;renderHangar();show('ov-hangar');};
-  $('hgName').onchange=e=>{meta.tank.name=(e.target.value||'BULGE-01').slice(0,18);saveMeta();};
+  $('hgName').onchange=e=>{meta.tank.name=(e.target.value||'BULGE-01').slice(0,18);e.target.value=meta.tank.name;saveMeta();};
   $('hgF').onclick=e=>{const b=e.target.closest('[data-f]');if(b){HG.f=b.dataset.f;renderHangar();}};
   $('hgInv').onclick=e=>{const b=e.target.closest('[data-it]');if(b){HG.sel=+b.dataset.it;SFX.ui();renderHangar();}};
   $('hgSlots').onclick=e=>{const b=e.target.closest('[data-slot]');if(!b)return;const id=meta.eq[b.dataset.slot];HG.f=STYPE(b.dataset.slot);HG.sel=id||null;renderHangar();};

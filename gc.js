@@ -80,7 +80,7 @@ function gcUlt(){
   if(!G||G.state!=='play'||!G.gc)return;const P=G.p;if(P.dead||P.ultC<100||P.ultA)return;
   P.ultC=0;if(P.u&&P.u.pacte){P.bub=Math.max(1,P.bub-10);checkLevel();}const k=G.prof,dm=P.dmg*lvlDmg(),U=ULT[k]||ULT.bal;G.gc.ultFlash=40;
   SFX.bossIn();G.glitch=Math.max(G.glitch,16);
-  if(k==='scout'){P.ultA={k,t:360};P.bSpd=P.spd;P.bFire=P.fireI;P.spd*=1.6;P.fireI=Math.max(2,P.fireI*.5);}
+  if(k==='scout'){P.ultA={k,t:360};P.bSpd=P.spd;P.bFire=P.fireI;P.spd*=1.6;P.fireI=Math.max(2,P.fireI*.5);P.uSpd=P.spd;P.uFire=P.fireI;}
   else if(k==='tank')P.ultA={k,t:360};
   else if(k==='spectre'){P.ultA={k,t:300};G.tstop=300;P.bCrit=P.crit;P.crit=1;}
   else if(k==='oracle'){const T=G.en.filter(e=>!e.dead&&e.spawn<=0&&dist2(e.x,e.y,P.x,P.y)<950*950).sort((a,b)=>b.hp-a.hp).slice(0,10);G.gc.strikes=T.map((e,i)=>({e,t:i*7}));
@@ -90,7 +90,7 @@ function gcUlt(){
     ringFX(P.x,P.y,20,R,'#ffffff',40,12);ringFX(P.x,P.y,20,R*.8,P.col,34,8);FX({ty:4,x:P.x,y:P.y,vx:0,vy:0,r:900,life:40,max:40,col:P.col});G.flash=.55;shake(1);G.freeze=Math.max(G.freeze,4);P.ultA={k,t:30};}
 }
 function gcEndUlt(){const P=G.p,A=P.ultA;if(!A)return;
-  if(A.k==='scout'){P.spd=P.bSpd;P.fireI=P.bFire;}if(A.k==='spectre'){P.crit=P.bCrit;G.tstop=0;}if(A.k==='reine')P.drones=Math.max(0,P.drones-6);P.ultA=null;}
+  if(A.k==='scout'){P.spd=P.bSpd*P.spd/P.uSpd;P.fireI=P.bFire*P.fireI/P.uFire;}if(A.k==='spectre'){P.crit=P.bCrit+P.crit-1;G.tstop=0;}if(A.k==='reine')P.drones=Math.max(0,P.drones-6);P.ultA=null;}
 /* bouclier et ultimes défensifs : appelé au début de hurtPlayer */
 function gcShield(dmg,sx,sy){const P=G.p;
   if(P.shieldT>0||(P.ultA&&(P.ultA.k==='tank'||P.ultA.k==='scout'))){sparks(P.x,P.y,'#7dff4a',6,3);return true;}return false;}
@@ -130,7 +130,7 @@ function gcTick(){
   for(let i=C.bombs.length-1;i>=0;i--){const b=C.bombs[i];if(--b.t>0)continue;C.bombs.splice(i,1);ringFX(b.x,b.y,10,b.r,COL.rd,18,6);FX({ty:4,x:b.x,y:b.y,vx:0,vy:0,r:b.r*1.6,life:16,max:16,col:COL.rd});shake(.3);SFX.pop(true);
     if(dist2(b.x,b.y,P.x,P.y)<(b.r+P.r)**2)hurtPlayer(9*dmgMul(),b.x,b.y);}
   for(const L of [C.beams,C.bolts])for(let i=L.length-1;i>=0;i--)if(--L[i].life<=0)L.splice(i,1);
-  if(C.ultFlash>0)C.ultFlash--;
+  if(C.ultFlash>0)C.ultFlash--;if(C.gift>0&&G.state==='play'&&--C.gift===0)openAltar(-1);
   if(G.t%30===0)for(const e of G.en)if(e.aff==='regen'&&!e.dead)e.hp=Math.min(e.mhp,e.hp+e.mhp*.04);
   /* autels */
   let near=-1;for(let i=0;i<WD.alts.length;i++){if(C.altUsed[i])continue;const a=WD.alts[i];if(dist2(a.x,a.y,P.x,P.y)<95*95){near=i;break;}}
@@ -143,7 +143,7 @@ function gcTick(){
         const e=mkEnemy(ks[Math.floor(R()*ks.length)],Rf.x+Math.cos(a)*(Rf.r-30),Rf.y+Math.sin(a)*(Rf.r-30),{aggro:true,rift:1});e.spawn=24;}}
       if(Rf.t>=Rf.dur){C.rift=null;C.riftDone[Rf.i]=1;for(const e of G.en)if(e.rift&&!e.dead)killEnemy(e);
         P.ultC=100;gsShard&&gsShard(15);giDrop(Rf.x,Rf.y,'rift');dropBubbles(Rf.x,Rf.y,Math.round(30*P.greed),60,false);ringFX(Rf.x,Rf.y,20,Rf.r,COL.gd,30,8);G.flash=.4;
-        banner('Faille scellée','Ultime chargé · don de l’autel',COL.gd,120);SFX.ach();setTimeout(()=>{if(G&&G.state==='play')openAltar(-1);},400);}}}
+        banner('Faille scellée','Ultime chargé · don de l’autel',COL.gd,120);SFX.ach();C.gift=24;}}}
   else if(G.t%6===0&&!C.dorm)for(let i=0;i<WD.rifts.length;i++){if(C.riftDone[i])continue;const f=WD.rifts[i];if(dist2(f.x,f.y,P.x,P.y)<80*80&&!G.arena){
     C.rift={x:f.x,y:f.y,r:430,t:0,dur:1200,i};banner('Faille','Tiens 20 secondes dans le cercle',COL.mg,110);G.glitch=24;SFX.bossIn();
     if(!C.firstRift&&G.gs){C.firstRift=1;gsSay('Les failles sont des blessures du rêve. Scelle-la.','',COL.mg,1,1);}break;}}
@@ -151,7 +151,7 @@ function gcTick(){
 function openAltar(i){
   const P=G.p,ch=[],have=P.sk.filter(Boolean).map(s=>s.id);
   if(i>=0&&G.gs)gsSay(ALT_Q[WD.alts[i].q],'Autel d’Iris',COL.gd,1,1);
-  if(!P.sk[1]){const pool=Object.keys(SKL).filter(k=>!have.includes(k)).sort(()=>R()-.5).slice(0,2);
+  if(!P.sk[1]){const pool=shuffle(Object.keys(SKL).filter(k=>!have.includes(k))).slice(0,2);
     for(const k of pool)ch.push({u:{id:'nsk_'+k,n:SKL[k].n,ic:SKL[k].ic,c:'Nouvelle compétence · '+KEYL[1],d:SKL[k].d,f:P=>{P.sk[1]={id:k,l:1,cd:0};P.evo['sk_'+k]=1;}}});}
   for(let j=0;j<2&&ch.length<3;j++){const s=P.sk[j];if(!s||s.l>=3)continue;const K=SKL[s.id];
     ch.push({u:{id:'sk_'+s.id,n:K.n,ic:K.ic,c:'Amélioration · '+KEYL[j],d:'Niveau '+(s.l+1)+' : plus de dégâts, de portée, recharge plus courte.',f:P=>{s.l++;}}});}

@@ -45,12 +45,12 @@ function onUp(e){
 }
 function onKey(e){
   const inGame=G&&G.state==='play';
-  if(inGame&&['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();
+  if((inGame||G&&G.state==='evo')&&['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();
   inp.keys[e.code]=true;auInit();
   if(e.code==='KeyM'){setMute(!meta.mute);updMuteBtn();return;}
   if(!G)return;
-  if(G.state==='duel'){const m={Digit1:'tir',Digit2:'sk0',Digit3:'sk1',Digit4:'garde',Digit5:'scan',Digit6:'ult'};if(m[e.code])duelAct(m[e.code]);else if(e.code==='Enter')duelEndTurn();return;}
-  if(G.state==='evo'){if(e.code==='Digit1'||e.code==='Numpad1')pickEvo(0);else if(e.code==='Digit2'||e.code==='Numpad2')pickEvo(1);else if(e.code==='KeyR')reroll();return;}
+  if(G.state==='duel'){const d=/^(?:Digit|Numpad)([1-9])$/.exec(e.code),a=d&&DU?DU.keys[+d[1]-1]:null;if(a)duelAct(a);else if(e.code==='Enter')duelEndTurn();return;}
+  if(G.state==='evo'){if(e.code==='Digit1'||e.code==='Numpad1')pickEvo(0);else if(e.code==='Digit2'||e.code==='Numpad2')pickEvo(1);else if(e.code==='Digit3'||e.code==='Numpad3')pickEvo(2);else if(e.code==='KeyR')reroll();return;}
   if(inGame&&(e.code==='Space'||e.code==='ShiftLeft'||e.code==='ShiftRight'))tryDash();
   if(inGame&&!e.repeat){if(e.code==='KeyQ')gcUse(0);else if(e.code==='KeyE')gcUse(1);else if(e.code==='KeyR')gcUlt();else if(e.code==='KeyF')gxInteract();}
   if(e.code==='Escape'||e.code==='KeyP')togglePause();
@@ -101,7 +101,7 @@ function pickEvo(i){
   const P=G.p,c=ch.mut?COL.gd:COL.cy;ftext(P.x,P.y-P.r-22,ch.u.n,c,19);ringFX(P.x,P.y,P.r,P.r*4,c,24,4);sparks(P.x,P.y,c,20,5);
   if(G.pendingEvo.length)G.evoDelay=12;
 }
-function reroll(){if(!G||G.state!=='evo'||G.p.rerolls<=0)return;G.p.rerolls--;G.choices=rollChoices(G.evoMut);renderEvo();SFX.ui();}
+function reroll(){if(!G||G.state!=='evo'||G.p.rerolls<=0||G.evoAlt)return;G.p.rerolls--;G.choices=rollChoices(G.evoMut);renderEvo();SFX.ui();}
 function buildSummary(){
   const P=G.p,parts=[];
   for(const id of P.muts){const m=MUT.find(x=>x.id===id);parts.push('<span class="chip mut">'+m.ic+' '+m.n+'</span>');}
@@ -202,10 +202,10 @@ function boot(){
   resize();addEventListener('resize',()=>{CVR=null;resize();});
   cv.addEventListener('pointerdown',onDown,{passive:false});cv.addEventListener('contextmenu',e=>e.preventDefault());
   cv.addEventListener('pointermove',onMove,{passive:true});
-  cv.addEventListener('pointerup',onUp);cv.addEventListener('pointercancel',onUp);
+  cv.addEventListener('pointerup',onUp);cv.addEventListener('pointercancel',e=>{if(inp.B&&inp.B.id===e.pointerId)inp.B=null;onUp(e);});
   cv.addEventListener('contextmenu',e=>e.preventDefault());
   addEventListener('keydown',onKey);
-  addEventListener('keyup',e=>{inp.keys[e.code]=false;});
+  addEventListener('keyup',e=>{inp.keys[e.code]=false;if(G&&G.state==='evo'&&e.code==='Space')e.preventDefault();});
   addEventListener('blur',()=>{inp.keys={};inp.L=inp.R=null;inp.mdown=false;});
   document.addEventListener('visibilitychange',()=>{if(document.hidden&&G&&G.state==='play')togglePause();});
   $('bPlay').onclick=()=>{auInit();SFX.ui();renderProf();show('ov-prof');};

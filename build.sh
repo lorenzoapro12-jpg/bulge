@@ -3,6 +3,8 @@
 #
 #   bash build.sh          -> génère bulge.html et compare à l'empreinte attendue
 #   bash build.sh --print  -> affiche l'empreinte produite sans la comparer
+#   bash build.sh --update -> accepte un changement légitime : enregistre la
+#                             nouvelle empreinte (à annoncer dans le compte rendu)
 #
 # L'ordre ci-dessous est figé : il définit le contenu de bulge.html.
 set -euo pipefail
@@ -18,6 +20,12 @@ ACTUAL=$(sha256sum bulge.html | cut -d' ' -f1)
 
 if [[ "${1:-}" == "--print" ]]; then
   echo "$ACTUAL  bulge.html"
+  exit 0
+fi
+
+if [[ "${1:-}" == "--update" ]]; then
+  echo "$ACTUAL  bulge.html" > "$EXPECTED_FILE"
+  echo "build: empreinte mise à jour -> $ACTUAL"
   exit 0
 fi
 

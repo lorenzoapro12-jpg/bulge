@@ -24,8 +24,8 @@ const INT={atk:{ic:'⚔',t:v=>'Attaque '+v},big:{ic:'💥',t:v=>'Frappe lourde '
 function gxWorld(rnd){
   const S=WD.sites,bySeg={};for(const s of WD.segs)(bySeg[s.e]=bySeg[s.e]||[]).push(s);
   const far=(x,y,d)=>{for(const L of [...WD.alts,...WD.rifts,...WD.lms,...WD.hearts])if(dist2(L.x,L.y,x,y)<d*d)return false;return dist2(x,y,WD.core.x,WD.core.y)>1500*1500;};
-  WD.scn=[];WD.hunt=[];const types=['convoi','balises','course'].sort(()=>rnd()-.5);
-  const edges=WD.edges.map((e,i)=>i).sort(()=>rnd()-.5),used=new Set();
+  WD.scn=[];WD.hunt=[];const types=shuffle(['convoi','balises','course'],rnd);
+  const edges=shuffle(WD.edges.map((e,i)=>i),rnd),used=new Set();
   for(const dmin of [650,420,250])for(const ei of edges){if(WD.scn.length>=3)break;if(used.has(ei))continue;const L=bySeg[ei];if(!L||L.length<18)continue;
     const s=L[4];if(Math.hypot(s.bx,s.by)<800||!far(s.bx,s.by,dmin))continue;let ok=true;for(const q of WD.scn)if(dist2(q.x,q.y,s.bx,s.by)<1600*1600)ok=false;if(!ok)continue;
     const path=[];for(let k=4;k<Math.min(L.length-1,4+20);k++)path.push([L[k].bx,L[k].by]);used.add(ei);WD.scn.push({x:s.bx,y:s.by,t:types[WD.scn.length],path});}
@@ -154,7 +154,7 @@ function dBase(){const P=G.p;return 16*P.dmg*lvlDmg();}
 function alive(){return DU.foes.filter(f=>f.hp>0);}
 function dHit(f,mult,ignoreSh,noSt){
   if(!f||f.hp<=0)return 0;const P=G.p;let d=dBase()*mult;
-  if(DU.me.crit||R()<P.crit){d*=P.critM||2.5;DU.me.crit=0;duelFloat(f,'Critique');}
+  if(DU.me.crit||R()<(P.ultA&&P.ultA.k==='spectre'?P.bCrit+P.crit-1:P.crit)){d*=P.critM||2.5;DU.me.crit=0;duelFloat(f,'Critique');}
   if(f.st.acid)d*=1+.08*f.st.acid;if(f.grouped&&mult<1)d*=1.5;
   d=Math.round(d);if(!ignoreSh&&f.sh>0){const a=Math.min(f.sh,d);f.sh-=a;d-=a;}
   f.hp=Math.max(0,f.hp-d);DU.me.ult=Math.min(100,DU.me.ult+8);f.flash=1;
@@ -168,7 +168,7 @@ function duelFloat(f,s){f.fl=s;}
 function duelAct(a){
   if(!DU||DU.busy)return;const me=DU.me,P=G.p;let tgt=alive()[0];const sel=DU.foes[DU.sel];if(sel&&sel.hp>0)tgt=sel;
   const cost=a==='tir'?DK[DU.kind].c:a==='sk0'||a==='sk1'?2:a==='ult'?0:1;if(me.en<cost)return;
-  if(a==='ult'&&me.ult<100)return;if((a==='sk0'||a==='sk1')&&me.cd[a==='sk0'?0:1]>0)return;
+  if(a==='ult'&&me.ult<100)return;if((a==='sk0'||a==='sk1')&&(!P.sk[a==='sk0'?0:1]||me.cd[a==='sk0'?0:1]>0))return;
   me.en-=cost;SFX.hit();
   if(a==='tir'){const k=DU.kind;
     if(k===1){for(const f of alive())dHit(f,.6);duelLog('Salve dispersée sur toute l’escouade.');}
@@ -263,7 +263,7 @@ function renderDuel(){
   const K=DK[DU.kind],acts=[['tir',K.a,K.d,K.c,1]];
   P.sk.forEach((s,j)=>{if(s)acts.push(['sk'+j,SKL[s.id].n+' '+ROMAN[s.l],DSK[s.id].d+(me.cd[j]?' · recharge '+me.cd[j]:''),2,!me.cd[j]]);});
   acts.push(['garde','Se retrancher','Bouclier 20 % et +1 énergie au prochain tour',1,1],['scan','Analyser','Révèle la faiblesse, prochain coup critique',1,1],['ult',(ULT[G.prof]||ULT.bal).n,'Ultime',0,me.ult>=100]);
-  $('dvAct').innerHTML=acts.map(([a,n,d,c,ok])=>'<button class="dact" data-a="'+a+'" '+(DU.busy||!ok||me.en<c?'disabled':'')+'><b>'+n+'</b><span>'+d+'</span><em>'+'⚡'.repeat(c)+'</em></button>').join('')+
+  DU.keys=acts.map(x=>x[0]);$('dvAct').innerHTML=acts.map(([a,n,d,c,ok])=>'<button class="dact" data-a="'+a+'" '+(DU.busy||!ok||me.en<c?'disabled':'')+'><b>'+n+'</b><span>'+d+'</span><em>'+'⚡'.repeat(c)+'</em></button>').join('')+
     '<button class="btn pri" id="dvEnd" '+(DU.busy?'disabled':'')+'>Fin du tour</button><button class="btn ghost" id="dvFlee" '+(DU.busy?'disabled':'')+'>Fuir (-20 % bulles)</button>';
 }
 function gxBindUI(){

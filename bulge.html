@@ -318,7 +318,7 @@ function R(){_seed=(_seed+0x6D2B79F5)>>>0;let t=_seed;t=Math.imul(t^(t>>>15),t|1
 const rr=(a,b)=>a+R()*(b-a);
 const pick=a=>a[Math.floor(R()*a.length)];
 const fr=(a,b)=>a+Math.random()*(b-a);
-function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(R()*(i+1));const t=a[i];a[i]=a[j];a[j]=t;}return a;}
+function shuffle(a,r){r=r||R;for(let i=a.length-1;i>0;i--){const j=Math.floor(r()*(i+1));const t=a[i];a[i]=a[j];a[j]=t;}return a;}
 function dist2(ax,ay,bx,by){const dx=ax-bx,dy=ay-by;return dx*dx+dy*dy;}
 function angDiff(a,b){let d=(b-a)%TAU;if(d>Math.PI)d-=TAU;else if(d<-Math.PI)d+=TAU;return d;}
 function fmt(n){return Math.round(n).toLocaleString('fr-FR');}
@@ -1879,7 +1879,7 @@ const MIS_R=[30,50,80];
 function misToday(){
   const day=todayKey();if(meta.mis&&meta.mis.day===day)return meta.mis;
   const r=mkRng(day*7919+13),pool=MIS.slice();for(let i=pool.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
-  const tiers=[0,1,2].sort(()=>r()-.5);
+  const tiers=shuffle([0,1,2],r);
   meta.mis={day,list:pool.slice(0,3).map((m,i)=>({id:m.id,n:m.v[tiers[i]],r:MIS_R[tiers[i]],p:0,done:0}))};saveMeta();return meta.mis;
 }
 function misEvt(src,v){
@@ -2132,7 +2132,7 @@ function gcUlt(){
   if(!G||G.state!=='play'||!G.gc)return;const P=G.p;if(P.dead||P.ultC<100||P.ultA)return;
   P.ultC=0;if(P.u&&P.u.pacte){P.bub=Math.max(1,P.bub-10);checkLevel();}const k=G.prof,dm=P.dmg*lvlDmg(),U=ULT[k]||ULT.bal;G.gc.ultFlash=40;
   SFX.bossIn();G.glitch=Math.max(G.glitch,16);
-  if(k==='scout'){P.ultA={k,t:360};P.bSpd=P.spd;P.bFire=P.fireI;P.spd*=1.6;P.fireI=Math.max(2,P.fireI*.5);}
+  if(k==='scout'){P.ultA={k,t:360};P.bSpd=P.spd;P.bFire=P.fireI;P.spd*=1.6;P.fireI=Math.max(2,P.fireI*.5);P.uSpd=P.spd;P.uFire=P.fireI;}
   else if(k==='tank')P.ultA={k,t:360};
   else if(k==='spectre'){P.ultA={k,t:300};G.tstop=300;P.bCrit=P.crit;P.crit=1;}
   else if(k==='oracle'){const T=G.en.filter(e=>!e.dead&&e.spawn<=0&&dist2(e.x,e.y,P.x,P.y)<950*950).sort((a,b)=>b.hp-a.hp).slice(0,10);G.gc.strikes=T.map((e,i)=>({e,t:i*7}));
@@ -2142,7 +2142,7 @@ function gcUlt(){
     ringFX(P.x,P.y,20,R,'#ffffff',40,12);ringFX(P.x,P.y,20,R*.8,P.col,34,8);FX({ty:4,x:P.x,y:P.y,vx:0,vy:0,r:900,life:40,max:40,col:P.col});G.flash=.55;shake(1);G.freeze=Math.max(G.freeze,4);P.ultA={k,t:30};}
 }
 function gcEndUlt(){const P=G.p,A=P.ultA;if(!A)return;
-  if(A.k==='scout'){P.spd=P.bSpd;P.fireI=P.bFire;}if(A.k==='spectre'){P.crit=P.bCrit;G.tstop=0;}if(A.k==='reine')P.drones=Math.max(0,P.drones-6);P.ultA=null;}
+  if(A.k==='scout'){P.spd=P.bSpd*P.spd/P.uSpd;P.fireI=P.bFire*P.fireI/P.uFire;}if(A.k==='spectre'){P.crit=P.bCrit+P.crit-1;G.tstop=0;}if(A.k==='reine')P.drones=Math.max(0,P.drones-6);P.ultA=null;}
 /* bouclier et ultimes défensifs : appelé au début de hurtPlayer */
 function gcShield(dmg,sx,sy){const P=G.p;
   if(P.shieldT>0||(P.ultA&&(P.ultA.k==='tank'||P.ultA.k==='scout'))){sparks(P.x,P.y,'#7dff4a',6,3);return true;}return false;}
@@ -2182,7 +2182,7 @@ function gcTick(){
   for(let i=C.bombs.length-1;i>=0;i--){const b=C.bombs[i];if(--b.t>0)continue;C.bombs.splice(i,1);ringFX(b.x,b.y,10,b.r,COL.rd,18,6);FX({ty:4,x:b.x,y:b.y,vx:0,vy:0,r:b.r*1.6,life:16,max:16,col:COL.rd});shake(.3);SFX.pop(true);
     if(dist2(b.x,b.y,P.x,P.y)<(b.r+P.r)**2)hurtPlayer(9*dmgMul(),b.x,b.y);}
   for(const L of [C.beams,C.bolts])for(let i=L.length-1;i>=0;i--)if(--L[i].life<=0)L.splice(i,1);
-  if(C.ultFlash>0)C.ultFlash--;
+  if(C.ultFlash>0)C.ultFlash--;if(C.gift>0&&G.state==='play'&&--C.gift===0)openAltar(-1);
   if(G.t%30===0)for(const e of G.en)if(e.aff==='regen'&&!e.dead)e.hp=Math.min(e.mhp,e.hp+e.mhp*.04);
   /* autels */
   let near=-1;for(let i=0;i<WD.alts.length;i++){if(C.altUsed[i])continue;const a=WD.alts[i];if(dist2(a.x,a.y,P.x,P.y)<95*95){near=i;break;}}
@@ -2195,7 +2195,7 @@ function gcTick(){
         const e=mkEnemy(ks[Math.floor(R()*ks.length)],Rf.x+Math.cos(a)*(Rf.r-30),Rf.y+Math.sin(a)*(Rf.r-30),{aggro:true,rift:1});e.spawn=24;}}
       if(Rf.t>=Rf.dur){C.rift=null;C.riftDone[Rf.i]=1;for(const e of G.en)if(e.rift&&!e.dead)killEnemy(e);
         P.ultC=100;gsShard&&gsShard(15);giDrop(Rf.x,Rf.y,'rift');dropBubbles(Rf.x,Rf.y,Math.round(30*P.greed),60,false);ringFX(Rf.x,Rf.y,20,Rf.r,COL.gd,30,8);G.flash=.4;
-        banner('Faille scellée','Ultime chargé · don de l’autel',COL.gd,120);SFX.ach();setTimeout(()=>{if(G&&G.state==='play')openAltar(-1);},400);}}}
+        banner('Faille scellée','Ultime chargé · don de l’autel',COL.gd,120);SFX.ach();C.gift=24;}}}
   else if(G.t%6===0&&!C.dorm)for(let i=0;i<WD.rifts.length;i++){if(C.riftDone[i])continue;const f=WD.rifts[i];if(dist2(f.x,f.y,P.x,P.y)<80*80&&!G.arena){
     C.rift={x:f.x,y:f.y,r:430,t:0,dur:1200,i};banner('Faille','Tiens 20 secondes dans le cercle',COL.mg,110);G.glitch=24;SFX.bossIn();
     if(!C.firstRift&&G.gs){C.firstRift=1;gsSay('Les failles sont des blessures du rêve. Scelle-la.','',COL.mg,1,1);}break;}}
@@ -2203,7 +2203,7 @@ function gcTick(){
 function openAltar(i){
   const P=G.p,ch=[],have=P.sk.filter(Boolean).map(s=>s.id);
   if(i>=0&&G.gs)gsSay(ALT_Q[WD.alts[i].q],'Autel d’Iris',COL.gd,1,1);
-  if(!P.sk[1]){const pool=Object.keys(SKL).filter(k=>!have.includes(k)).sort(()=>R()-.5).slice(0,2);
+  if(!P.sk[1]){const pool=shuffle(Object.keys(SKL).filter(k=>!have.includes(k))).slice(0,2);
     for(const k of pool)ch.push({u:{id:'nsk_'+k,n:SKL[k].n,ic:SKL[k].ic,c:'Nouvelle compétence · '+KEYL[1],d:SKL[k].d,f:P=>{P.sk[1]={id:k,l:1,cd:0};P.evo['sk_'+k]=1;}}});}
   for(let j=0;j<2&&ch.length<3;j++){const s=P.sk[j];if(!s||s.l>=3)continue;const K=SKL[s.id];
     ch.push({u:{id:'sk_'+s.id,n:K.n,ic:K.ic,c:'Amélioration · '+KEYL[j],d:'Niveau '+(s.l+1)+' : plus de dégâts, de portée, recharge plus courte.',f:P=>{s.l++;}}});}
@@ -2565,7 +2565,7 @@ function drawTankPreview(eq){
 }
 function giBindUI(){
   $('bHangar').onclick=()=>{SFX.ui();HG.sel=null;renderHangar();show('ov-hangar');};
-  $('hgName').onchange=e=>{meta.tank.name=(e.target.value||'BULGE-01').slice(0,18);saveMeta();};
+  $('hgName').onchange=e=>{meta.tank.name=(e.target.value||'BULGE-01').slice(0,18);e.target.value=meta.tank.name;saveMeta();};
   $('hgF').onclick=e=>{const b=e.target.closest('[data-f]');if(b){HG.f=b.dataset.f;renderHangar();}};
   $('hgInv').onclick=e=>{const b=e.target.closest('[data-it]');if(b){HG.sel=+b.dataset.it;SFX.ui();renderHangar();}};
   $('hgSlots').onclick=e=>{const b=e.target.closest('[data-slot]');if(!b)return;const id=meta.eq[b.dataset.slot];HG.f=STYPE(b.dataset.slot);HG.sel=id||null;renderHangar();};
@@ -2605,8 +2605,8 @@ const INT={atk:{ic:'⚔',t:v=>'Attaque '+v},big:{ic:'💥',t:v=>'Frappe lourde '
 function gxWorld(rnd){
   const S=WD.sites,bySeg={};for(const s of WD.segs)(bySeg[s.e]=bySeg[s.e]||[]).push(s);
   const far=(x,y,d)=>{for(const L of [...WD.alts,...WD.rifts,...WD.lms,...WD.hearts])if(dist2(L.x,L.y,x,y)<d*d)return false;return dist2(x,y,WD.core.x,WD.core.y)>1500*1500;};
-  WD.scn=[];WD.hunt=[];const types=['convoi','balises','course'].sort(()=>rnd()-.5);
-  const edges=WD.edges.map((e,i)=>i).sort(()=>rnd()-.5),used=new Set();
+  WD.scn=[];WD.hunt=[];const types=shuffle(['convoi','balises','course'],rnd);
+  const edges=shuffle(WD.edges.map((e,i)=>i),rnd),used=new Set();
   for(const dmin of [650,420,250])for(const ei of edges){if(WD.scn.length>=3)break;if(used.has(ei))continue;const L=bySeg[ei];if(!L||L.length<18)continue;
     const s=L[4];if(Math.hypot(s.bx,s.by)<800||!far(s.bx,s.by,dmin))continue;let ok=true;for(const q of WD.scn)if(dist2(q.x,q.y,s.bx,s.by)<1600*1600)ok=false;if(!ok)continue;
     const path=[];for(let k=4;k<Math.min(L.length-1,4+20);k++)path.push([L[k].bx,L[k].by]);used.add(ei);WD.scn.push({x:s.bx,y:s.by,t:types[WD.scn.length],path});}
@@ -2735,7 +2735,7 @@ function dBase(){const P=G.p;return 16*P.dmg*lvlDmg();}
 function alive(){return DU.foes.filter(f=>f.hp>0);}
 function dHit(f,mult,ignoreSh,noSt){
   if(!f||f.hp<=0)return 0;const P=G.p;let d=dBase()*mult;
-  if(DU.me.crit||R()<P.crit){d*=P.critM||2.5;DU.me.crit=0;duelFloat(f,'Critique');}
+  if(DU.me.crit||R()<(P.ultA&&P.ultA.k==='spectre'?P.bCrit+P.crit-1:P.crit)){d*=P.critM||2.5;DU.me.crit=0;duelFloat(f,'Critique');}
   if(f.st.acid)d*=1+.08*f.st.acid;if(f.grouped&&mult<1)d*=1.5;
   d=Math.round(d);if(!ignoreSh&&f.sh>0){const a=Math.min(f.sh,d);f.sh-=a;d-=a;}
   f.hp=Math.max(0,f.hp-d);DU.me.ult=Math.min(100,DU.me.ult+8);f.flash=1;
@@ -2749,7 +2749,7 @@ function duelFloat(f,s){f.fl=s;}
 function duelAct(a){
   if(!DU||DU.busy)return;const me=DU.me,P=G.p;let tgt=alive()[0];const sel=DU.foes[DU.sel];if(sel&&sel.hp>0)tgt=sel;
   const cost=a==='tir'?DK[DU.kind].c:a==='sk0'||a==='sk1'?2:a==='ult'?0:1;if(me.en<cost)return;
-  if(a==='ult'&&me.ult<100)return;if((a==='sk0'||a==='sk1')&&me.cd[a==='sk0'?0:1]>0)return;
+  if(a==='ult'&&me.ult<100)return;if((a==='sk0'||a==='sk1')&&(!P.sk[a==='sk0'?0:1]||me.cd[a==='sk0'?0:1]>0))return;
   me.en-=cost;SFX.hit();
   if(a==='tir'){const k=DU.kind;
     if(k===1){for(const f of alive())dHit(f,.6);duelLog('Salve dispersée sur toute l’escouade.');}
@@ -2844,7 +2844,7 @@ function renderDuel(){
   const K=DK[DU.kind],acts=[['tir',K.a,K.d,K.c,1]];
   P.sk.forEach((s,j)=>{if(s)acts.push(['sk'+j,SKL[s.id].n+' '+ROMAN[s.l],DSK[s.id].d+(me.cd[j]?' · recharge '+me.cd[j]:''),2,!me.cd[j]]);});
   acts.push(['garde','Se retrancher','Bouclier 20 % et +1 énergie au prochain tour',1,1],['scan','Analyser','Révèle la faiblesse, prochain coup critique',1,1],['ult',(ULT[G.prof]||ULT.bal).n,'Ultime',0,me.ult>=100]);
-  $('dvAct').innerHTML=acts.map(([a,n,d,c,ok])=>'<button class="dact" data-a="'+a+'" '+(DU.busy||!ok||me.en<c?'disabled':'')+'><b>'+n+'</b><span>'+d+'</span><em>'+'⚡'.repeat(c)+'</em></button>').join('')+
+  DU.keys=acts.map(x=>x[0]);$('dvAct').innerHTML=acts.map(([a,n,d,c,ok])=>'<button class="dact" data-a="'+a+'" '+(DU.busy||!ok||me.en<c?'disabled':'')+'><b>'+n+'</b><span>'+d+'</span><em>'+'⚡'.repeat(c)+'</em></button>').join('')+
     '<button class="btn pri" id="dvEnd" '+(DU.busy?'disabled':'')+'>Fin du tour</button><button class="btn ghost" id="dvFlee" '+(DU.busy?'disabled':'')+'>Fuir (-20 % bulles)</button>';
 }
 function gxBindUI(){
@@ -2901,7 +2901,7 @@ function gtRunStart(){
   const on=!G.daily&&(meta.tuto||0)<TUTO.length;
   G.gt={on,step:-1,T:null,tipT:0};
   /* les systèmes avancés attendent le deuxième cycle */
-  G.gc.dorm=meta.runs<1;G.gx.dorm=meta.runs<1;
+  G.gc.dorm=!G.daily&&meta.runs<1;G.gx.dorm=!G.daily&&meta.runs<1;
   if(on){G.help=0;G.banner=null;tutGo(meta.tuto||0);}
 }
 function tutGo(i){
@@ -2914,7 +2914,7 @@ function tutDone(){
   banner('Prologue terminé','+60 éclats · un objet rare',COL.gd,140);giDrop(G.p.x,G.p.y,'rift',1);SFX.ach();
   gsSay('Tu sais l’essentiel. Le reste, le rêve te l’apprendra. Je reste près de toi, dans chaque écho.',GUIDE,COL.gd,1);
 }
-function tip(id){if(!meta.tips)meta.tips={};if(meta.tips[id]||!TIPS[id]||G.daily)return false;meta.tips[id]=1;if(G.gt)G.gt.lastTip=G.time;saveMeta();gsSay(TIPS[id].split(/(?<=[.!])\s/)[0],'Astuce · détails dans le Guide',COL.gd,0,1);return true;}
+function tip(id){if(!meta.tips)meta.tips={};if(meta.tips[id]||!TIPS[id]||G.daily)return false;meta.tips[id]=1;if(G.gt)G.gt.lastTip=G.time;saveMeta();gsSay(TIPS[id].replace(/([.!])\s[\s\S]*$/,'$1'),'Astuce · détails dans le Guide',COL.gd,0,1);return true;}
 function gtTick(){
   const S=G.gt;if(!S)return;const P=G.p;
   if(S.on&&S.T){const T=S.T,st=TUTO[S.step];T.t++;
@@ -3485,12 +3485,12 @@ function onUp(e){
 }
 function onKey(e){
   const inGame=G&&G.state==='play';
-  if(inGame&&['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();
+  if((inGame||G&&G.state==='evo')&&['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();
   inp.keys[e.code]=true;auInit();
   if(e.code==='KeyM'){setMute(!meta.mute);updMuteBtn();return;}
   if(!G)return;
-  if(G.state==='duel'){const m={Digit1:'tir',Digit2:'sk0',Digit3:'sk1',Digit4:'garde',Digit5:'scan',Digit6:'ult'};if(m[e.code])duelAct(m[e.code]);else if(e.code==='Enter')duelEndTurn();return;}
-  if(G.state==='evo'){if(e.code==='Digit1'||e.code==='Numpad1')pickEvo(0);else if(e.code==='Digit2'||e.code==='Numpad2')pickEvo(1);else if(e.code==='KeyR')reroll();return;}
+  if(G.state==='duel'){const d=/^(?:Digit|Numpad)([1-9])$/.exec(e.code),a=d&&DU?DU.keys[+d[1]-1]:null;if(a)duelAct(a);else if(e.code==='Enter')duelEndTurn();return;}
+  if(G.state==='evo'){if(e.code==='Digit1'||e.code==='Numpad1')pickEvo(0);else if(e.code==='Digit2'||e.code==='Numpad2')pickEvo(1);else if(e.code==='Digit3'||e.code==='Numpad3')pickEvo(2);else if(e.code==='KeyR')reroll();return;}
   if(inGame&&(e.code==='Space'||e.code==='ShiftLeft'||e.code==='ShiftRight'))tryDash();
   if(inGame&&!e.repeat){if(e.code==='KeyQ')gcUse(0);else if(e.code==='KeyE')gcUse(1);else if(e.code==='KeyR')gcUlt();else if(e.code==='KeyF')gxInteract();}
   if(e.code==='Escape'||e.code==='KeyP')togglePause();
@@ -3541,7 +3541,7 @@ function pickEvo(i){
   const P=G.p,c=ch.mut?COL.gd:COL.cy;ftext(P.x,P.y-P.r-22,ch.u.n,c,19);ringFX(P.x,P.y,P.r,P.r*4,c,24,4);sparks(P.x,P.y,c,20,5);
   if(G.pendingEvo.length)G.evoDelay=12;
 }
-function reroll(){if(!G||G.state!=='evo'||G.p.rerolls<=0)return;G.p.rerolls--;G.choices=rollChoices(G.evoMut);renderEvo();SFX.ui();}
+function reroll(){if(!G||G.state!=='evo'||G.p.rerolls<=0||G.evoAlt)return;G.p.rerolls--;G.choices=rollChoices(G.evoMut);renderEvo();SFX.ui();}
 function buildSummary(){
   const P=G.p,parts=[];
   for(const id of P.muts){const m=MUT.find(x=>x.id===id);parts.push('<span class="chip mut">'+m.ic+' '+m.n+'</span>');}
@@ -3642,10 +3642,10 @@ function boot(){
   resize();addEventListener('resize',()=>{CVR=null;resize();});
   cv.addEventListener('pointerdown',onDown,{passive:false});cv.addEventListener('contextmenu',e=>e.preventDefault());
   cv.addEventListener('pointermove',onMove,{passive:true});
-  cv.addEventListener('pointerup',onUp);cv.addEventListener('pointercancel',onUp);
+  cv.addEventListener('pointerup',onUp);cv.addEventListener('pointercancel',e=>{if(inp.B&&inp.B.id===e.pointerId)inp.B=null;onUp(e);});
   cv.addEventListener('contextmenu',e=>e.preventDefault());
   addEventListener('keydown',onKey);
-  addEventListener('keyup',e=>{inp.keys[e.code]=false;});
+  addEventListener('keyup',e=>{inp.keys[e.code]=false;if(G&&G.state==='evo'&&e.code==='Space')e.preventDefault();});
   addEventListener('blur',()=>{inp.keys={};inp.L=inp.R=null;inp.mdown=false;});
   document.addEventListener('visibilitychange',()=>{if(document.hidden&&G&&G.state==='play')togglePause();});
   $('bPlay').onclick=()=>{auInit();SFX.ui();renderProf();show('ov-prof');};

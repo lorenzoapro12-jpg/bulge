@@ -77,7 +77,7 @@ const MIS_R=[30,50,80];
 function misToday(){
   const day=todayKey();if(meta.mis&&meta.mis.day===day)return meta.mis;
   const r=mkRng(day*7919+13),pool=MIS.slice();for(let i=pool.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
-  const tiers=[0,1,2].sort(()=>r()-.5);
+  const tiers=shuffle([0,1,2],r);
   meta.mis={day,list:pool.slice(0,3).map((m,i)=>({id:m.id,n:m.v[tiers[i]],r:MIS_R[tiers[i]],p:0,done:0}))};saveMeta();return meta.mis;
 }
 function misEvt(src,v){
