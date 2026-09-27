@@ -122,7 +122,7 @@ function auInit(){
     AU.sfx=ac.createGain();AU.sfx.gain.value=.55;AU.sfx.connect(AU.master);
     AU.mus=ac.createGain();AU.mus.gain.value=.64;AU.mus.connect(AU.master);
     const len=ac.sampleRate*2,b=ac.createBuffer(1,len,ac.sampleRate),d=b.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;AU.nb=b;
-    musInit(ac);AU.next=ac.currentTime+.15;setInterval(musTick,25);
+    musInit(ac);AU.next=ac.currentTime+.35;setInterval(musTick,25);
   }catch(e){AU.ac=null;}
 }
 function setMute(m){meta.mute=m;saveMeta();if(AU.master)AU.master.gain.setTargetAtTime(m?0:.8,AU.ac.currentTime,.05);}
@@ -271,7 +271,15 @@ function genMel(b){const r=mkRngA(b.length*977+b.charCodeAt(0)*31),out=new Array
     R.forEach(([st],i)=>{let d=last+(r()<.5?1:-1)*(r()<.7?1:0);d=Math.max(0,Math.min(3,d));if(bar===3&&i===R.length-1)d=0;if(i===0&&r()<.4)d=r()<.5?0:2;out[bar*16+st]=d;last=d;});}
   return out;}
 function mkRngA(s){let a=s>>>0||1;return()=>{a=(a*16807)%2147483647;return a/2147483647;};}
-function musTick(){const ac=AU.ac;if(!ac||!AU.st)return;while(AU.next<ac.currentTime+.2){schedStep(AU.step,AU.next);AU.step++;AU.next+=STEP;}}
+/* Ordonnanceur musical. La marge (LA) doit etre plus large que le pire blocage du fil principal :
+   la cuisson du monde et le rendu peuvent immobiliser le fil plusieurs centaines de millisecondes
+   sur un telephone. Avec 200 ms, AU.next passait dans le PASSE et la boucle planifiait des notes
+   deja depassees — le moteur audio les jouait entassees ou les jetait : c'est le crachat entendu.
+   Et si le retard se produit malgre la marge, on se resynchronise au lieu d'empiler. */
+const LA=.6;
+function musTick(){const ac=AU.ac;if(!ac||!AU.st)return;
+  if(AU.next<ac.currentTime)AU.next=ac.currentTime+.05;
+  while(AU.next<ac.currentTime+LA){schedStep(AU.step,AU.next);AU.step++;AU.next+=STEP;}}
 function musNewPal(barN){AU.pal=PAL[AU.bio];AU.mel=genMel(AU.bio);AU.mel2=varMel(AU.mel);AU.bb=barN;}
 function schedStep(s,t){
   if(meta.mute)return;
