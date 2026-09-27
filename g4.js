@@ -165,18 +165,29 @@ let last=0,acc=0,FPSV=0,fpsN=0,fpsT=0,slowT=0;const STEPMS=1000/60,DTH=[];
    Nouvelle méthode : on compare la médiane au rafraîchissement réel de l'écran, sur 3 s, et on retire
    d'abord des effets ; la résolution ne baisse qu'en dernier recours, une seule fois. */
 const QPRE={high:[3,1],mid:[2,1],low:[1,.8]};
-function applyQuality(){const q=meta.q||'auto';if(q==='auto'){QL=3;RES=1;}else{QL=QPRE[q][0];RES=QPRE[q][1];}applyRes();}
+/* En mode auto, la qualité APPRISE survit d'une partie a l'autre (meta.qAuto, donc aussi d'un
+   chargement a l'autre). La remettre au maximum a chaque startGame condamnait chaque debut de
+   partie a resaccader le temps que perf() redescende les crans un par un. */
+function applyQuality(){const q=meta.q||'auto';
+  if(q==='auto'){const a=meta.qAuto;if(a&&a.length===2){QL=a[0];RES=a[1];}else{QL=3;RES=1;}}
+  else{QL=QPRE[q][0];RES=QPRE[q][1];}
+  applyRes();}
 let REFDT=0;
 function perf(dt){
   fpsN++;fpsT+=dt;if(fpsT>=500){FPSV=Math.round(fpsN*1000/fpsT);fpsN=0;fpsT=0;}
-  DTH.push(dt);if(DTH.length>180)DTH.shift();if(DTH.length<180||fpsN%15)return;
-  const so=DTH.slice().sort((a,b)=>a-b),med=so[90];
+  /* fenetre de 120 images (2 s a 60 Hz) au lieu de 180 : l'echantillon revient plus vite, donc
+     l'adaptation converge plus vite, sans baisser la robustesse de la mediane. */
+  DTH.push(dt);if(DTH.length>120)DTH.shift();if(DTH.length<120||fpsN%15)return;
+  const so=DTH.slice().sort((a,b)=>a-b),med=so[60];
   if(!G||G.state!=='play'){REFDT=REFDT?Math.min(REFDT,med):med;slowT=0;return;}
   if(!REFDT)REFDT=Math.min(med,16.8);
   if((meta.q||'auto')!=='auto')return;
-  if(med>REFDT*1.3){if((slowT+=15)>180){slowT=0;DTH.length=0;
+  /* seuil a 60 (4 echantillons, ~1 s) contre 180 (~3 s) avant : moins de temps perdu en saccade ;
+     le seuil de detection monte a 1,35x pour ne pas declencher sur une simple gigue de vsync. */
+  if(med>REFDT*1.35){if((slowT+=15)>60){slowT=0;DTH.length=0;
     if(QL>1){QL--;if(G)toast('Effets allégés pour garder la fluidité');}
-    else if(RES>.8){RES=.8;applyRes();if(G)toast('Résolution réduite pour garder la fluidité');}}}
+    else if(RES>.8){RES=.8;applyRes();if(G)toast('Résolution réduite pour garder la fluidité');}
+    meta.qAuto=[QL,RES];saveMeta();}}
   else slowT=Math.max(0,slowT-30);
 }
 let FRN=0;

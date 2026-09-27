@@ -136,14 +136,14 @@ const CLIFF_EDGE={
   sea:(g,L)=>{g.lineWidth=2.4;for(const q of L)for(let m=0;m<3;m++){const x=q.x-q.r*.6+m*q.r*.6,y=q.y+q.r*.6+6,l=14+qrand(q,m)*18;g.strokeStyle=m%2?'#2fbf8f':'#1d8f76';g.beginPath();g.moveTo(x,y);for(let t=1;t<=5;t++)g.lineTo(x+Math.sin(t*1.3+qrand(q,m+3)*5)*4,y+l*t/5);g.stroke();}},
   ice:(g,L)=>{g.fillStyle='rgba(215,240,255,.85)';for(const q of L)for(let m=0;m<5;m++){const x=q.x-q.r*.7+m*q.r*.35,y=q.y+q.r*.58+6,l=6+qrand(q,m)*14;g.beginPath();g.moveTo(x-3,y);g.lineTo(x+3,y);g.lineTo(x,y+l);g.closePath();g.fill();}},
   core:(g,L)=>{for(const q of L){radial(g,q.x,q.y+q.r*.7+8,26,'#ff5a3c',.35);}}};
-function drawWalls(g,c){
+function drawWalls(g,c,only){
   const i0=Math.round((c.x0-G0)/WC)-1,j0=Math.round((c.y0-G0)/WC)-1,cells=[];
   for(let j=j0;j<j0+10;j++)for(let i=i0;i<i0+10;i++)if(wallAt(i,j)){const x=G0+(i+.5)*WC,y=G0+(j+.5)*WC,h=hash2(i,j,WD.seed);
     cells.push({i,j,x,y,r:WC*(.72+(h&255)/255*.1),h,b:biomeAt(x,y),n:!wallAt(i,j-1),in:wallAt(i-1,j)&&wallAt(i+1,j)&&wallAt(i,j-1)&&wallAt(i,j+1)});}
   if(!cells.length)return;
   const grp={};for(const q of cells)(grp[q.b]||(grp[q.b]=[])).push(q);
   const circ=(L,dx,dy,k)=>{g.beginPath();for(const q of L){g.moveTo(q.x+dx+q.r*k,q.y+dy);g.arc(q.x+dx,q.y+dy,q.r*k,0,TAU);}};
-  for(const b in grp){const L=grp[b];
+  for(const b in grp){if(only&&b!==only)continue;const L=grp[b];
     if(b==='sky'){ /* gouffres entre les îles : on voit le vide et les nuages en contrebas */
       circ(L,0,0,1.2);g.fillStyle='rgba(255,255,255,.22)';g.fill();circ(L,0,0,1.03);g.strokeStyle='#dfe8ff';g.lineWidth=3;g.stroke();circ(L,0,0,1);g.fillStyle='#080c2c';g.fill();circ(L,0,10,.78);g.fillStyle='#03041a';g.fill();
       for(const q of L){if((q.h>>9)%3)continue;g.fillStyle='rgba(200,215,255,.5)';g.beginPath();g.arc(q.x+((q.h>>12)%30)-15,q.y+((q.h>>17)%30)-10,1.2,0,TAU);g.fill();}
@@ -197,7 +197,7 @@ const GTEX={
   urban:(g,x,y,r)=>{g.fillStyle=r<.5?'rgba(255,255,255,.05)':'rgba(0,0,0,.18)';g.fillRect(x,y,1.5+r*2,1.5+r*2);if(r>.96){g.strokeStyle='rgba(0,0,0,.3)';g.lineWidth=1;g.beginPath();g.moveTo(x,y);g.lineTo(x+14,y+6);g.lineTo(x+20,y+2);g.stroke();}},
   ice:(g,x,y,r)=>{if(r<.7){g.strokeStyle='rgba(230,248,255,.12)';g.lineWidth=1;g.beginPath();g.moveTo(x,y);g.lineTo(x+12+r*10,y+3);g.stroke();}else{g.fillStyle='rgba(255,255,255,.6)';g.fillRect(x,y,1.5,1.5);}},
   core:(g,x,y,r)=>{g.fillStyle=r<.15?'rgba(255,120,60,.45)':'rgba(0,0,0,.2)';g.beginPath();g.arc(x,y,r<.15?1.4:2+r*2,0,TAU);g.fill();}};
-function groundTex(g,c){const rnd=mkRng(hash2(c.cx,c.cy,WD.seed^0x3c5));for(let i=0;i<220;i++){const x=c.x0+rnd()*CH,y=c.y0+rnd()*CH,r=rnd();if(x*x+y*y>WR*WR)continue;const f=GTEX[biomeAt(x,y)];if(f)f(g,x,y,r);}g.globalAlpha=1;}
+/* la texture de sol (220 items) est cuite par lots : voir groundTexStep, plus bas */
 /* ---------- pièces de décor remarquables (une par biome, disséminées) ---------- */
 const SETP={
   plains:(g,x,y,R,rnd)=>{radial(g,x,y,R*1.3,'#9dffc8',.08);g.fillStyle='#0d3a3a';g.beginPath();g.ellipse(x,y,R,R*.72,0,0,TAU);g.fill();
@@ -238,30 +238,70 @@ function setPieces(g,c){const rnd=mkRng(hash2(c.cx,c.cy,WD.seed^0x77e1));c.sp=nu
   const R=110+rnd()*80,x=c.x0+R+rnd()*(CH-2*R),y=c.y0+R+rnd()*(CH-2*R);if(x*x+y*y>(WR-300)**2)return;
   if(wallNear(x,y,R+20)||trailDist(x,y)<R+60)return;for(const L of WD.lms)if(dist2(L.x,L.y,x,y)<(L.R+R+60)**2)return;
   const f=SETP[biomeAt(x,y)];if(!f)return;g.save();f(g,x,y,R,rnd);g.restore();g.globalAlpha=1;c.sp={x,y,R};}
-function bakeStep(c){
-  let k=c.bk;
-  if(!k){const cv2=BPOOL.pop()||mkCanvas(CH,CH),g=cv2.getContext('2d',{alpha:false});g.setTransform(1,0,0,1,0,0);g.globalAlpha=1;g.globalCompositeOperation='source-over';
-    g.fillStyle='#05030c';g.fillRect(0,0,CH,CH);g.translate(-c.x0,-c.y0);mapInto(g,c.x0,c.y0,CH,CH);k=c.bk={cv:cv2,g,s:0};}
-  const g=k.g;BK0=c.x0;BK1=c.y0;
-  if(k.s===0){drawRelief(g,c);groundTex(g,c);drawGrid(g,c);drawRoads(g,c);}
-  else if(k.s===1){drawPaths(g,c);for(const L of WD.lms)if(Math.abs(L.x-c.x0-CH/2)<CH/2+L.R+60&&Math.abs(L.y-c.y0-CH/2)<CH/2+L.R+60)LMG[L.t](g,L);setPieces(g,c);}
-  else if(k.s===2){const rnd=mkRng(hash2(c.cx,c.cy,WD.seed^0x5bd1e995));
-    for(let i=0;i<72;i++){const x=c.x0+rnd()*CH,y=c.y0+rnd()*CH;if(x*x+y*y>WR*WR)continue;if(wallAt(Math.floor((x-G0)/WC),Math.floor((y-G0)/WC)))continue;if(c.sp&&dist2(x,y,c.sp.x,c.sp.y)<c.sp.R*c.sp.R)continue;const ja=rnd()*TAU,jr=rnd()*120;DECO[biomeAt(x+Math.cos(ja)*jr,y+Math.sin(ja)*jr)](g,x,y,rnd,i);}lisiere(g,c,rnd);}
-  else{drawWalls(g,c);c.bake=k.cv;c.bk=null;c.used=FRAME;WD.bakes.push(c);return true;}
-  k.s++;return false;
-}
-function bakeChunk(c){while(!bakeStep(c));}
-/* lisières : là où deux biomes se touchent, un liseré de lucioles aux deux couleurs */
-function lisiere(g,c,rnd){
-  for(let i=0;i<42;i++){const x=c.x0+rnd()*CH,y=c.y0+rnd()*CH;if(x*x+y*y>WR*WR)continue;
+/* Cuisson par lots. Le budget de temps est verifie ENTRE les appels a bakeStep : une unite de
+   travail indivisible qui le depasse fait deborder l'image de tout son cout. On decoupe donc les
+   grosses boucles en lots, avec un curseur (k.i) et le generateur (k.rnd) conserves d'une image a
+   l'autre. La suite de tirages et l'ordre des traces restent EXACTEMENT ceux d'origine : un chunk
+   fini est identique au pixel pres, seule sa repartition dans le temps change. */
+function groundTexStep(g,c,k,n){const rnd=k.rnd[1];let m=0;
+  while(k.i<220&&m<n){const x=c.x0+rnd()*CH,y=c.y0+rnd()*CH,r=rnd();m++;k.i++;if(x*x+y*y>WR*WR)continue;const f=GTEX[biomeAt(x,y)];if(f)f(g,x,y,r);}
+  return k.i>=220;}
+function decoStep(g,c,k,n){const rnd=k.rnd[7];let m=0;
+  while(k.i<72&&m<n){const i=k.i++,x=c.x0+rnd()*CH,y=c.y0+rnd()*CH;m++;
+    if(x*x+y*y>WR*WR)continue;if(wallAt(Math.floor((x-G0)/WC),Math.floor((y-G0)/WC)))continue;if(c.sp&&dist2(x,y,c.sp.x,c.sp.y)<c.sp.R*c.sp.R)continue;
+    const ja=rnd()*TAU,jr=rnd()*120;DECO[biomeAt(x+Math.cos(ja)*jr,y+Math.sin(ja)*jr)](g,x,y,rnd,i);}
+  return k.i>=72;}
+/* meme generateur que decoStep (k.rnd[7]) : dans l'original, lisiere recevait le generateur de la
+   boucle de decor et poursuivait le meme flux de tirages. */
+function lisiereStep(g,c,k,n){const rnd=k.rnd[7];let m=0;
+  while(k.i<42&&m<n){const x=c.x0+rnd()*CH,y=c.y0+rnd()*CH;m++;k.i++;
+    if(x*x+y*y>WR*WR)continue;
     const b1=biomeAt(x-80,y),b2=biomeAt(x+80,y),b3=biomeAt(x,y-80),b4=biomeAt(x,y+80);if(b1===b2&&b3===b4&&b1===b3)continue;
     const A=BIO[b1!==b2?b1:b3],B2=BIO[b1!==b2?b2:b4];
     for(const [col,ox] of [[A.a,-10],[B2.a,10]]){const px=x+ox+rnd()*16,py=y+rnd()*16-8,r=18+rnd()*16;
       g.globalAlpha=.07;g.fillStyle=col;g.beginPath();g.arc(px,py,r,0,TAU);g.fill();g.globalAlpha=.16;g.beginPath();g.arc(px,py,r*.4,0,TAU);g.fill();
       g.globalAlpha=.85;g.fillStyle='#ffffff';g.beginPath();g.arc(px,py,1.6,0,TAU);g.fill();}
     if(rnd()<.35){g.globalAlpha=.5;g.strokeStyle=B2.a;g.lineWidth=1.5;g.beginPath();const a=rnd()*TAU,s=8+rnd()*8;g.moveTo(x,y-s);g.lineTo(x+s*.5,y);g.lineTo(x,y+s);g.lineTo(x-s*.5,y);g.closePath();g.stroke();}}
-  g.globalAlpha=1;
+  return k.i>=42;}
+/* Murs : c'etait le plus gros bloc indivisible de la cuisson (11 317 operations d'un seul tenant,
+   mesure du 27/09/2026, la ou toutes les autres unites tombaient sous 300). drawWalls reste
+   identique — on lui passe seulement le groupe de biome a dessiner. Le parcours du `for...in`
+   d'origine est conserve, donc l'ordre des traces aussi. */
+function wallGroups(c){const i0=Math.round((c.x0-G0)/WC)-1,j0=Math.round((c.y0-G0)/WC)-1,g={};
+  for(let j=j0;j<j0+10;j++)for(let i=i0;i<i0+10;i++)if(wallAt(i,j)){const b=biomeAt(G0+(i+.5)*WC,G0+(j+.5)*WC);if(!g[b])g[b]=1;}
+  return Object.keys(g);}
+function wallsStep(g,c,k){
+  if(!k.wk)k.wk={keys:wallGroups(c),i:0};
+  const W=k.wk;
+  if(W.i>=W.keys.length)return;
+  drawWalls(g,c,W.keys[W.i++]);
+  return W.i>=W.keys.length?undefined:false;}
+/* une entree par unite de travail, dans l'ORDRE EXACT d'origine. `false` = unite inachevee,
+   `true` = chunk termine, autre = unite faite (on rend la main, on reprendra a la suivante). */
+const BAKE_STEPS=[
+  (g,c,k)=>drawRelief(g,c),
+  (g,c,k)=>{if(!k.rnd[1])k.rnd[1]=mkRng(hash2(c.cx,c.cy,WD.seed^0x3c5));if(!groundTexStep(g,c,k,22))return false;g.globalAlpha=1;},
+  (g,c,k)=>drawGrid(g,c),
+  (g,c,k)=>drawRoads(g,c),
+  (g,c,k)=>drawPaths(g,c),
+  (g,c,k)=>{for(const L of WD.lms)if(Math.abs(L.x-c.x0-CH/2)<CH/2+L.R+60&&Math.abs(L.y-c.y0-CH/2)<CH/2+L.R+60)LMG[L.t](g,L);},
+  (g,c,k)=>setPieces(g,c),
+  (g,c,k)=>{if(!k.rnd[7])k.rnd[7]=mkRng(hash2(c.cx,c.cy,WD.seed^0x5bd1e995));if(!decoStep(g,c,k,6))return false;},
+  (g,c,k)=>{if(!lisiereStep(g,c,k,6))return false;g.globalAlpha=1;},
+  (g,c,k)=>{if(wallsStep(g,c,k)===false)return false;},
+  (g,c,k)=>{c.bake=k.cv;c.bk=null;c.used=FRAME;WD.bakes.push(c);return true;}];
+function bakeStep(c){
+  let k=c.bk;
+  if(!k){const cv2=BPOOL.pop()||mkCanvas(CH,CH),g=cv2.getContext('2d',{alpha:false});g.setTransform(1,0,0,1,0,0);g.globalAlpha=1;g.globalCompositeOperation='source-over';
+    g.fillStyle='#05030c';g.fillRect(0,0,CH,CH);g.translate(-c.x0,-c.y0);mapInto(g,c.x0,c.y0,CH,CH);k=c.bk={cv:cv2,g,s:0,i:0,rnd:{}};}
+  const g=k.g;BK0=c.x0;BK1=c.y0;
+  const res=BAKE_STEPS[k.s](g,c,k);
+  if(res===false)return false;
+  if(res===true)return true;
+  k.s++;k.i=0;return false;
 }
+function bakeChunk(c){while(!bakeStep(c));}
+/* lisières (42 lucioles) cuites par lots : voir lisiereStep, plus haut */
 /* éviction LRU : jamais un chunk utilisé à cette frame (plus de boucle cuisson/éviction) */
 function evictBakes(max){
   while(WD.bakes.length>max){let mi=-1;for(let i=0;i<WD.bakes.length;i++){const b=WD.bakes[i];if(b.used>=FRAME)continue;if(mi<0||b.used<WD.bakes[mi].used)mi=i;}
