@@ -586,6 +586,14 @@ scenario('prologue : un joueur qui ne dashe ni ne lance sa compétence n est pas
 check('hooks : SIMF / __SIM / __SIM_INPUT / __SIM_PICK / __SIM_END utilisés par le jeu',
   call('typeof SIMF') === 'function' && ['__SIM_END', '__SIM_PICK', '__SIM_INPUT'].every(h => code.includes('window.' + h)) && code.includes('window.__SIM'));
 
+/* PERF-2 — garde-fous de la cuisson du monde : chacun tourne dans son propre processus (cuisson.js
+   installe le jeu dans le contexte principal de V8, avec une horloge virtuelle) */
+const sub = (f, args) => { const r = cp.spawnSync(process.execPath, [path.join(__dirname, f), ...args], { cwd: ROOT, encoding: 'utf8' }); const out = (r.stdout || '') + (r.stderr || ''); return { ok: r.status === 0, out }; };
+{ const r = sub('cuisson.js', REF ? ['--ref=' + REF] : []);
+  check('cuisson : aucun chunk entier hors budget, travail continu et unité indivisible plafonnés (test/cuisson.js)', r.ok, r.out.split('\n').filter(l => /^\s+(OK|ECHEC)\s/.test(l)).map(l => l.trim()).join(' | ') || r.out.slice(-300)); }
+{ const r = sub('art.js', REF ? ['--cible=' + REF] : []);
+  check('cuisson : séquence brute des opérations de chaque chunk identique à 93b8cfe (test/art.js)', r.ok, (r.out.match(/chunks identiques : .*/) || [r.out.slice(-300)])[0]); }
+
 /* ---------- verdict ---------- */
 console.log('\n---------------- VERDICT ----------------');
 let all = true;

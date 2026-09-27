@@ -193,8 +193,9 @@ function perf(dt){
 let FRN=0;
 function frame(ts){
   requestAnimationFrame(frame);
+  const t0=performance.now();BKMS=0;
   if(!last)last=ts;let dt=ts-last;last=ts;if(dt>100)dt=100;
-  perf(dt);
+  perf(dt);FDT=dt;
   let A=1;
   if(G&&(G.state==='play'||G.state==='dying'||G.state==='victory')){
     acc+=dt*G.timeScale;let n=0;while(acc>=STEPMS&&n<5){step();acc-=STEPMS;n++;}if(n>=5)acc=0;
@@ -203,6 +204,8 @@ function frame(ts){
   if(REDUCED&&G){G.trauma*=.5;G.glitch=Math.min(G.glitch,2);}
   const bgOnly=!G||['pause','duel','end','evo'].includes(G.state);FRN=(FRN+1)%4;
   if(!bgOnly||FRN%(G&&G.state!=='evo'?4:2)===0||!G&&FRN%2===0)render(A,dt);
+  /* travail JS réel de cette image, hors cuisson : la mesure dont bakeBudget() part à l'image suivante */
+  FWK=performance.now()-t0-BKMS;
 }
 function startGame(prof,daily){
   if(!shipOK(prof)){SAN_TAB='ships';renderSanct();show('ov-sanct');return;}

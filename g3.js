@@ -67,7 +67,7 @@ function drawLowGlows(){
   c.globalAlpha=1;c.globalCompositeOperation='source-over';
 }
 function chunksCover(){const c0=Math.floor(VL/CH),c1=Math.floor(VR/CH),r0=Math.floor(VT/CH),r1=Math.floor(VB/CH);
-  for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(!c||!c.bake)return false;}return true;}
+  for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(!c||!c.bake&&!c.bk)return false;}return true;}
 function render(A,dt){
   FRAME++;RDT=dt||16.7;SPRB=3;ctx=MAINCTX;const c=ctx;
   c.setTransform(1,0,0,1,0,0);c.globalAlpha=1;c.globalCompositeOperation='source-over';
@@ -80,7 +80,7 @@ function render(A,dt){
   RZ=CAM.z;if(inGame)lerpIn(A);
   VL=CAM.x-(W/2+60)/RZ;VR=CAM.x+(W/2+60)/RZ;VT=CAM.y-(H/2+60)/RZ;VB=CAM.y+(H/2+60)/RZ;
   const mix=biomeMix(CAM.x,CAM.y);
-  streamWorld(G&&G.state==='play'?3:5);
+  streamWorld(bakeBudget());
   /* le sol de secours n'est dessiné que si un chunk visible n'est pas encore prêt */
   if(!chunksCover()){c.fillStyle='#05030c';c.fillRect(0,0,cv.width,cv.height);screenTf();drawGround();}
   worldTf();drawChunks();
@@ -123,7 +123,8 @@ function drawFar(mix){
 }
 function drawChunks(){
   const c0=Math.floor(VL/CH),c1=Math.floor(VR/CH),r0=Math.floor(VT/CH),r1=Math.floor(VB/CH);
-  for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(c&&c.bake)ctx.drawImage(c.bake,c.x0,c.y0,CH,CH);}
+  /* un chunk en cours de cuisson (c.bk) s'affiche tel quel : opaque, il part du même sol que drawGround */
+  for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy),b=c&&(c.bake||c.bk&&c.bk.cv);if(b)ctx.drawImage(b,c.x0,c.y0,CH,CH);}
   for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(c)for(const it of c.live)drawLive(it);}
   ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
 }

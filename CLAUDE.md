@@ -78,6 +78,11 @@ Outils complémentaires :
 - `node test/trace.js` — empreintes d'état (simulation, monde, rendu), chronométrage.
   `--ref=HEAD` compare à un commit. Sert à **prouver qu'un changement n'a pas d'effet**
   (élagage, refactorisation) : les empreintes doivent être identiques.
+- `node test/cuisson.js` — garde-fou de la cuisson du monde (horloge virtuelle « téléphone »,
+  vraie boucle `frame()`) : aucun chunk entier hors budget, travail continu et unité indivisible
+  plafonnés. `--ref=` pour l'ancien code, `--k=` pour le coût d'une opération. Appelé par headless.js.
+- `node test/art.js` — séquence BRUTE des opérations canvas de 378 chunks comparée à `93b8cfe`
+  (avant PERF-2) : toute modification de l'art du monde échoue. Appelé par headless.js.
 - `node test/unused.js` — recensement du code mort (identifiants, `SFX`, `id` HTML,
   classes CSS, médias). À lancer avant d'affirmer qu'un symbole est utilisé.
 
@@ -91,7 +96,16 @@ pas ici.
 
 ## Environnement
 
-- Serveur Linux ARM64, `node` v22 disponible. **`chromium` ne démarre pas ici** :
-  le test headless par `vm` + DOM/canvas stubés est la seule voie d'exécution.
+- Serveur Linux ARM64, `node` v22 disponible.
+- **`chromium` DÉMARRE ici** (vérifié le 27/09/2026 — l'affirmation contraire était fausse et a
+  fait produire des chiffres « téléphone » par modèle au lieu d'être mesurés). C'est un snap :
+  son `/tmp` est privé, donc `--screenshot=/tmp/x.png` écrit un fichier introuvable depuis le
+  serveur. Écrire ailleurs : `--screenshot=/root/shots/x.png`. Exemple de capture :
+  `chromium --headless=new --no-sandbox --disable-gpu --hide-scrollbars --window-size=390,780 \
+   --virtual-time-budget=40000 --screenshot=/root/shots/jeu.png file:///chemin/page.html`
+  Pour MESURER (et non capturer), piloter par CDP : voir `/root/work/bulge-verif/perf-run.js`
+  (`node perf-run.js <page.html> <ralentissement CPU> <durée s> <label>`), qui lit de vrais
+  intervalles d'image avec `Emulation.setCPUThrottlingRate`.
+  Le harnais `vm` reste la voie d'exécution déterministe pour les tests.
 - Écrire dans ce dépôt uniquement. Ne pas toucher à `/root/.hermes/`, `~/.claude/` ni
   aux autres projets.
