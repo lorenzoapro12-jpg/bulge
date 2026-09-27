@@ -133,7 +133,7 @@ function gxJournal(){const X=G.gx,C=G.gc;if(!X)return '';const n=o=>Object.keys(
    DUEL TACTIQUE
    ========================================================= */
 let DU=null;
-function canonKind(){if(G.daily)return 0;const it=giEquipped().canon;return it?it.bi:0;}
+function canonKind(){if(G.daily)return 0;const it=giEquipped().canon;return it&&BASES.canon[it.bi]?it.bi:0;}
 function duelStart(i){
   const h=WD.hunt[i],P=G.p,sc=1+.35*(G.room-1),A=ARCH[h.a];
   const rnd=mkRng(WD.seed+i*97),els=Object.keys(EL),weak=els[Math.floor(rnd()*4)],res=els.filter(e=>e!==weak)[Math.floor(rnd()*3)];
@@ -168,7 +168,7 @@ function duelFloat(f,s){f.fl=s;}
 function duelAct(a){
   if(!DU||DU.busy)return;const me=DU.me,P=G.p;let tgt=alive()[0];const sel=DU.foes[DU.sel];if(sel&&sel.hp>0)tgt=sel;
   const cost=a==='tir'?DK[DU.kind].c:a==='sk0'||a==='sk1'?2:a==='ult'?0:1;if(me.en<cost)return;
-  if(a==='ult'&&me.ult<100)return;if((a==='sk0'||a==='sk1')&&(!P.sk[a==='sk0'?0:1]||me.cd[a==='sk0'?0:1]>0))return;
+  if(a==='ult'&&me.ult<100)return;if((a==='sk0'||a==='sk1')&&(!P.sk[a==='sk0'?0:1]||me.cd[a==='sk0'?0:1]>0))return;if(a==='scan'&&tgt.rev&&me.crit)return;
   me.en-=cost;SFX.hit();
   if(a==='tir'){const k=DU.kind;
     if(k===1){for(const f of alive())dHit(f,.6);duelLog('Salve dispersée sur toute l’escouade.');}
@@ -260,9 +260,9 @@ function renderDuel(){
   $('dvMe').innerHTML='<div class="fn">'+meta.tank.name.replace(/</g,'')+' <small>'+PROF[G.prof].n+'</small></div><div class="bar me"><i style="width:'+(me.hp/me.mhp*100)+'%"></i></div>'+
     '<div class="fh">Coque '+me.hp+' / '+me.mhp+(me.sh?' · ⬡ '+me.sh:'')+(me.mark?' · <b style="color:#ff5570">marqué</b>':'')+(me.burn?' · en feu':'')+(me.evade?' · esquive prête':'')+'</div>'+
     '<div class="en">'+'<i class="on"></i>'.repeat(me.en)+'<i></i>'.repeat(Math.max(0,3-me.en))+'<span>énergie</span><span class="ul">Ultime '+Math.floor(me.ult)+' %</span></div>';
-  const K=DK[DU.kind],acts=[['tir',K.a,K.d,K.c,1]];
+  const K=DK[DU.kind],acts=[['tir',K.a,K.d,K.c,1]],sf=DU.foes[DU.sel],tg=sf&&sf.hp>0?sf:alive()[0];
   P.sk.forEach((s,j)=>{if(s)acts.push(['sk'+j,SKL[s.id].n+' '+ROMAN[s.l],DSK[s.id].d+(me.cd[j]?' · recharge '+me.cd[j]:''),2,!me.cd[j]]);});
-  acts.push(['garde','Se retrancher','Bouclier 20 % et +1 énergie au prochain tour',1,1],['scan','Analyser','Révèle la faiblesse, prochain coup critique',1,1],['ult',(ULT[G.prof]||ULT.bal).n,'Ultime',0,me.ult>=100]);
+  acts.push(['garde','Se retrancher','Bouclier 20 % et +1 énergie au prochain tour',1,1],['scan','Analyser','Révèle la faiblesse, prochain coup critique',1,!(tg&&tg.rev&&me.crit)],['ult',(ULT[G.prof]||ULT.bal).n,'Ultime',0,me.ult>=100]);
   DU.keys=acts.map(x=>x[0]);$('dvAct').innerHTML=acts.map(([a,n,d,c,ok])=>'<button class="dact" data-a="'+a+'" '+(DU.busy||!ok||me.en<c?'disabled':'')+'><b>'+n+'</b><span>'+d+'</span><em>'+'⚡'.repeat(c)+'</em></button>').join('')+
     '<button class="btn pri" id="dvEnd" '+(DU.busy?'disabled':'')+'>Fin du tour</button><button class="btn ghost" id="dvFlee" '+(DU.busy?'disabled':'')+'>Fuir (-20 % bulles)</button>';
 }

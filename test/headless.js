@@ -475,6 +475,62 @@ scenario('résiduel hangar : nom vidé → le champ affiche le nom réellement e
   return { ok: stored === shown, detail: 'enregistré=' + JSON.stringify(stored) + ' affiché=' + JSON.stringify(shown) };
 });
 
+/* résiduel (famille « débit sans effet ») — gx.js:171/265 : « Analyser » déjà sans effet (cible révélée ET critique armé)
+   => bouton désactivé et aucun débit ; redevient disponible dès que le critique est consommé ou sur une cible non révélée */
+scenario('résiduel duel : Analyser sans effet ⇒ bouton désactivé, aucun débit ; propriété débit ⇒ effet (hors journal)', () => {
+  const st = () => call('JSON.stringify({f:DU.foes.map(f=>[f.hp,f.sh,f.rev,f.frozen||0,f.grouped||0,JSON.stringify(f.st)]),me:[DU.me.hp,DU.me.sh,DU.me.crit,DU.me.bonus,DU.me.evade,DU.me.drones,DU.me.ult,DU.me.cd.join()]})');
+  const scanOff = () => /data-a="scan" disabled/.test(call("$('dvAct').innerHTML"));
+  const bad = [], log = [];
+  const act = (a, label) => { const e0 = call('DU.me.en'), s0 = st(); call('duelAct(' + JSON.stringify(a) + ')'); const e1 = call('DU.me.en'), s1 = st();
+    log.push(label + ' ' + e0 + '→' + e1 + (s1 !== s0 ? '+effet' : ''));
+    if (e1 < e0 && s1 === s0) bad.push(label + ' débite sans effet'); return { e0, e1, eff: s1 !== s0 }; };
+  start('bal', false);
+  call('duelStart(0);DU.sel=0;renderDuel()');
+  if (scanOff()) bad.push('bouton désactivé alors que la cible n est pas révélée');
+  const a1 = act('scan', 'analyse1');
+  if (!(a1.e1 === a1.e0 - 1 && a1.eff)) bad.push('1re analyse : coût ou effet modifié');
+  const off = scanOff(); log.push('bouton après analyse=' + (off ? 'désactivé' : 'actif'));
+  if (!off) bad.push('bouton actif alors qu Analyser n a plus d effet');
+  act('scan', 'analyse2');
+  act('tir', 'tir(consomme le critique)');
+  const on2 = !scanOff(); log.push('bouton après tir=' + (on2 ? 'actif' : 'désactivé'));
+  if (!on2) bad.push('bouton non réactivé après consommation du critique');
+  const a3 = act('scan', 'analyse3');
+  if (!(a3.e1 === a3.e0 - 1 && a3.eff)) bad.push('analyse après tir : coût ou effet modifié');
+  call('duelFlee()');
+  return { ok: !bad.length, detail: log.join(' ; ') + (bad.length ? ' ; ÉCHECS : ' + bad.join(', ') : '') };
+});
+
+/* résiduel (famille « champ sans garde ») — gi.js:263/268, gx.js:136 : sauvegarde altérée avec it.bi hors bornes */
+scenario('résiduel sauvegarde : équipement à bi hors bornes ⇒ ni exception ni affichage faux (hangar, duel)', () => {
+  const save = call('JSON.stringify({eq:meta.eq,inv:meta.inv})'), bad = [], seen = [];
+  const noJunk = (where, html) => { if (/undefined|NaN/.test(html)) bad.push(where + ' affiche undefined/NaN'); };
+  try {
+    call('{const c=giItem(meta.eq.canon);c.bi=99;meta.inv.push({id:99999,s:"noyau",r:0,lvl:1,up:0,bi:99,aff:[],u:null});meta.eq.noyau=99999;}');
+    try { call('renderHangar()'); seen.push('hangar rendu'); } catch (e) { bad.push('hangar : ' + e.message); }
+    for (const id of ['hgSlots', 'hgStats', 'hgIdx']) noJunk(id, doc.getElementById(id).innerHTML);
+    seen.push('emplacements=' + (doc.getElementById('hgSlots').innerHTML.match(/class="sn">[^<]*/g) || []).map(s => s.slice(11)).join('|'));
+    try { start('bal', false); call('duelStart(0)'); seen.push('duel canon=' + call('DK[DU.kind].n')); noJunk('duel', call("$('dvAct').innerHTML")); call('duelFlee()'); }
+    catch (e) { bad.push('duel : ' + e.message); }
+  } finally { call('{const s=' + save + ';meta.eq=s.eq;meta.inv=s.inv;}'); call('DU=null;if(G)G.state="play"'); }
+  return { ok: !bad.length, detail: seen.join(' ; ') + (bad.length ? ' ; ÉCHECS : ' + bad.join(', ') : '') };
+});
+
+/* résiduel (famille « champ sans garde ») — gs.js:85/194 : sauvegarde altérée meta.mis avec une mission inconnue */
+scenario('résiduel sauvegarde : mission inconnue dans meta.mis ⇒ ni exception ni affichage faux (menu, partie)', () => {
+  const save = call('JSON.stringify(meta.mis)'), bad = [], seen = [];
+  try {
+    call('meta.mis={day:todayKey(),list:[{id:"ancienne_mission",n:5,r:30,p:0,done:0},{id:"kill",n:200,r:30,p:0,done:0}]}');
+    try { call('renderMenu()'); } catch (e) { bad.push('menu : ' + e.message); }
+    const html = call("$('mMis').innerHTML");
+    if (/undefined|NaN/.test(html)) bad.push('menu affiche undefined/NaN');
+    if (!/Absorbe 200 ennemis/.test(html)) bad.push('mission saine absente du menu');
+    seen.push('menu : ' + (html.match(/<span>[^<]*<\/span>/g) || []).join(''));
+    try { start('bal', false); steps(80); seen.push('80 pas de jeu, kills mission=' + call('meta.mis.list[1].p')); } catch (e) { bad.push('partie : ' + e.message); }
+  } finally { call('meta.mis=' + save); }
+  return { ok: !bad.length, detail: seen.join(' ; ') + (bad.length ? ' ; ÉCHECS : ' + bad.join(', ') : '') };
+});
+
 /* hooks du harnais : ne doivent pas avoir disparu */
 check('hooks : SIMF / __SIM / __SIM_INPUT / __SIM_PICK / __SIM_END utilisés par le jeu',
   call('typeof SIMF') === 'function' && ['__SIM_END', '__SIM_PICK', '__SIM_INPUT'].every(h => code.includes('window.' + h)) && code.includes('window.__SIM'));

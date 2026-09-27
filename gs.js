@@ -82,7 +82,7 @@ function misToday(){
 }
 function misEvt(src,v){
   const M=misToday();
-  for(const m of M.list){const d=MIS.find(x=>x.id===m.id);if(d.src!==src||m.done)continue;
+  for(const m of M.list){const d=MIS.find(x=>x.id===m.id);if(!d||d.src!==src||m.done)continue;
     m.p=d.best?Math.max(m.p,v):m.p+v;
     if(m.p>=m.n){m.p=m.n;m.done=1;meta.shards+=m.r;if(G&&G.gs)G.gs.misDone.push(m);if(G)toast('✓ Mission  +'+m.r+' ◇');SFX.ach();}}
 }
@@ -191,7 +191,7 @@ function gsMenu(){
   {const lk=meta.runs<1;for(const id of ['bHangar','bSanct']){const b=$(id);if(b){b.disabled=lk;b.classList.toggle('lockedb',lk);}}
    $('bHangar').textContent=lk?'Hangar · après ton premier cycle':'Hangar'+(meta.pilot&&meta.pilot.pts?' · '+meta.pilot.pts+' points à répartir':'');$('bSanct').textContent=lk?'Sanctuaire · après ton premier cycle':'Sanctuaire';}
   $('mStats').innerHTML='<div class="pill tank"><b>'+meta.tank.name.replace(/</g,'')+'</b><span>pilote niv. '+meta.pilot.lvl+(meta.pilot.pts?' · '+meta.pilot.pts+' pts':'')+'</span></div>'+$('mStats').innerHTML+'<div class="pill"><b>◇ '+fmt(meta.shards)+'</b><span>éclats</span></div><div class="pill"><b>'+lc+'/'+LORE_N+'</b><span>échos</span></div>'+(meta.streak>1?'<div class="pill"><b>'+meta.streak+' j</b><span>série</span></div>':'');
-  $('mMis').innerHTML='<div class="mt">Missions du jour</div>'+M.list.map(m=>{const d=MIS.find(x=>x.id===m.id);return '<div class="mis'+(m.done?' done':'')+'"><span>'+(m.done?'✓ ':'')+d.t(m.n)+'</span><b>+'+m.r+' ◇</b><i style="--v:'+Math.round(m.p/m.n*100)+'%"></i></div>';}).join('');
+  $('mMis').innerHTML='<div class="mt">Missions du jour</div>'+M.list.map(m=>{const d=MIS.find(x=>x.id===m.id);if(!d)return '';return '<div class="mis'+(m.done?' done':'')+'"><span>'+(m.done?'✓ ':'')+d.t(m.n)+'</span><b>+'+m.r+' ◇</b><i style="--v:'+Math.round(m.p/m.n*100)+'%"></i></div>';}).join('');
 }
 function gsEndBox(){
   const S=G.gs;if(!S||!S.sum)return '';const u=S.sum;

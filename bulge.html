@@ -1884,7 +1884,7 @@ function misToday(){
 }
 function misEvt(src,v){
   const M=misToday();
-  for(const m of M.list){const d=MIS.find(x=>x.id===m.id);if(d.src!==src||m.done)continue;
+  for(const m of M.list){const d=MIS.find(x=>x.id===m.id);if(!d||d.src!==src||m.done)continue;
     m.p=d.best?Math.max(m.p,v):m.p+v;
     if(m.p>=m.n){m.p=m.n;m.done=1;meta.shards+=m.r;if(G&&G.gs)G.gs.misDone.push(m);if(G)toast('✓ Mission  +'+m.r+' ◇');SFX.ach();}}
 }
@@ -1993,7 +1993,7 @@ function gsMenu(){
   {const lk=meta.runs<1;for(const id of ['bHangar','bSanct']){const b=$(id);if(b){b.disabled=lk;b.classList.toggle('lockedb',lk);}}
    $('bHangar').textContent=lk?'Hangar · après ton premier cycle':'Hangar'+(meta.pilot&&meta.pilot.pts?' · '+meta.pilot.pts+' points à répartir':'');$('bSanct').textContent=lk?'Sanctuaire · après ton premier cycle':'Sanctuaire';}
   $('mStats').innerHTML='<div class="pill tank"><b>'+meta.tank.name.replace(/</g,'')+'</b><span>pilote niv. '+meta.pilot.lvl+(meta.pilot.pts?' · '+meta.pilot.pts+' pts':'')+'</span></div>'+$('mStats').innerHTML+'<div class="pill"><b>◇ '+fmt(meta.shards)+'</b><span>éclats</span></div><div class="pill"><b>'+lc+'/'+LORE_N+'</b><span>échos</span></div>'+(meta.streak>1?'<div class="pill"><b>'+meta.streak+' j</b><span>série</span></div>':'');
-  $('mMis').innerHTML='<div class="mt">Missions du jour</div>'+M.list.map(m=>{const d=MIS.find(x=>x.id===m.id);return '<div class="mis'+(m.done?' done':'')+'"><span>'+(m.done?'✓ ':'')+d.t(m.n)+'</span><b>+'+m.r+' ◇</b><i style="--v:'+Math.round(m.p/m.n*100)+'%"></i></div>';}).join('');
+  $('mMis').innerHTML='<div class="mt">Missions du jour</div>'+M.list.map(m=>{const d=MIS.find(x=>x.id===m.id);if(!d)return '';return '<div class="mis'+(m.done?' done':'')+'"><span>'+(m.done?'✓ ':'')+d.t(m.n)+'</span><b>+'+m.r+' ◇</b><i style="--v:'+Math.round(m.p/m.n*100)+'%"></i></div>';}).join('');
 }
 function gsEndBox(){
   const S=G.gs;if(!S||!S.sum)return '';const u=S.sum;
@@ -2555,12 +2555,12 @@ function renderHangar(){
 }
 function drawTankPreview(eq){
   const cv2=$('hgPrev');if(!cv2)return;const g=cv2.getContext('2d'),w=cv2.width,h=cv2.height,sk=SKINS[meta.skin],col=(sk&&sk.col&&skinOK(meta.skin))?sk.col:(PROF[meta.lastProf]||PROF.bal).col;
-  g.clearRect(0,0,w,h);const cx=w/2,cy=h/2,B=eq.canon?BASES.canon[eq.canon.bi]:BASES.canon[0],tur=1+(B.b.turrets||0),rad=34*(eq.blind&&eq.blind.u==='geant'?1.25:1);
+  g.clearRect(0,0,w,h);const cx=w/2,cy=h/2,B=eq.canon&&BASES.canon[eq.canon.bi]||BASES.canon[0],tur=1+(B.b.turrets||0),rad=34*(eq.blind&&eq.blind.u==='geant'?1.25:1);
   const rg=g.createRadialGradient(cx,cy,10,cx,cy,90);rg.addColorStop(0,col+'55');rg.addColorStop(1,'transparent');g.fillStyle=rg;g.fillRect(0,0,w,h);
   if(eq.moteur){g.fillStyle=RAR[eq.moteur.r].col;for(const s of [-1,1]){g.globalAlpha=.7;g.beginPath();g.moveTo(cx-rad*.6*s,cy+rad*.7);g.lineTo(cx-rad*.35*s,cy+rad*1.35);g.lineTo(cx-rad*.1*s,cy+rad*.7);g.fill();}g.globalAlpha=1;}
   g.strokeStyle=col;g.lineCap='round';g.lineWidth=B.b.bsizeM?11:7;for(let i=0;i<tur;i++){const a=-Math.PI/2+(i-(tur-1)/2)*.35;g.beginPath();g.moveTo(cx,cy);g.lineTo(cx+Math.cos(a)*(rad+(B.b.bspdM?34:22)),cy+Math.sin(a)*(rad+(B.b.bspdM?34:22)));g.stroke();}
   g.fillStyle='#120a22';g.beginPath();g.arc(cx,cy,rad,0,TAU);g.fill();g.lineWidth=eq.blind?3+eq.blind.r*2:2;g.strokeStyle=eq.blind?RAR[eq.blind.r].col:col;g.stroke();
-  const n=eq.noyau;g.fillStyle=n?(EL[Object.keys(BASES.noyau[n.bi].b)[0]]||{col:'#fff'}).col:col;g.globalAlpha=.9;g.beginPath();g.arc(cx,cy,rad*.42,0,TAU);g.fill();g.globalAlpha=1;
+  const n=eq.noyau;g.fillStyle=n?(EL[Object.keys((BASES.noyau[n.bi]||BASES.noyau[0]).b)[0]]||{col:'#fff'}).col:col;g.globalAlpha=.9;g.beginPath();g.arc(cx,cy,rad*.42,0,TAU);g.fill();g.globalAlpha=1;
   if(Object.values(eq).some(it=>it.r===3)){g.strokeStyle=RAR[3].col;g.setLineDash([5,7]);g.lineWidth=2;g.beginPath();g.arc(cx,cy,rad+14,0,TAU);g.stroke();g.setLineDash([]);}
 }
 function giBindUI(){
@@ -2714,7 +2714,7 @@ function gxJournal(){const X=G.gx,C=G.gc;if(!X)return '';const n=o=>Object.keys(
    DUEL TACTIQUE
    ========================================================= */
 let DU=null;
-function canonKind(){if(G.daily)return 0;const it=giEquipped().canon;return it?it.bi:0;}
+function canonKind(){if(G.daily)return 0;const it=giEquipped().canon;return it&&BASES.canon[it.bi]?it.bi:0;}
 function duelStart(i){
   const h=WD.hunt[i],P=G.p,sc=1+.35*(G.room-1),A=ARCH[h.a];
   const rnd=mkRng(WD.seed+i*97),els=Object.keys(EL),weak=els[Math.floor(rnd()*4)],res=els.filter(e=>e!==weak)[Math.floor(rnd()*3)];
@@ -2749,7 +2749,7 @@ function duelFloat(f,s){f.fl=s;}
 function duelAct(a){
   if(!DU||DU.busy)return;const me=DU.me,P=G.p;let tgt=alive()[0];const sel=DU.foes[DU.sel];if(sel&&sel.hp>0)tgt=sel;
   const cost=a==='tir'?DK[DU.kind].c:a==='sk0'||a==='sk1'?2:a==='ult'?0:1;if(me.en<cost)return;
-  if(a==='ult'&&me.ult<100)return;if((a==='sk0'||a==='sk1')&&(!P.sk[a==='sk0'?0:1]||me.cd[a==='sk0'?0:1]>0))return;
+  if(a==='ult'&&me.ult<100)return;if((a==='sk0'||a==='sk1')&&(!P.sk[a==='sk0'?0:1]||me.cd[a==='sk0'?0:1]>0))return;if(a==='scan'&&tgt.rev&&me.crit)return;
   me.en-=cost;SFX.hit();
   if(a==='tir'){const k=DU.kind;
     if(k===1){for(const f of alive())dHit(f,.6);duelLog('Salve dispersée sur toute l’escouade.');}
@@ -2841,9 +2841,9 @@ function renderDuel(){
   $('dvMe').innerHTML='<div class="fn">'+meta.tank.name.replace(/</g,'')+' <small>'+PROF[G.prof].n+'</small></div><div class="bar me"><i style="width:'+(me.hp/me.mhp*100)+'%"></i></div>'+
     '<div class="fh">Coque '+me.hp+' / '+me.mhp+(me.sh?' · ⬡ '+me.sh:'')+(me.mark?' · <b style="color:#ff5570">marqué</b>':'')+(me.burn?' · en feu':'')+(me.evade?' · esquive prête':'')+'</div>'+
     '<div class="en">'+'<i class="on"></i>'.repeat(me.en)+'<i></i>'.repeat(Math.max(0,3-me.en))+'<span>énergie</span><span class="ul">Ultime '+Math.floor(me.ult)+' %</span></div>';
-  const K=DK[DU.kind],acts=[['tir',K.a,K.d,K.c,1]];
+  const K=DK[DU.kind],acts=[['tir',K.a,K.d,K.c,1]],sf=DU.foes[DU.sel],tg=sf&&sf.hp>0?sf:alive()[0];
   P.sk.forEach((s,j)=>{if(s)acts.push(['sk'+j,SKL[s.id].n+' '+ROMAN[s.l],DSK[s.id].d+(me.cd[j]?' · recharge '+me.cd[j]:''),2,!me.cd[j]]);});
-  acts.push(['garde','Se retrancher','Bouclier 20 % et +1 énergie au prochain tour',1,1],['scan','Analyser','Révèle la faiblesse, prochain coup critique',1,1],['ult',(ULT[G.prof]||ULT.bal).n,'Ultime',0,me.ult>=100]);
+  acts.push(['garde','Se retrancher','Bouclier 20 % et +1 énergie au prochain tour',1,1],['scan','Analyser','Révèle la faiblesse, prochain coup critique',1,!(tg&&tg.rev&&me.crit)],['ult',(ULT[G.prof]||ULT.bal).n,'Ultime',0,me.ult>=100]);
   DU.keys=acts.map(x=>x[0]);$('dvAct').innerHTML=acts.map(([a,n,d,c,ok])=>'<button class="dact" data-a="'+a+'" '+(DU.busy||!ok||me.en<c?'disabled':'')+'><b>'+n+'</b><span>'+d+'</span><em>'+'⚡'.repeat(c)+'</em></button>').join('')+
     '<button class="btn pri" id="dvEnd" '+(DU.busy?'disabled':'')+'>Fin du tour</button><button class="btn ghost" id="dvFlee" '+(DU.busy?'disabled':'')+'>Fuir (-20 % bulles)</button>';
 }

@@ -260,12 +260,12 @@ function renderHangar(){
 }
 function drawTankPreview(eq){
   const cv2=$('hgPrev');if(!cv2)return;const g=cv2.getContext('2d'),w=cv2.width,h=cv2.height,sk=SKINS[meta.skin],col=(sk&&sk.col&&skinOK(meta.skin))?sk.col:(PROF[meta.lastProf]||PROF.bal).col;
-  g.clearRect(0,0,w,h);const cx=w/2,cy=h/2,B=eq.canon?BASES.canon[eq.canon.bi]:BASES.canon[0],tur=1+(B.b.turrets||0),rad=34*(eq.blind&&eq.blind.u==='geant'?1.25:1);
+  g.clearRect(0,0,w,h);const cx=w/2,cy=h/2,B=eq.canon&&BASES.canon[eq.canon.bi]||BASES.canon[0],tur=1+(B.b.turrets||0),rad=34*(eq.blind&&eq.blind.u==='geant'?1.25:1);
   const rg=g.createRadialGradient(cx,cy,10,cx,cy,90);rg.addColorStop(0,col+'55');rg.addColorStop(1,'transparent');g.fillStyle=rg;g.fillRect(0,0,w,h);
   if(eq.moteur){g.fillStyle=RAR[eq.moteur.r].col;for(const s of [-1,1]){g.globalAlpha=.7;g.beginPath();g.moveTo(cx-rad*.6*s,cy+rad*.7);g.lineTo(cx-rad*.35*s,cy+rad*1.35);g.lineTo(cx-rad*.1*s,cy+rad*.7);g.fill();}g.globalAlpha=1;}
   g.strokeStyle=col;g.lineCap='round';g.lineWidth=B.b.bsizeM?11:7;for(let i=0;i<tur;i++){const a=-Math.PI/2+(i-(tur-1)/2)*.35;g.beginPath();g.moveTo(cx,cy);g.lineTo(cx+Math.cos(a)*(rad+(B.b.bspdM?34:22)),cy+Math.sin(a)*(rad+(B.b.bspdM?34:22)));g.stroke();}
   g.fillStyle='#120a22';g.beginPath();g.arc(cx,cy,rad,0,TAU);g.fill();g.lineWidth=eq.blind?3+eq.blind.r*2:2;g.strokeStyle=eq.blind?RAR[eq.blind.r].col:col;g.stroke();
-  const n=eq.noyau;g.fillStyle=n?(EL[Object.keys(BASES.noyau[n.bi].b)[0]]||{col:'#fff'}).col:col;g.globalAlpha=.9;g.beginPath();g.arc(cx,cy,rad*.42,0,TAU);g.fill();g.globalAlpha=1;
+  const n=eq.noyau;g.fillStyle=n?(EL[Object.keys((BASES.noyau[n.bi]||BASES.noyau[0]).b)[0]]||{col:'#fff'}).col:col;g.globalAlpha=.9;g.beginPath();g.arc(cx,cy,rad*.42,0,TAU);g.fill();g.globalAlpha=1;
   if(Object.values(eq).some(it=>it.r===3)){g.strokeStyle=RAR[3].col;g.setLineDash([5,7]);g.lineWidth=2;g.beginPath();g.arc(cx,cy,rad+14,0,TAU);g.stroke();g.setLineDash([]);}
 }
 function giBindUI(){
