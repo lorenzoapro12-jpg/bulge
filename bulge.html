@@ -759,6 +759,15 @@ function genChunk(cx,cy){
     if(q[0]==='car'){const vert=rnd()<.5;c.live.push({t:'car',x:vert?Math.round(x/256)*256+(rnd()<.5?-13:13):x0,y:vert?y0:Math.round(y/256)*256+(rnd()<.5?-13:13),vert,ph:rnd()*CH,spd:(rnd()<.5?-1:1)*(1.3+rnd()*1.2)});continue;}
     c.live.push({t:q[0],x,y,s:.7+rnd()*.6,ph:rnd()*TAU});}
   if(rnd()<.34){const x=x0+60+rnd()*(CH-120),y=y0+60+rnd()*(CH-120);if(clearOK(x,y,40)&&!hitList(c.obs,x,y,50)&&!wallNear(x,y,70))c.cachePos={x,y};}
+  /* Vie ambiante supplementaire : phalenes des plaines, vols de l'archipel.
+     Placee avec un generateur PROPRE au chunk, JAMAIS avec `rnd` : consommer le generateur de
+     genChunk ici deplacerait caches, autels et failles de la totalite du monde, et le defi du
+     jour avec. Elles sont dessinees par image (g3.js, drawLive) et non cuites, donc aucun chunk
+     n'est modifie — la garde d'art de test/art.js reste intacte. */
+  {const ar=mkRng(hash2(cx,cy,WD.seed^0x1f3e5));
+    for(let i=0;i<5;i++){const x=x0+ar()*CH,y=y0+ar()*CH,b=biomeAt(x,y);
+      if(b==='plains')c.live.push({t:'moth',x,y,s:.7+ar()*.7,ph:ar()*TAU});
+      else if(b==='sky')c.live.push({t:'bird',x,y,s:.75+ar()*.5,ph:ar()*TAU});}}
   return c;
 }
 function collOf(c){
@@ -3349,6 +3358,35 @@ function drawLive(it){
       c.globalCompositeOperation='source-over';c.globalAlpha=1;c.fillStyle='#2c2b3e';c.fillRect(x-(it.vert?5:10),y-(it.vert?10:5),it.vert?10:20,it.vert?20:10);break;}
     case 'shimmer':{if(!vis(it.x,it.y,20))return;const p=Math.pow(Math.max(0,Math.sin(RT*.04+it.ph)),8);if(p<.05)return;c.globalAlpha=p;c.strokeStyle='#fff';c.lineWidth=1.5;c.beginPath();c.moveTo(it.x-8,it.y);c.lineTo(it.x+8,it.y);c.moveTo(it.x,it.y-8);c.lineTo(it.x,it.y+8);c.stroke();c.globalAlpha=1;break;}
     case 'node':{if(!vis(it.x,it.y,40))return;const p=.5+.5*Math.sin(RT*.06+it.ph);c.globalCompositeOperation='lighter';soft(it.x,it.y,20+p*12,'#ff3355',.3+.3*p);c.globalCompositeOperation='source-over';c.globalAlpha=1;break;}
+    case 'moth':{ /* Phalenes des plaines. Elles s'ecartent du joueur puis reviennent SANS AUCUN
+       ETAT : le decalage est une fonction pure de la distance, donc la position reste
+       reproductible et le retour est automatique des qu'on s'eloigne.
+       Lisibilite : le sol des plaines est vert, donc un halo vert-jaune s'y noie (mesure du
+       27/09 : +0 pixel visible). Coeur blanc chaud et ailes claires pour contraster. */
+      if(!vis(it.x,it.y,110))return;
+      let x=it.x,y=it.y;
+      if(G&&G.p){const dx=x-G.p.x,dy=y-G.p.y,d=Math.hypot(dx,dy)||1,R=175;
+        if(d<R){const k=(1-d/R)*(1-d/R)*52;x+=dx/d*k;y+=dy/d*k;}}
+      if(!vis(x,y,34))return;
+      const bf=.5+.5*Math.sin(RT*.22+it.ph*3);
+      c.globalCompositeOperation='lighter';
+      soft(x,y,14*it.s*(.8+.3*bf),'#fff4c2',.3+.18*bf);      /* halo serre : un insecte, pas une tache */
+      soft(x,y,5*it.s,'#ffffff',.6);
+      c.globalCompositeOperation='source-over';c.globalAlpha=1;
+      c.fillStyle='rgba(255,255,255,.95)';                   /* ailes : deux traits clairs */
+      c.beginPath();c.moveTo(x-5*it.s,y-1.6*it.s);c.quadraticCurveTo(x,y-1.2*it.s*(1+bf),x+5*it.s,y-1.6*it.s);
+      c.moveTo(x-5*it.s,y+1.6*it.s);c.quadraticCurveTo(x,y+1.2*it.s*(1+bf),x+5*it.s,y+1.6*it.s);
+      c.lineWidth=1*it.s;c.strokeStyle='rgba(255,255,255,.85)';c.stroke();
+      c.beginPath();c.arc(x,y,1.5*it.s,0,TAU);c.fill();break;}
+    case 'bird':{ /* Vols de l'archipel : une bande traverse le ciel, ombre portee sur la mer de
+       nuages. Trajectoire pure fonction du temps et de la phase : aucune memoire. */
+      const sp=RT*.05+it.ph,bx=it.x+((sp*170)%760)-380,by=it.y+Math.sin(sp*.8+it.ph)*34;
+      if(!vis(bx,by,70))return;
+      const f=.5+.5*Math.sin(RT*.22+it.ph*5);
+      c.strokeStyle='rgba(16,20,46,.30)';c.lineWidth=2;c.lineCap='round';   /* ombre */
+      c.beginPath();c.moveTo(bx-6*it.s+30,by+34);c.lineTo(bx+30,by+34-3*it.s);c.lineTo(bx+6*it.s+30,by+34);c.stroke();
+      c.strokeStyle='rgba(242,248,255,.92)';c.lineWidth=1.7;
+      c.beginPath();c.moveTo(bx-8*it.s,by);c.quadraticCurveTo(bx,by-7*it.s*(.55+f),bx+8*it.s,by);c.stroke();break;}
   }
 }
 function drawCaustics(w){

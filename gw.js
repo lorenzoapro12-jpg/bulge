@@ -124,6 +124,15 @@ function genChunk(cx,cy){
     if(q[0]==='car'){const vert=rnd()<.5;c.live.push({t:'car',x:vert?Math.round(x/256)*256+(rnd()<.5?-13:13):x0,y:vert?y0:Math.round(y/256)*256+(rnd()<.5?-13:13),vert,ph:rnd()*CH,spd:(rnd()<.5?-1:1)*(1.3+rnd()*1.2)});continue;}
     c.live.push({t:q[0],x,y,s:.7+rnd()*.6,ph:rnd()*TAU});}
   if(rnd()<.34){const x=x0+60+rnd()*(CH-120),y=y0+60+rnd()*(CH-120);if(clearOK(x,y,40)&&!hitList(c.obs,x,y,50)&&!wallNear(x,y,70))c.cachePos={x,y};}
+  /* Vie ambiante supplementaire : phalenes des plaines, vols de l'archipel.
+     Placee avec un generateur PROPRE au chunk, JAMAIS avec `rnd` : consommer le generateur de
+     genChunk ici deplacerait caches, autels et failles de la totalite du monde, et le defi du
+     jour avec. Elles sont dessinees par image (g3.js, drawLive) et non cuites, donc aucun chunk
+     n'est modifie — la garde d'art de test/art.js reste intacte. */
+  {const ar=mkRng(hash2(cx,cy,WD.seed^0x1f3e5));
+    for(let i=0;i<5;i++){const x=x0+ar()*CH,y=y0+ar()*CH,b=biomeAt(x,y);
+      if(b==='plains')c.live.push({t:'moth',x,y,s:.7+ar()*.7,ph:ar()*TAU});
+      else if(b==='sky')c.live.push({t:'bird',x,y,s:.75+ar()*.5,ph:ar()*TAU});}}
   return c;
 }
 function collOf(c){
