@@ -1,7 +1,6 @@
 /* =========================================================
    ENTRÉES, INTERFACE, BOUCLE
    ========================================================= */
-const RM=typeof matchMedia!=='undefined'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
 const COARSE=typeof matchMedia!=='undefined'&&matchMedia('(pointer: coarse)').matches;
 const inp={keys:{},L:null,R:null,touch:COARSE,mx:0,my:0,mdown:false,mt:-1e9};
 function readInput(){
@@ -57,8 +56,8 @@ function onKey(e){
 }
 
 /* ---------- écrans ---------- */
-const IN_GAME=['play','warp','dying','victory','evo','pause','duel'];
-function flashFade(col,ms){const f=$('fade');if(!f||RM)return;f.style.background=col;f.style.setProperty('--d',(ms||800)+'ms');f.classList.remove('go');void f.offsetWidth;f.classList.add('go');}
+const IN_GAME=['play','dying','victory','evo','pause','duel'];
+function flashFade(col,ms){const f=$('fade');if(!f||REDUCED)return;f.style.background=col;f.style.setProperty('--d',(ms||800)+'ms');f.classList.remove('go');void f.offsetWidth;f.classList.add('go');}
 function show(id){
   document.querySelectorAll('.ov').forEach(o=>o.classList.toggle('on',o.id===id));
   if(id){const p=$('prompt');if(p)p.hidden=true;if(G&&G.gx){G.gx.pk='';G.gx.prompt=null;}}
@@ -160,7 +159,7 @@ function renderLB(){
 }
 
 /* ---------- boucle ---------- */
-let last=0,acc=0,FPSV=0,fpsN=0,fpsT=0,slowT=0,fastT=0;const STEPMS=1000/60,DTH=[];
+let last=0,acc=0,FPSV=0,fpsN=0,fpsT=0,slowT=0;const STEPMS=1000/60,DTH=[];
 /* Qualité. Ancienne méthode : baisse de résolution dès que le temps moyen dépassait 1,22× le meilleur
    temps récent -> se déclenchait sur une simple gigue de vsync, même sur une machine capable.
    Nouvelle méthode : on compare la médiane au rafraîchissement réel de l'écran, sur 3 s, et on retire
@@ -190,7 +189,7 @@ function frame(ts){
     acc+=dt*G.timeScale;let n=0;while(acc>=STEPMS&&n<5){step();acc-=STEPMS;n++;}if(n>=5)acc=0;
     if(G&&(G.state==='play'||G.state==='dying'||G.state==='victory'))A=clamp(acc/STEPMS,0,1);
   }
-  if(RM&&G){G.trauma*=.5;G.glitch=Math.min(G.glitch,2);}
+  if(REDUCED&&G){G.trauma*=.5;G.glitch=Math.min(G.glitch,2);}
   const bgOnly=!G||['pause','duel','end','evo'].includes(G.state);FRN=(FRN+1)%4;
   if(!bgOnly||FRN%(G&&G.state!=='evo'?4:2)===0||!G&&FRN%2===0)render(A,dt);
 }
@@ -203,7 +202,6 @@ function boot(){
   cv.addEventListener('pointerdown',onDown,{passive:false});cv.addEventListener('contextmenu',e=>e.preventDefault());
   cv.addEventListener('pointermove',onMove,{passive:true});
   cv.addEventListener('pointerup',onUp);cv.addEventListener('pointercancel',e=>{if(inp.B&&inp.B.id===e.pointerId)inp.B=null;onUp(e);});
-  cv.addEventListener('contextmenu',e=>e.preventDefault());
   addEventListener('keydown',onKey);
   addEventListener('keyup',e=>{inp.keys[e.code]=false;if(G&&G.state==='evo'&&e.code==='Space')e.preventDefault();});
   addEventListener('blur',()=>{inp.keys={};inp.L=inp.R=null;inp.mdown=false;});

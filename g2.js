@@ -2,7 +2,7 @@
    LOGIQUE DE JEU
    ========================================================= */
 let G=null;
-const MAXLVL=14,BOSS_ROOM=10,MUT_LV=[4,8,12];
+const MAXLVL=14,MUT_LV=[4,8,12];
 function T(l){return l<=1?0:Math.round(9*Math.pow(l-1,1.5));}
 /* facteur « début de partie » : 1 au départ, 0 dès que la menace dépasse 2,5 */
 const EARLY=()=>G?clamp(1-(G.room-1)/1.5,0,1):0;

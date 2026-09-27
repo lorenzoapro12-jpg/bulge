@@ -233,11 +233,10 @@ function gcHUD(){
   cssOp('tfrz',G.tstop>0?.28:0);
   if(G.tstop>0){c.font='700 14px '+FD;c.fillStyle='#b9dcff';c.fillText('Temps figé : '+Math.ceil(G.tstop/60)+' s',W/2,W<600?222:108);}
 }
-function gcTouch(x,y){const S=gcSlots();for(let i=0;i<3;i++){const s=S[i];if(Math.hypot(x-s.x,y-s.y)<s.r+12){if(i===2)gcUlt();else gcUse(i);return true;}}return false;}
 function gcMini(x,y,k){const c=ctx;
   c.fillStyle=COL.gd;for(let i=0;i<WD.alts.length;i++){if(G.gc&&G.gc.altUsed[i])continue;const a=WD.alts[i];c.fillRect(x+(a.x+WR)*k-1.5,y+(a.y+WR)*k-1.5,3,3);}
   c.fillStyle=COL.mg;for(let i=0;i<WD.rifts.length;i++){if(G.gc&&(G.gc.riftDone[i]||G.gc.dorm))continue;const f=WD.rifts[i];c.beginPath();c.arc(x+(f.x+WR)*k,y+(f.y+WR)*k,2.4,0,TAU);c.fill();}}
 
 /* ---------- ambiance de biome : teinte continue + fondu à l'entrée ---------- */
 function biomeWash(b){const B=BIO[b];if(!B)return;const t=$('vig'),w=$('wash');if(t)t.style.backgroundColor=rgba(B.a,.07);
-  if(w&&!RM){w.style.setProperty('--c',B.a);w.classList.remove('go');void w.offsetWidth;w.classList.add('go');}}
+  if(w&&!REDUCED){w.style.setProperty('--c',B.a);w.classList.remove('go');void w.offsetWidth;w.classList.add('go');}}

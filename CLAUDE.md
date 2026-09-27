@@ -73,6 +73,22 @@ Si `test/headless.js` n'existe pas ou ne couvre pas ce qu'on vient de modifier,
 **l'écrire / l'étendre d'abord**. Un correctif sans test qui échoue avant et passe après
 n'est pas un correctif vérifié.
 
+Outils complémentaires :
+
+- `node test/trace.js` — empreintes d'état (simulation, monde, rendu), chronométrage.
+  `--ref=HEAD` compare à un commit. Sert à **prouver qu'un changement n'a pas d'effet**
+  (élagage, refactorisation) : les empreintes doivent être identiques.
+- `node test/unused.js` — recensement du code mort (identifiants, `SFX`, `id` HTML,
+  classes CSS, médias). À lancer avant d'affirmer qu'un symbole est utilisé.
+
+⚠️ **Ne jamais conclure sur la performance depuis le harnais.** `node test/headless.js`
+exécute le jeu dans un `vm.createContext` : chaque accès à une globale y passe par un
+intercepteur, jusqu'à ~180× plus lent qu'en portée réelle. Mesuré le 27/09/2026 :
+`genWorld` semblait prendre 1,9 s sous `vm`, contre ~54 ms en contexte principal. Un
+« goulot » vu sous `vm` est très probablement un artefact du banc. Pour chronométrer :
+`test/trace.js` (contexte principal), et pour le rendu, un vrai navigateur — qu'il n'y a
+pas ici.
+
 ## Environnement
 
 - Serveur Linux ARM64, `node` v22 disponible. **`chromium` ne démarre pas ici** :

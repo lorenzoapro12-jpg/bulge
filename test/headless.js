@@ -253,7 +253,19 @@ if (!ONLY_SCN) {
   const r3 = playRun('run3-defi-du-jour', 'bal', 424242, 60000, { daily: true });
   const r4 = playRun('run4-colosse', 'tank', 31337, 60000);
   const r5 = playRun('run5-eclaireur', 'scout', 2718, 60000);
-  const rs = [r1, r2, r3, r4, r5];
+  /* passe globale : la VICTOIRE en défi du jour n'était couverte nulle part (run3 : actif + kills>0 seulement).
+     La graine du défi dépend de la date (g2.js newRun) : la date est FIGÉE au 27/09/2026 pour ce critère, sinon il
+     dépendrait du jour d'exécution. Vérifié (test/trace.js --daily-days=10) : l'IA de test gagne 9 dates sur 10 ; au
+     04/10/2026 elle reste coincée loin d'un cœur alors que le terrain est praticable (remplissage à 12 px avec pointHit,
+     rayon 30 et 37 px : 3 cœurs et noyau atteignables). Ce n'est pas un défaut du jeu mais une limite de l'IA de test. */
+  call('var __RealDate=Date;Date=class extends __RealDate{constructor(...a){if(a.length)super(...a);else super(2026,8,27,12);}static now(){return new __RealDate(2026,8,27,12).getTime();}}');
+  let r6, m6, a6;
+  try {
+    m6 = JSON.parse(call('JSON.stringify({runs:meta.runs,wins:meta.wins,day:meta.daily[String(todayKey())]||0,lb:meta.lb.length})'));
+    r6 = playRun('run6-defi-du-jour-victoire', 'bal', 777, 400000, { daily: true, boost: true, teleport: true });
+    a6 = JSON.parse(call('JSON.stringify({runs:meta.runs,wins:meta.wins,day:meta.daily[String(G.dayKey)],ach:!!meta.ach.daily,xp:G.gi?G.gi.xp:null,lbd:meta.lb.some(e=>e.d===1&&e.w===1&&e.s===G.score),arts:ARTS_ON,dk:G.dayKey})'));
+  } finally { call('Date=__RealDate'); }
+  const rs = [r1, r2, r3, r4, r5, r6];
   check('parties : aucune exception', rs.every(r => !r.error), rs.filter(r => r.error).map(r => r.run + ': ' + r.error).join(' ; '));
   check('run1 : absorptions (kills>0)', r1.kills > 0, 'kills=' + r1.kills);
   check('run1 : progression de niveau (maxLvl>2)', r1.maxLvl > 2, 'maxLvl=' + r1.maxLvl);
@@ -266,6 +278,11 @@ if (!ONLY_SCN) {
   check('run3 : défi du jour actif', r3.daily === true && r3.kills > 0, 'daily=' + r3.daily + ' kills=' + r3.kills);
   check('run4 : profil Colosse jouable', r4.kills > 0, 'kills=' + r4.kills);
   check('run5 : profil Éclaireur jouable', r5.kills > 0, 'kills=' + r5.kills);
+  check('run6 : VICTOIRE en défi du jour (__SIM_END(true), 3 cœurs, reliques inactives)', r6.ended && r6.win === true && r6.daily === true && r6.hearts >= 3 && a6.arts === false,
+    'jour=' + a6.dk + ' daily=' + r6.daily + ' fin=' + r6.ended + ' victoire=' + r6.win + ' coeurs=' + r6.hearts + ' pas=' + r6.steps + ' reliques actives=' + a6.arts);
+  check('run6 : règles du défi à la victoire (aucune relique proposée, cycle et victoires non comptés, 0 XP, record du jour, succès Rituel, classement)',
+    r6.relicChoices === 0 && a6.runs === m6.runs && a6.wins === m6.wins && a6.xp === 0 && a6.day === Math.max(m6.day, r6.score) && a6.ach && a6.lbd,
+    'reliques=' + r6.relicChoices + ' cycles ' + m6.runs + '→' + a6.runs + ' victoires ' + m6.wins + '→' + a6.wins + ' xp=' + a6.xp + ' record du jour ' + m6.day + '→' + a6.day + ' (score ' + r6.score + ') Rituel=' + a6.ach + ' classement=' + a6.lbd);
 }
 
 /* =========================================================
@@ -529,6 +546,40 @@ scenario('résiduel sauvegarde : mission inconnue dans meta.mis ⇒ ni exception
     try { start('bal', false); steps(80); seen.push('80 pas de jeu, kills mission=' + call('meta.mis.list[1].p')); } catch (e) { bad.push('partie : ' + e.message); }
   } finally { call('meta.mis=' + save); }
   return { ok: !bad.length, detail: seen.join(' ; ') + (bad.length ? ' ; ÉCHECS : ' + bad.join(', ') : '') };
+});
+
+/* passe globale — gx.js renderDuel : les touches 1..n (et Entrée) existaient mais n'étaient affichées nulle part.
+   Au clavier : chaque bouton d'action porte le chiffre qui le déclenche, dans l'ordre de DU.keys ; Entrée sur « Fin du tour ».
+   Sur tactile : aucun libellé de touche (comme les touches A/E/R du HUD, gc.js). */
+scenario('duel : chaque action affiche sa touche au clavier (1…n, Entrée), aucune sur tactile', () => {
+  const read = () => { const html = call("$('dvAct').innerHTML"), btns = html.match(/<button class="dact"[\s\S]*?<\/button>/g) || [];
+    return { html, keys: call('DU.keys.join(",")'), acts: btns.map(b => (/data-a="(\w+)"/.exec(b) || [])[1]).join(','),
+      shown: btns.map(b => (/<kbd>([^<]*)<\/kbd>/.exec(b) || [])[1] || '-').join(','), end: /id="dvEnd"[^>]*>[^<]*<kbd>Entrée<\/kbd>/.test(html) }; };
+  start('bal', false); call('inp.touch=false;duelStart(0)'); const k = read(); call('duelFlee()');
+  start('bal', false); call('inp.touch=true;duelStart(0)'); const t = read(); call('duelFlee();inp.touch=false');
+  const want = k.keys.split(',').map((_, i) => i + 1).join(',');
+  return { ok: k.acts === k.keys && k.shown === want && k.end && !/<kbd>/.test(t.html),
+    detail: 'clavier : boutons [' + k.acts + '] touches affichées [' + k.shown + '] (attendu [' + want + ']), Entrée affichée=' + k.end + ' ; tactile : libellés=' + /<kbd>/.test(t.html) };
+});
+
+/* passe globale — gt.js : une étape du prologue ne se validait QUE par son action. Un joueur qui ne dashe pas ou ne lance
+   jamais sa compétence restait bloqué indéfiniment (d'une partie à l'autre : meta.tuto reprend à l'étape), sans voir
+   la suite ni recevoir la récompense. Joueur passif (immobile, invulnérable, n'utilise rien) placé à l'étape « dash » :
+   il doit arriver à l'étape « heart » (l'objectif de la partie). Témoin : lancer sa compétence valide l'étape tout de suite. */
+scenario('prologue : un joueur qui ne dashe ni ne lance sa compétence n est pas bloqué ; l action valide toujours aussitôt', () => {
+  const tuto = call('meta.tuto'), inputFn = win.__SIM_INPUT, idx = (id) => call('TUTO.findIndex(s=>s.id===' + JSON.stringify(id) + ')');
+  const iDash = idx('dash'), iSkill = idx('skill'), iHeart = idx('heart'), seen = [];
+  try {
+    win.__SIM_INPUT = () => call('G.inX=G.inY=0;G.p.inv=1e9');
+    call('meta.tuto=' + iDash); start('bal', false);
+    let last = call('G.gt.step'); const n = steps(40000, () => { const s = call('G.gt.step'); if (s !== last) { seen.push(s + '@' + call('G.time')); last = s; } return s >= iHeart; });
+    const reached = call('G.gt.step'), usedSkill = call('G.p.sk[0].cd>0'), dashed = call('G.p.dashT>0');
+    /* témoin : l'action valide l'étape immédiatement */
+    call('meta.tuto=' + iSkill); start('bal', false); steps(40); call('gcUse(0)');
+    const n2 = steps(600, () => call('G.gt.step') !== iSkill), after = call('G.gt.step');
+    return { ok: reached === iHeart && !usedSkill && !dashed && after === iSkill + 1 && n2 <= 2,
+      detail: 'passif : étape ' + iDash + '→' + reached + ' en ' + n + ' pas (étapes franchies ' + seen.join(' ') + ', compétence utilisée=' + usedSkill + ') ; témoin : compétence lancée → étape ' + iSkill + '→' + after + ' en ' + n2 + ' pas' };
+  } finally { win.__SIM_INPUT = inputFn; call(tuto === undefined ? 'delete meta.tuto' : 'meta.tuto=' + JSON.stringify(tuto)); }
 });
 
 /* hooks du harnais : ne doivent pas avoir disparu */

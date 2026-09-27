@@ -141,9 +141,6 @@ const SFX={
   evo(){if(!can('ev',100))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',220,880,t,.35,.07);nz(AU.sfx,t,.3,.05,'bandpass',3000,2);},
   hurt(){if(!can('hu',90))return;const t=AU.ac.currentTime;nz(AU.sfx,t,.28,.25,'lowpass',1000);osc(AU.sfx,'sawtooth',200,55,t,.32,.09);},
   dash(){if(!can('da',100))return;const t=AU.ac.currentTime;nz(AU.sfx,t,.22,.12,'bandpass',1800,.8);osc(AU.sfx,'sine',300,900,t,.14,.04);},
-  warp(){if(!can('wa',300))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',120,1800,t,.6,.09);osc(AU.sfx,'triangle',240,3600,t+.05,.5,.03);nz(AU.sfx,t,.6,.08,'highpass',2000);},
-  clear(){if(!can('cl',300))return;const t=AU.ac.currentTime;[0,7,12,19].forEach((s,k)=>osc(AU.sfx,'triangle',440*Math.pow(2,s/12),0,t+k*.07,.3,.05));},
-  spawn(){if(!can('sp',200))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',1600,200,t,.25,.03);},
   eshot(){if(!can('es',110))return;const t=AU.ac.currentTime;osc(AU.sfx,'triangle',340,190,t,.07,.016);},
   tele(){if(!can('te',150))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',600,1500,t,.8,.025);},
   snipe(){if(!can('sn',100))return;const t=AU.ac.currentTime;osc(AU.sfx,'sawtooth',1400,200,t,.18,.05);},
@@ -202,7 +199,6 @@ function bus(dest,p,ds,rs){const key=dest.__id+'|'+(Math.round(p*2)/2)+'|'+ds+'|
   b=ac.createGain();const pn=ac.createStereoPanner();pn.pan.value=Math.round(p*2)/2;b.connect(pn);pn.connect(dest);
   if(ds){const g=ac.createGain();g.gain.value=ds;pn.connect(g);g.connect(AU.dsend);}if(rs){const g=ac.createGain();g.gain.value=rs;pn.connect(g);g.connect(AU.rsend);}
   return AU.buses[key]=b;}
-function pan(dest,p){return bus(dest,p,0,0);}
 function iPad(t,notes,dur,cut){const ac=AU.ac;
   for(const n of notes.slice(0,3)){const f=hz(n+12),lp=ac.createBiquadFilter(),g=ac.createGain(),P=bus(AU.st.pad,(Math.random()-.5)*.9,0,.5);
     lp.type='lowpass';lp.Q.value=.6;lp.frequency.setValueAtTime(cut*.4,t);lp.frequency.linearRampToValueAtTime(cut,t+dur*.5);lp.frequency.linearRampToValueAtTime(cut*.6,t+dur);

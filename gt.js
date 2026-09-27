@@ -16,13 +16,13 @@ const TUTO=[
   {id:'level',o:'Atteins le niveau 2 et choisis une évolution',h:()=>'Chaque niveau propose trois évolutions. Elles se combinent : cherche des synergies plutôt que des chiffres.',
     say:'Tu grandis. À chaque palier, le rêve t’offre une forme nouvelle. Choisis bien : certaines s’aiment entre elles.',start:T=>tutSpawn(5,'pop',400),done:T=>G.p.lvl>=2&&G.state==='play'},
   {id:'dash',o:'Utilise le dash',h:()=>inp.touch?'Bouton ⚡ en bas à droite.':'Espace ou Maj.',
-    say:'Le dash te rend intouchable un court instant. Traverse les tirs au lieu de les fuir.',done:T=>G.p.dashT>0||G.p.dashing>0},
+    say:'Le dash te rend intouchable un court instant. Traverse les tirs au lieu de les fuir.',done:T=>G.p.dashT>0||G.p.dashing>0,wait:2700},
   {id:'skill',o:'Lance ta compétence sur un groupe',h:()=>inp.touch?'Appui court sur le bouton ① (à gauche du ⚡).':'Touche '+KEYL[0]+' ou clic droit.',
-    say:()=>'Chaque forme porte un don. Le tien s’appelle '+SKL[G.p.sk[0].id].n+'. Il se recharge : garde-le pour les moments qui comptent.',start:T=>tutSpawn(6,'mite',300),done:T=>G.p.sk[0].cd>0},
+    say:()=>'Chaque forme porte un don. Le tien s’appelle '+SKL[G.p.sk[0].id].n+'. Il se recharge : garde-le pour les moments qui comptent.',start:T=>tutSpawn(6,'mite',300),done:T=>G.p.sk[0].cd>0,wait:2700},
   {id:'echo',o:'Réveille un écho',h:()=>'Entre dans le cercle doré d’un monument. La flèche dorée t’y mène.',
-    say:'Les monuments gardent des fragments de l’histoire d’Iris. Ton histoire, peut-être. Va les écouter.',tgt:()=>nearestOf(WD.lms,(L,i)=>!G.gs.lm[i]),done:T=>G.gs.echo>=1},
+    say:'Les monuments gardent des fragments de l’histoire d’Iris. Ton histoire, peut-être. Va les écouter.',tgt:()=>nearestOf(WD.lms,(L,i)=>!G.gs.lm[i]),done:T=>G.gs.echo>=1,wait:9000},
   {id:'altar',o:'Reçois le don d’un autel',h:()=>'Reste un instant dans le cercle d’un autel doré (■ sur la mini-carte). Il t’offre une deuxième compétence.',
-    say:'Iris a semé des autels le long des routes. Suis les panneaux aux embranchements : ils indiquent où mène chaque chemin.',tgt:()=>nearestOf(WD.alts,(a,i)=>!G.gc.altUsed[i]),done:T=>Object.keys(G.gc.altUsed).length>=1},
+    say:'Iris a semé des autels le long des routes. Suis les panneaux aux embranchements : ils indiquent où mène chaque chemin.',tgt:()=>nearestOf(WD.alts,(a,i)=>!G.gc.altUsed[i]),done:T=>Object.keys(G.gc.altUsed).length>=1,wait:9000},
   {id:'heart',o:'Détruis un cœur de zone',h:()=>'Suis la flèche vers un cœur. Dans son arène, une membrane t’enferme : arrive avec des bulles en réserve.',
     say:'Trois gardiens protègent l’Hypernoyau. Chacun est un souvenir forcé de monter la garde. Libère le premier.',done:T=>G.heartsDone>=1}];
 const TIPS={
@@ -43,7 +43,6 @@ const TIPS={
   hangar:'Le Hangar est ouvert : équipe ton butin, répartis tes points de pilote et compare les objets avant de les porter.'};
 function nearestOf(arr,ok){const P=G.p;let b=null,bd=1e18;arr.forEach((q,i)=>{if(ok&&!ok(q,i))return;const d=dist2(q.x,q.y,P.x,P.y);if(d<bd){bd=d;b=q;}});return b;}
 function tutSpawn(n,t,d){const P=G.p;for(let k=0;k<n;k++){const a=k/n*TAU+R();const e=mkEnemy(t,P.x+Math.cos(a)*d,P.y+Math.sin(a)*d,{aggro:true,noElite:true});e.hp=Math.min(e.hp,e.mhp*.6);}}
-function tutOn(){return G&&G.gt&&G.gt.on;}
 function gtRunStart(){
   const on=!G.daily&&(meta.tuto||0)<TUTO.length;
   G.gt={on,step:-1,T:null,tipT:0};
@@ -51,10 +50,10 @@ function gtRunStart(){
   G.gc.dorm=!G.daily&&meta.runs<1;G.gx.dorm=!G.daily&&meta.runs<1;
   if(on){G.help=0;G.banner=null;tutGo(meta.tuto||0);}
 }
-function tutGo(i){
+function tutGo(i,skip){
   const S=G.gt;S.step=i;meta.tuto=i;saveMeta();if(i>=TUTO.length){tutDone();return;}
   const st=TUTO[i],P=G.p;S.T={k0:G.kills,dist:0,lx:P.x,ly:P.y,got:0,lb:P.bub,t:0};
-  if(st.start)st.start(S.T);if(G.gs)G.gs.subs=G.gs.subs.filter(q=>q.who!==GUIDE);gsSay(typeof st.say==='function'?st.say():st.say,GUIDE,COL.cy,1);
+  if(st.start)st.start(S.T);if(G.gs)G.gs.subs=G.gs.subs.filter(q=>q.who!==GUIDE);gsSay((skip?'Pas grave, tu y reviendras : c’est noté dans le Guide. ':'')+(typeof st.say==='function'?st.say():st.say),GUIDE,COL.cy,1);
 }
 function tutDone(){
   const S=G.gt;S.on=false;meta.tuto=TUTO.length;meta.shards+=60;saveMeta();
@@ -66,7 +65,9 @@ function gtTick(){
   const S=G.gt;if(!S)return;const P=G.p;
   if(S.on&&S.T){const T=S.T,st=TUTO[S.step];T.t++;
     T.dist+=Math.hypot(P.x-T.lx,P.y-T.ly);T.lx=P.x;T.ly=P.y;if(P.bub>T.lb)T.got+=P.bub-T.lb;T.lb=P.bub;
-    if(st&&st.done(T)&&T.t>30){ringFX(P.x,P.y,P.r,P.r*4,COL.cy,18,3);SFX.pick(8);tutGo(S.step+1);return;}}
+    if(st&&st.done(T)&&T.t>30){ringFX(P.x,P.y,P.r,P.r*4,COL.cy,18,3);SFX.pick(8);tutGo(S.step+1);return;}
+    /* patience : une étape non faite n'enferme pas le joueur dans le prologue (son aide reste dans le Guide) */
+    if(st&&st.wait&&T.t>=st.wait){tutGo(S.step+1,1);return;}}
   if(G.t%20!==0)return;
   /* astuces contextuelles : une fois chacune, jamais pendant les premiers pas */
   if(S.on&&S.step<4)return;

@@ -162,6 +162,7 @@ p.sub{color:#c9c3ea;font-size:16px;max-width:52ch;line-height:1.4}
 .dvact{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;width:100%}
 .dact{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:10px 12px;border-radius:12px;border:1px solid rgba(45,226,255,.4);background:rgba(8,4,18,.85);color:inherit;cursor:pointer;min-height:64px}
 .dact b{font-size:14px}.dact span{font-size:11px;color:#b7b0d8;line-height:1.3}.dact em{font-style:normal;font-size:12px;color:var(--gd)}.dact:disabled{opacity:.35;cursor:default}
+.dvact kbd{font-family:inherit;font-size:11px;font-weight:700;color:var(--dim);border:1px solid rgba(143,137,179,.5);border-radius:4px;padding:0 5px;margin-right:7px;vertical-align:1px}.dvact .btn kbd{margin:0 0 0 8px;color:inherit;opacity:.7}
 .dvact .btn{min-height:46px}.dvact #dvEnd{position:sticky;bottom:calc(8px + env(safe-area-inset-bottom));z-index:2}
 @media (max-width:600px){.dvfoes{grid-template-columns:1fr 1fr}.foe.cmd{grid-column:1/-1}.foe{padding:8px 10px}.dvlog{min-height:0;font-size:12px}.dact{min-height:56px;padding:8px 10px}.dvin{gap:8px}}
 .gtip{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-left:3px solid var(--cy);background:rgba(255,255,255,.04);border-radius:8px;font-size:13px;line-height:1.45}.gtip.locked{opacity:.4;border-color:#4a4468}
@@ -441,9 +442,6 @@ const SFX={
   evo(){if(!can('ev',100))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',220,880,t,.35,.07);nz(AU.sfx,t,.3,.05,'bandpass',3000,2);},
   hurt(){if(!can('hu',90))return;const t=AU.ac.currentTime;nz(AU.sfx,t,.28,.25,'lowpass',1000);osc(AU.sfx,'sawtooth',200,55,t,.32,.09);},
   dash(){if(!can('da',100))return;const t=AU.ac.currentTime;nz(AU.sfx,t,.22,.12,'bandpass',1800,.8);osc(AU.sfx,'sine',300,900,t,.14,.04);},
-  warp(){if(!can('wa',300))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',120,1800,t,.6,.09);osc(AU.sfx,'triangle',240,3600,t+.05,.5,.03);nz(AU.sfx,t,.6,.08,'highpass',2000);},
-  clear(){if(!can('cl',300))return;const t=AU.ac.currentTime;[0,7,12,19].forEach((s,k)=>osc(AU.sfx,'triangle',440*Math.pow(2,s/12),0,t+k*.07,.3,.05));},
-  spawn(){if(!can('sp',200))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',1600,200,t,.25,.03);},
   eshot(){if(!can('es',110))return;const t=AU.ac.currentTime;osc(AU.sfx,'triangle',340,190,t,.07,.016);},
   tele(){if(!can('te',150))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',600,1500,t,.8,.025);},
   snipe(){if(!can('sn',100))return;const t=AU.ac.currentTime;osc(AU.sfx,'sawtooth',1400,200,t,.18,.05);},
@@ -502,7 +500,6 @@ function bus(dest,p,ds,rs){const key=dest.__id+'|'+(Math.round(p*2)/2)+'|'+ds+'|
   b=ac.createGain();const pn=ac.createStereoPanner();pn.pan.value=Math.round(p*2)/2;b.connect(pn);pn.connect(dest);
   if(ds){const g=ac.createGain();g.gain.value=ds;pn.connect(g);g.connect(AU.dsend);}if(rs){const g=ac.createGain();g.gain.value=rs;pn.connect(g);g.connect(AU.rsend);}
   return AU.buses[key]=b;}
-function pan(dest,p){return bus(dest,p,0,0);}
 function iPad(t,notes,dur,cut){const ac=AU.ac;
   for(const n of notes.slice(0,3)){const f=hz(n+12),lp=ac.createBiquadFilter(),g=ac.createGain(),P=bus(AU.st.pad,(Math.random()-.5)*.9,0,.5);
     lp.type='lowpass';lp.Q.value=.6;lp.frequency.setValueAtTime(cut*.4,t);lp.frequency.linearRampToValueAtTime(cut,t+dur*.5);lp.frequency.linearRampToValueAtTime(cut*.6,t+dur);
@@ -633,14 +630,14 @@ function schedStep(s,t){
    ========================================================= */
 const WR=7000,CH=512,NC=Math.ceil(2*WR/CH)+4,COFF=NC>>1;
 const BIO={
-  plains:{n:'Plaines de Lumen',sub:'Prairies phosphorescentes',g:'#10302a',a:'#6dffb5',b:'#d6ff7a',mus:0,wave:'triangle',wea:'pollen',far:'mist',en:{pop:3,mite:2,spike:1.2,orbit:1,spread:1,ring:.6}},
-  floral:{n:'Jardin carnivore',sub:'Les fleurs ont faim',g:'#330f35',a:'#ff5ad8',b:'#ffd166',mus:1,wave:'triangle',wea:'petals',far:'blooms',en:{spawner:1.4,mite:2.5,pop:2,spike:1.5,ring:1}},
-  sea:{n:'Récif abyssal',sub:'Pression et lumière froide',g:'#062150',a:'#34e6ff',b:'#6dffd9',mus:2,wave:'sine',wea:'bubbles',far:'rays',en:{orbit:3,pop:2,ring:1.5,spawner:.8,sniper:.6}},
-  sky:{n:'Archipel céleste',sub:'Au-dessus des nuages',g:'#223673',a:'#cfe0ff',b:'#ffffff',mus:3,wave:'triangle',wea:'wind',far:'clouds',en:{sniper:2.5,orbit:2,spread:1.5,pop:1}},
-  cyber:{n:'Grille néon',sub:'Le réseau te voit',g:'#0a0822',a:'#2de2ff',b:'#ff2d95',mus:4,wave:'square',wea:'data',far:'grid',en:{gatling:2.5,sniper:1.5,spread:2,mite:1.5}},
-  urban:{n:'Mégapole',sub:'Pluie acide et néons',g:'#13131f',a:'#ffc93c',b:'#ff2d95',mus:5,wave:'sawtooth',wea:'rain',far:'lights',en:{spread:2.5,spike:2,gatling:1.5,pop:1.5,sniper:1}},
-  ice:{n:'Glacier fractal',sub:'Tout se fige',g:'#0f2d42',a:'#b5f3ff',b:'#ffffff',mus:6,wave:'sine',wea:'snow',far:'mist',en:{ring:2.5,spread:1.5,orbit:1.5,spike:1}},
-  core:{n:'Le Cœur',sub:'Territoire de l’Hypernoyau',g:'#300a10',a:'#ff3355',b:'#ff8a2d',mus:7,wave:'sawtooth',wea:'embers',far:'pulse',en:{spike:2,ring:2,spawner:1.5,gatling:1.5,sniper:1}},
+  plains:{n:'Plaines de Lumen',sub:'Prairies phosphorescentes',g:'#10302a',a:'#6dffb5',b:'#d6ff7a',wea:'pollen',far:'mist',en:{pop:3,mite:2,spike:1.2,orbit:1,spread:1,ring:.6}},
+  floral:{n:'Jardin carnivore',sub:'Les fleurs ont faim',g:'#330f35',a:'#ff5ad8',b:'#ffd166',wea:'petals',far:'blooms',en:{spawner:1.4,mite:2.5,pop:2,spike:1.5,ring:1}},
+  sea:{n:'Récif abyssal',sub:'Pression et lumière froide',g:'#062150',a:'#34e6ff',b:'#6dffd9',wea:'bubbles',far:'rays',en:{orbit:3,pop:2,ring:1.5,spawner:.8,sniper:.6}},
+  sky:{n:'Archipel céleste',sub:'Au-dessus des nuages',g:'#223673',a:'#cfe0ff',b:'#ffffff',wea:'wind',far:'clouds',en:{sniper:2.5,orbit:2,spread:1.5,pop:1}},
+  cyber:{n:'Grille néon',sub:'Le réseau te voit',g:'#0a0822',a:'#2de2ff',b:'#ff2d95',wea:'data',far:'grid',en:{gatling:2.5,sniper:1.5,spread:2,mite:1.5}},
+  urban:{n:'Mégapole',sub:'Pluie acide et néons',g:'#13131f',a:'#ffc93c',b:'#ff2d95',wea:'rain',far:'lights',en:{spread:2.5,spike:2,gatling:1.5,pop:1.5,sniper:1}},
+  ice:{n:'Glacier fractal',sub:'Tout se fige',g:'#0f2d42',a:'#b5f3ff',b:'#ffffff',wea:'snow',far:'mist',en:{ring:2.5,spread:1.5,orbit:1.5,spike:1}},
+  core:{n:'Le Cœur',sub:'Territoire de l’Hypernoyau',g:'#300a10',a:'#ff3355',b:'#ff8a2d',wea:'embers',far:'pulse',en:{spike:2,ring:2,spawner:1.5,gatling:1.5,sniper:1}},
 };
 const BTYPES=['plains','floral','sea','sky','cyber','urban','ice'];
 function mkRng(s){let a=(s>>>0)||1;return()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};}
@@ -1238,7 +1235,7 @@ function obsSprite(o){
    LOGIQUE DE JEU
    ========================================================= */
 let G=null;
-const MAXLVL=14,BOSS_ROOM=10,MUT_LV=[4,8,12];
+const MAXLVL=14,MUT_LV=[4,8,12];
 function T(l){return l<=1?0:Math.round(9*Math.pow(l-1,1.5));}
 /* facteur « début de partie » : 1 au départ, 0 dès que la menace dépasse 2,5 */
 const EARLY=()=>G?clamp(1-(G.room-1)/1.5,0,1):0;
@@ -2285,14 +2282,13 @@ function gcHUD(){
   cssOp('tfrz',G.tstop>0?.28:0);
   if(G.tstop>0){c.font='700 14px '+FD;c.fillStyle='#b9dcff';c.fillText('Temps figé : '+Math.ceil(G.tstop/60)+' s',W/2,W<600?222:108);}
 }
-function gcTouch(x,y){const S=gcSlots();for(let i=0;i<3;i++){const s=S[i];if(Math.hypot(x-s.x,y-s.y)<s.r+12){if(i===2)gcUlt();else gcUse(i);return true;}}return false;}
 function gcMini(x,y,k){const c=ctx;
   c.fillStyle=COL.gd;for(let i=0;i<WD.alts.length;i++){if(G.gc&&G.gc.altUsed[i])continue;const a=WD.alts[i];c.fillRect(x+(a.x+WR)*k-1.5,y+(a.y+WR)*k-1.5,3,3);}
   c.fillStyle=COL.mg;for(let i=0;i<WD.rifts.length;i++){if(G.gc&&(G.gc.riftDone[i]||G.gc.dorm))continue;const f=WD.rifts[i];c.beginPath();c.arc(x+(f.x+WR)*k,y+(f.y+WR)*k,2.4,0,TAU);c.fill();}}
 
 /* ---------- ambiance de biome : teinte continue + fondu à l'entrée ---------- */
 function biomeWash(b){const B=BIO[b];if(!B)return;const t=$('vig'),w=$('wash');if(t)t.style.backgroundColor=rgba(B.a,.07);
-  if(w&&!RM){w.style.setProperty('--c',B.a);w.classList.remove('go');void w.offsetWidth;w.classList.add('go');}}
+  if(w&&!REDUCED){w.style.setProperty('--c',B.a);w.classList.remove('go');void w.offsetWidth;w.classList.add('go');}}
 /* =========================================================
    gi.js : LE TANK, SON PILOTE, SON ÉQUIPEMENT
    attributs à effets multiples, altérations et synergies, butin, hangar
@@ -2844,8 +2840,10 @@ function renderDuel(){
   const K=DK[DU.kind],acts=[['tir',K.a,K.d,K.c,1]],sf=DU.foes[DU.sel],tg=sf&&sf.hp>0?sf:alive()[0];
   P.sk.forEach((s,j)=>{if(s)acts.push(['sk'+j,SKL[s.id].n+' '+ROMAN[s.l],DSK[s.id].d+(me.cd[j]?' · recharge '+me.cd[j]:''),2,!me.cd[j]]);});
   acts.push(['garde','Se retrancher','Bouclier 20 % et +1 énergie au prochain tour',1,1],['scan','Analyser','Révèle la faiblesse, prochain coup critique',1,!(tg&&tg.rev&&me.crit)],['ult',(ULT[G.prof]||ULT.bal).n,'Ultime',0,me.ult>=100]);
-  DU.keys=acts.map(x=>x[0]);$('dvAct').innerHTML=acts.map(([a,n,d,c,ok])=>'<button class="dact" data-a="'+a+'" '+(DU.busy||!ok||me.en<c?'disabled':'')+'><b>'+n+'</b><span>'+d+'</span><em>'+'⚡'.repeat(c)+'</em></button>').join('')+
-    '<button class="btn pri" id="dvEnd" '+(DU.busy?'disabled':'')+'>Fin du tour</button><button class="btn ghost" id="dvFlee" '+(DU.busy?'disabled':'')+'>Fuir (-20 % bulles)</button>';
+  /* touches affichées au clavier seulement : la touche N déclenche DU.keys[N-1] (g4.js onKey) */
+  const kb=s=>inp.touch?'':'<kbd>'+s+'</kbd>';
+  DU.keys=acts.map(x=>x[0]);$('dvAct').innerHTML=acts.map(([a,n,d,c,ok],i)=>'<button class="dact" data-a="'+a+'" '+(DU.busy||!ok||me.en<c?'disabled':'')+'><b>'+kb(i+1)+n+'</b><span>'+d+'</span><em>'+'⚡'.repeat(c)+'</em></button>').join('')+
+    '<button class="btn pri" id="dvEnd" '+(DU.busy?'disabled':'')+'>Fin du tour'+kb('Entrée')+'</button><button class="btn ghost" id="dvFlee" '+(DU.busy?'disabled':'')+'>Fuir (-20 % bulles)</button>';
 }
 function gxBindUI(){
   $('dvFoes').onclick=e=>{const b=e.target.closest('[data-f]');if(b&&DU&&DU.foes[+b.dataset.f].hp>0){DU.sel=+b.dataset.f;renderDuel();}};
@@ -2869,13 +2867,13 @@ const TUTO=[
   {id:'level',o:'Atteins le niveau 2 et choisis une évolution',h:()=>'Chaque niveau propose trois évolutions. Elles se combinent : cherche des synergies plutôt que des chiffres.',
     say:'Tu grandis. À chaque palier, le rêve t’offre une forme nouvelle. Choisis bien : certaines s’aiment entre elles.',start:T=>tutSpawn(5,'pop',400),done:T=>G.p.lvl>=2&&G.state==='play'},
   {id:'dash',o:'Utilise le dash',h:()=>inp.touch?'Bouton ⚡ en bas à droite.':'Espace ou Maj.',
-    say:'Le dash te rend intouchable un court instant. Traverse les tirs au lieu de les fuir.',done:T=>G.p.dashT>0||G.p.dashing>0},
+    say:'Le dash te rend intouchable un court instant. Traverse les tirs au lieu de les fuir.',done:T=>G.p.dashT>0||G.p.dashing>0,wait:2700},
   {id:'skill',o:'Lance ta compétence sur un groupe',h:()=>inp.touch?'Appui court sur le bouton ① (à gauche du ⚡).':'Touche '+KEYL[0]+' ou clic droit.',
-    say:()=>'Chaque forme porte un don. Le tien s’appelle '+SKL[G.p.sk[0].id].n+'. Il se recharge : garde-le pour les moments qui comptent.',start:T=>tutSpawn(6,'mite',300),done:T=>G.p.sk[0].cd>0},
+    say:()=>'Chaque forme porte un don. Le tien s’appelle '+SKL[G.p.sk[0].id].n+'. Il se recharge : garde-le pour les moments qui comptent.',start:T=>tutSpawn(6,'mite',300),done:T=>G.p.sk[0].cd>0,wait:2700},
   {id:'echo',o:'Réveille un écho',h:()=>'Entre dans le cercle doré d’un monument. La flèche dorée t’y mène.',
-    say:'Les monuments gardent des fragments de l’histoire d’Iris. Ton histoire, peut-être. Va les écouter.',tgt:()=>nearestOf(WD.lms,(L,i)=>!G.gs.lm[i]),done:T=>G.gs.echo>=1},
+    say:'Les monuments gardent des fragments de l’histoire d’Iris. Ton histoire, peut-être. Va les écouter.',tgt:()=>nearestOf(WD.lms,(L,i)=>!G.gs.lm[i]),done:T=>G.gs.echo>=1,wait:9000},
   {id:'altar',o:'Reçois le don d’un autel',h:()=>'Reste un instant dans le cercle d’un autel doré (■ sur la mini-carte). Il t’offre une deuxième compétence.',
-    say:'Iris a semé des autels le long des routes. Suis les panneaux aux embranchements : ils indiquent où mène chaque chemin.',tgt:()=>nearestOf(WD.alts,(a,i)=>!G.gc.altUsed[i]),done:T=>Object.keys(G.gc.altUsed).length>=1},
+    say:'Iris a semé des autels le long des routes. Suis les panneaux aux embranchements : ils indiquent où mène chaque chemin.',tgt:()=>nearestOf(WD.alts,(a,i)=>!G.gc.altUsed[i]),done:T=>Object.keys(G.gc.altUsed).length>=1,wait:9000},
   {id:'heart',o:'Détruis un cœur de zone',h:()=>'Suis la flèche vers un cœur. Dans son arène, une membrane t’enferme : arrive avec des bulles en réserve.',
     say:'Trois gardiens protègent l’Hypernoyau. Chacun est un souvenir forcé de monter la garde. Libère le premier.',done:T=>G.heartsDone>=1}];
 const TIPS={
@@ -2896,7 +2894,6 @@ const TIPS={
   hangar:'Le Hangar est ouvert : équipe ton butin, répartis tes points de pilote et compare les objets avant de les porter.'};
 function nearestOf(arr,ok){const P=G.p;let b=null,bd=1e18;arr.forEach((q,i)=>{if(ok&&!ok(q,i))return;const d=dist2(q.x,q.y,P.x,P.y);if(d<bd){bd=d;b=q;}});return b;}
 function tutSpawn(n,t,d){const P=G.p;for(let k=0;k<n;k++){const a=k/n*TAU+R();const e=mkEnemy(t,P.x+Math.cos(a)*d,P.y+Math.sin(a)*d,{aggro:true,noElite:true});e.hp=Math.min(e.hp,e.mhp*.6);}}
-function tutOn(){return G&&G.gt&&G.gt.on;}
 function gtRunStart(){
   const on=!G.daily&&(meta.tuto||0)<TUTO.length;
   G.gt={on,step:-1,T:null,tipT:0};
@@ -2904,10 +2901,10 @@ function gtRunStart(){
   G.gc.dorm=!G.daily&&meta.runs<1;G.gx.dorm=!G.daily&&meta.runs<1;
   if(on){G.help=0;G.banner=null;tutGo(meta.tuto||0);}
 }
-function tutGo(i){
+function tutGo(i,skip){
   const S=G.gt;S.step=i;meta.tuto=i;saveMeta();if(i>=TUTO.length){tutDone();return;}
   const st=TUTO[i],P=G.p;S.T={k0:G.kills,dist:0,lx:P.x,ly:P.y,got:0,lb:P.bub,t:0};
-  if(st.start)st.start(S.T);if(G.gs)G.gs.subs=G.gs.subs.filter(q=>q.who!==GUIDE);gsSay(typeof st.say==='function'?st.say():st.say,GUIDE,COL.cy,1);
+  if(st.start)st.start(S.T);if(G.gs)G.gs.subs=G.gs.subs.filter(q=>q.who!==GUIDE);gsSay((skip?'Pas grave, tu y reviendras : c’est noté dans le Guide. ':'')+(typeof st.say==='function'?st.say():st.say),GUIDE,COL.cy,1);
 }
 function tutDone(){
   const S=G.gt;S.on=false;meta.tuto=TUTO.length;meta.shards+=60;saveMeta();
@@ -2919,7 +2916,9 @@ function gtTick(){
   const S=G.gt;if(!S)return;const P=G.p;
   if(S.on&&S.T){const T=S.T,st=TUTO[S.step];T.t++;
     T.dist+=Math.hypot(P.x-T.lx,P.y-T.ly);T.lx=P.x;T.ly=P.y;if(P.bub>T.lb)T.got+=P.bub-T.lb;T.lb=P.bub;
-    if(st&&st.done(T)&&T.t>30){ringFX(P.x,P.y,P.r,P.r*4,COL.cy,18,3);SFX.pick(8);tutGo(S.step+1);return;}}
+    if(st&&st.done(T)&&T.t>30){ringFX(P.x,P.y,P.r,P.r*4,COL.cy,18,3);SFX.pick(8);tutGo(S.step+1);return;}
+    /* patience : une étape non faite n'enferme pas le joueur dans le prologue (son aide reste dans le Guide) */
+    if(st&&st.wait&&T.t>=st.wait){tutGo(S.step+1,1);return;}}
   if(G.t%20!==0)return;
   /* astuces contextuelles : une fois chacune, jamais pendant les premiers pas */
   if(S.on&&S.step<4)return;
@@ -3441,7 +3440,6 @@ function drawHUD(){
 /* =========================================================
    ENTRÉES, INTERFACE, BOUCLE
    ========================================================= */
-const RM=typeof matchMedia!=='undefined'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
 const COARSE=typeof matchMedia!=='undefined'&&matchMedia('(pointer: coarse)').matches;
 const inp={keys:{},L:null,R:null,touch:COARSE,mx:0,my:0,mdown:false,mt:-1e9};
 function readInput(){
@@ -3497,8 +3495,8 @@ function onKey(e){
 }
 
 /* ---------- écrans ---------- */
-const IN_GAME=['play','warp','dying','victory','evo','pause','duel'];
-function flashFade(col,ms){const f=$('fade');if(!f||RM)return;f.style.background=col;f.style.setProperty('--d',(ms||800)+'ms');f.classList.remove('go');void f.offsetWidth;f.classList.add('go');}
+const IN_GAME=['play','dying','victory','evo','pause','duel'];
+function flashFade(col,ms){const f=$('fade');if(!f||REDUCED)return;f.style.background=col;f.style.setProperty('--d',(ms||800)+'ms');f.classList.remove('go');void f.offsetWidth;f.classList.add('go');}
 function show(id){
   document.querySelectorAll('.ov').forEach(o=>o.classList.toggle('on',o.id===id));
   if(id){const p=$('prompt');if(p)p.hidden=true;if(G&&G.gx){G.gx.pk='';G.gx.prompt=null;}}
@@ -3600,7 +3598,7 @@ function renderLB(){
 }
 
 /* ---------- boucle ---------- */
-let last=0,acc=0,FPSV=0,fpsN=0,fpsT=0,slowT=0,fastT=0;const STEPMS=1000/60,DTH=[];
+let last=0,acc=0,FPSV=0,fpsN=0,fpsT=0,slowT=0;const STEPMS=1000/60,DTH=[];
 /* Qualité. Ancienne méthode : baisse de résolution dès que le temps moyen dépassait 1,22× le meilleur
    temps récent -> se déclenchait sur une simple gigue de vsync, même sur une machine capable.
    Nouvelle méthode : on compare la médiane au rafraîchissement réel de l'écran, sur 3 s, et on retire
@@ -3630,7 +3628,7 @@ function frame(ts){
     acc+=dt*G.timeScale;let n=0;while(acc>=STEPMS&&n<5){step();acc-=STEPMS;n++;}if(n>=5)acc=0;
     if(G&&(G.state==='play'||G.state==='dying'||G.state==='victory'))A=clamp(acc/STEPMS,0,1);
   }
-  if(RM&&G){G.trauma*=.5;G.glitch=Math.min(G.glitch,2);}
+  if(REDUCED&&G){G.trauma*=.5;G.glitch=Math.min(G.glitch,2);}
   const bgOnly=!G||['pause','duel','end','evo'].includes(G.state);FRN=(FRN+1)%4;
   if(!bgOnly||FRN%(G&&G.state!=='evo'?4:2)===0||!G&&FRN%2===0)render(A,dt);
 }
@@ -3643,7 +3641,6 @@ function boot(){
   cv.addEventListener('pointerdown',onDown,{passive:false});cv.addEventListener('contextmenu',e=>e.preventDefault());
   cv.addEventListener('pointermove',onMove,{passive:true});
   cv.addEventListener('pointerup',onUp);cv.addEventListener('pointercancel',e=>{if(inp.B&&inp.B.id===e.pointerId)inp.B=null;onUp(e);});
-  cv.addEventListener('contextmenu',e=>e.preventDefault());
   addEventListener('keydown',onKey);
   addEventListener('keyup',e=>{inp.keys[e.code]=false;if(G&&G.state==='evo'&&e.code==='Space')e.preventDefault();});
   addEventListener('blur',()=>{inp.keys={};inp.L=inp.R=null;inp.mdown=false;});

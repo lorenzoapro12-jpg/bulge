@@ -3,14 +3,14 @@
    ========================================================= */
 const WR=7000,CH=512,NC=Math.ceil(2*WR/CH)+4,COFF=NC>>1;
 const BIO={
-  plains:{n:'Plaines de Lumen',sub:'Prairies phosphorescentes',g:'#10302a',a:'#6dffb5',b:'#d6ff7a',mus:0,wave:'triangle',wea:'pollen',far:'mist',en:{pop:3,mite:2,spike:1.2,orbit:1,spread:1,ring:.6}},
-  floral:{n:'Jardin carnivore',sub:'Les fleurs ont faim',g:'#330f35',a:'#ff5ad8',b:'#ffd166',mus:1,wave:'triangle',wea:'petals',far:'blooms',en:{spawner:1.4,mite:2.5,pop:2,spike:1.5,ring:1}},
-  sea:{n:'Récif abyssal',sub:'Pression et lumière froide',g:'#062150',a:'#34e6ff',b:'#6dffd9',mus:2,wave:'sine',wea:'bubbles',far:'rays',en:{orbit:3,pop:2,ring:1.5,spawner:.8,sniper:.6}},
-  sky:{n:'Archipel céleste',sub:'Au-dessus des nuages',g:'#223673',a:'#cfe0ff',b:'#ffffff',mus:3,wave:'triangle',wea:'wind',far:'clouds',en:{sniper:2.5,orbit:2,spread:1.5,pop:1}},
-  cyber:{n:'Grille néon',sub:'Le réseau te voit',g:'#0a0822',a:'#2de2ff',b:'#ff2d95',mus:4,wave:'square',wea:'data',far:'grid',en:{gatling:2.5,sniper:1.5,spread:2,mite:1.5}},
-  urban:{n:'Mégapole',sub:'Pluie acide et néons',g:'#13131f',a:'#ffc93c',b:'#ff2d95',mus:5,wave:'sawtooth',wea:'rain',far:'lights',en:{spread:2.5,spike:2,gatling:1.5,pop:1.5,sniper:1}},
-  ice:{n:'Glacier fractal',sub:'Tout se fige',g:'#0f2d42',a:'#b5f3ff',b:'#ffffff',mus:6,wave:'sine',wea:'snow',far:'mist',en:{ring:2.5,spread:1.5,orbit:1.5,spike:1}},
-  core:{n:'Le Cœur',sub:'Territoire de l’Hypernoyau',g:'#300a10',a:'#ff3355',b:'#ff8a2d',mus:7,wave:'sawtooth',wea:'embers',far:'pulse',en:{spike:2,ring:2,spawner:1.5,gatling:1.5,sniper:1}},
+  plains:{n:'Plaines de Lumen',sub:'Prairies phosphorescentes',g:'#10302a',a:'#6dffb5',b:'#d6ff7a',wea:'pollen',far:'mist',en:{pop:3,mite:2,spike:1.2,orbit:1,spread:1,ring:.6}},
+  floral:{n:'Jardin carnivore',sub:'Les fleurs ont faim',g:'#330f35',a:'#ff5ad8',b:'#ffd166',wea:'petals',far:'blooms',en:{spawner:1.4,mite:2.5,pop:2,spike:1.5,ring:1}},
+  sea:{n:'Récif abyssal',sub:'Pression et lumière froide',g:'#062150',a:'#34e6ff',b:'#6dffd9',wea:'bubbles',far:'rays',en:{orbit:3,pop:2,ring:1.5,spawner:.8,sniper:.6}},
+  sky:{n:'Archipel céleste',sub:'Au-dessus des nuages',g:'#223673',a:'#cfe0ff',b:'#ffffff',wea:'wind',far:'clouds',en:{sniper:2.5,orbit:2,spread:1.5,pop:1}},
+  cyber:{n:'Grille néon',sub:'Le réseau te voit',g:'#0a0822',a:'#2de2ff',b:'#ff2d95',wea:'data',far:'grid',en:{gatling:2.5,sniper:1.5,spread:2,mite:1.5}},
+  urban:{n:'Mégapole',sub:'Pluie acide et néons',g:'#13131f',a:'#ffc93c',b:'#ff2d95',wea:'rain',far:'lights',en:{spread:2.5,spike:2,gatling:1.5,pop:1.5,sniper:1}},
+  ice:{n:'Glacier fractal',sub:'Tout se fige',g:'#0f2d42',a:'#b5f3ff',b:'#ffffff',wea:'snow',far:'mist',en:{ring:2.5,spread:1.5,orbit:1.5,spike:1}},
+  core:{n:'Le Cœur',sub:'Territoire de l’Hypernoyau',g:'#300a10',a:'#ff3355',b:'#ff8a2d',wea:'embers',far:'pulse',en:{spike:2,ring:2,spawner:1.5,gatling:1.5,sniper:1}},
 };
 const BTYPES=['plains','floral','sea','sky','cyber','urban','ice'];
 function mkRng(s){let a=(s>>>0)||1;return()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};}
