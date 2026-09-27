@@ -110,11 +110,15 @@ const FAR={
   rays(x,y,s,sc,w){ctx.globalCompositeOperation='lighter';ctx.save();ctx.translate(x,y);ctx.rotate(-.5);ctx.scale(.35,2.6);soft(0,0,(90+s*80)*sc,'#8fe9ff',.08*w);ctx.restore();},
   blooms(x,y,s,sc,w){ctx.globalCompositeOperation='lighter';soft(x,y,(80+s*110)*sc,s<.5?'#ff5ad8':'#b44dff',.1*w);},
   grid(x,y,s,sc,w,cell){ctx.globalCompositeOperation='lighter';ctx.globalAlpha=.07*w;ctx.strokeStyle='#2de2ff';ctx.lineWidth=1;const d=cell*sc;ctx.strokeRect(x-d/2,y-d/2,d,d);if(s>.6){ctx.globalAlpha=.25*w;ctx.fillStyle='#ff2d95';ctx.fillRect(x-2,y-2,4,4);}},
-  lights(x,y,s,sc,w){ctx.globalCompositeOperation='lighter';for(let k=0;k<5;k++){const a=s*50+k*1.3;glow(x+Math.cos(a)*40*sc*k*.4,y+Math.sin(a)*40*sc*k*.4,3,k%2?'#ffc93c':'#ff2d95',.35*w);}},
+  /* grappe de 5 lueurs : 16 variantes composées une fois (1 drawImage par cellule au lieu de 5) */
+  lights(x,y,s,sc,w){ctx.globalCompositeOperation='lighter';const q=(s*16)|0;if(!SPR['fl'+q]){if(FLB<=0)return;FLB--;}const S=spr('fl'+q,144,g=>{g.globalCompositeOperation='lighter';for(let k=0;k<5;k++){const a=(q+.5)/16*50+k*1.3,r=5;
+      g.drawImage(glowSpr(k%2?'#ffc93c':'#ff2d95'),72+Math.cos(a)*16*k-r,72+Math.sin(a)*16*k-r,r*2,r*2);}});
+    ctx.globalAlpha=.35*w;ctx.drawImage(S,x-72*sc,y-72*sc,144*sc,144*sc);},
   pulse(x,y,s,sc,w){ctx.globalCompositeOperation='lighter';soft(x,y,(100+s*90)*sc,'#ff3355',(.06+.05*Math.sin(RT*.05+s*6))*w);},
 };
+let FLB=0;
 function drawFar(mix){
-  const f=.55,sc=RZ*.72,cell=QL<3||COARSE?760:560,fx=CAM.x*f,fy=CAM.y*f,hw=W/2/sc+cell,hh=H/2/sc+cell;
+  FLB=2;const f=.55,sc=RZ*.72,cell=QL<3||COARSE?760:560,fx=CAM.x*f,fy=CAM.y*f,hw=W/2/sc+cell,hh=H/2/sc+cell;
   const i0=Math.floor((fx-hw)/cell),i1=Math.floor((fx+hw)/cell),j0=Math.floor((fy-hh)/cell),j1=Math.floor((fy+hh)/cell);
   for(const m of mix){const t=BIO[m.b].far;if(!t||m.w<.3)continue;const fn=FAR[t];
     for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++){const h=hash2(i,j,WD.seed^77),u=(h&1023)/1024,v=((h>>>10)&1023)/1024,s=((h>>>20)&255)/255;
@@ -168,8 +172,37 @@ function drawObstacles(){
   for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const ch=getChunk(cx,cy);if(!ch)continue;
     for(const o of ch.obs){if(o.wall)continue;const m=o.R+140;if(o.cx+m<VL||o.cx-m>VR||o.cy+m<VT||o.cy-m>VB)continue;
       if(!o.spr){if(SPRB<=0)continue;SPRB--;OSPR.push(o);}
-      o.su=FRAME;ctx.drawImage(obsSprite(o),o.sx,o.sy,o.sw,o.sh);
+      o.su=FRAME;if(o.b==='urban'||o.lt==='urban'&&o.role==='center'){obsSprite(o);TWL.push(o);continue;}ctx.drawImage(obsSprite(o),o.sx,o.sy,o.sw,o.sh);
       if(o.b==='core'){ctx.globalCompositeOperation='lighter';soft(o.x,o.y,o.r*1.3,'#ff3355',.1+.08*Math.sin(RT*.05+o.s));ctx.globalCompositeOperation='source-over';ctx.globalAlpha=1;}}}
+  drawTowers();
+}
+/* Mégapole : tours extrudées en perspective. Le toit glisse loin du centre de l'écran à proportion de sa
+   hauteur ; chaque façade tournée vers la caméra est un parallélogramme, donc l'image AFFINE d'une texture
+   de fenêtres (facTex) : un setTransform et un drawImage. La collision reste l'emprise au sol. Ordre du
+   peintre : la plus éloignée d'abord, pour qu'un toit proche recouvre la façade d'une tour plus lointaine. */
+const TWL=[],TWK=.13,TWM=100,PHH=2.6;
+/* décalage du sommet d'un objet de hauteur T posé en x,y (borné à m) */
+function twOff(x,y,T,m){const k=T*TWK;return[clamp((x-CAM.x)*k,-m,m),clamp((y-CAM.y)*k,-m,m)];}
+function drawTowers(){
+  if(!TWL.length)return;const c=ctx,s=PS*RZ,tx=PS*(W/2+RSX-CAM.x*RZ),ty=PS*(H/2+RSY-CAM.y*RZ);let nb=1;
+  TWL.sort((a,b)=>dist2(b.cx,b.cy,CAM.x,CAM.y)-dist2(a.cx,a.cy,CAM.x,CAM.y));
+  const face=(o,x0,y0,x1,y1,dx,dy,dk)=>{let t=FACS[(o.s%FACN)*2+(dk?1:0)];if(!t){if(nb<=0)return;nb--;t=facTex(o.s%FACN,dk);}
+    const L=Math.hypot(x1-x0,y1-y0),u0=(o.s>>>4)%(FACW-L|0||1);
+    c.setTransform(s*(x1-x0)/L,s*(y1-y0)/L,-s*dx/FACH,-s*dy/FACH,s*(x0+dx)+tx,s*(y0+dy)+ty);c.drawImage(t,u0*2,0,L*2,FACH*2,0,0,L,FACH);};
+  for(const o of TWL){
+    if(o.b==='lm'){ /* le phare, monument de la ville : un fût rond (le disque balayé), le plus haut de tous */
+      const [dx,dy]=twOff(o.x,o.y,PHH,TWM*2),r=o.r,L=Math.hypot(dx,dy)||1,nx=-dy/L,ny=dx/L;
+      c.lineCap='round';c.strokeStyle='#1b1930';c.lineWidth=r*2;c.beginPath();c.moveTo(o.x,o.y);c.lineTo(o.x+dx,o.y+dy);c.stroke();c.lineCap='butt';
+      c.lineWidth=2;c.strokeStyle='#ffd27a';c.globalAlpha=.55;c.beginPath();for(let t=.12;t<.96;t+=.085){const px=o.x+dx*t,py=o.y+dy*t;c.moveTo(px-nx*r*.92,py-ny*r*.92);c.lineTo(px+nx*r*.92,py+ny*r*.92);}c.stroke();
+      c.lineWidth=3;c.globalAlpha=.9;for(const [f,col] of [[-.95,'#ff2d95'],[.95,'#2de2ff']]){c.strokeStyle=col;c.beginPath();c.moveTo(o.x+nx*r*f,o.y+ny*r*f);c.lineTo(o.x+dx+nx*r*f,o.y+dy+ny*r*f);c.stroke();}
+      c.globalAlpha=1;c.drawImage(o.spr,o.sx+dx,o.sy+dy,o.sw,o.sh);c.globalCompositeOperation='lighter';glow(o.x+dx,o.y+dy,r*1.4,'#fff3c4',.55+.2*Math.sin(RT*.05));c.globalCompositeOperation='source-over';c.globalAlpha=1;continue;}
+    const T=twH(o),[dx,dy]=twOff(o.cx,o.cy,T,TWM),X=o.x,Y=o.y,R=X+o.w,B=Y+o.h;
+    if(R+Math.max(dx,0)+12<VL||X+Math.min(dx,0)-12>VR||B+Math.max(dy,0)+12<VT||Y+Math.min(dy,0)-12>VB)continue;
+    if(dx>.6)face(o,X,Y,X,B,dx,dy,0);else if(dx<-.6)face(o,R,Y,R,B,dx,dy,1);
+    if(dy>.6)face(o,X,Y,R,Y,dx,dy,0);else if(dy<-.6)face(o,X,B,R,B,dx,dy,1);
+    c.setTransform(s,0,0,s,tx,ty);c.drawImage(o.spr,o.sx+dx,o.sy+dy,o.sw,o.sh);
+    if(T>1.15&&Math.sin(RT*.07+o.s)>.55){c.globalCompositeOperation='lighter';glow(o.cx+dx,o.cy+dy,9,'#ff3355',.9);c.globalCompositeOperation='source-over';c.globalAlpha=1;}}
+  TWL.length=0;
 }
 function drawObjectives(){
   const c=ctx;

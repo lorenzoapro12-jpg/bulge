@@ -68,7 +68,13 @@ const VISTA={
     c.strokeStyle='#e6f2ff';c.lineWidth=4;c.globalAlpha=.35*w;c.beginPath();c.ellipse(0,0,L*.5,L*.14,0,Math.PI*1.05,TAU*.98);c.stroke();c.globalAlpha=.6*w;for(let k=0;k<7;k++)glow(-L*.3+k*L*.1,L*.04,7,'#dff0ff',.9);c.restore();c.globalAlpha=1;});},
   cyber:w=>{const c=ctx;vcells(.22,700,(x,y,r1,r2)=>{if(r1>.65)return;c.save();c.translate(x,y);c.globalAlpha=.3*w;c.strokeStyle=r2>.5?'#2de2ff':'#ff2d95';c.lineWidth=3;
     for(let k=0;k<3;k++){c.save();c.rotate(RT*.004*(k+1)*(r2>.5?1:-1));c.scale(1,.35+k*.2);c.beginPath();c.arc(0,0,60+k*34+r1*40,0,TAU);c.stroke();c.restore();}c.restore();c.globalAlpha=1;});},
-  urban:w=>{const c=ctx;c.fillStyle='#fff3c4';for(let i=0;i<3;i++){const bx=W*(.2+.3*i),a=-Math.PI/2+Math.sin(RT*.004+i*2)*.5;c.globalAlpha=.07*w;c.beginPath();c.moveTo(bx,H+10);c.lineTo(bx+Math.cos(a-.08)*H*1.4,H+Math.sin(a-.08)*H*1.4);c.lineTo(bx+Math.cos(a+.08)*H*1.4,H+Math.sin(a+.08)*H*1.4);c.closePath();c.fill();}c.globalAlpha=1;
+  urban:w=>{const c=ctx,beam=(bx,by,a,L,al)=>{for(const [s,k] of [[.06,.35],[.02,1]]){c.globalAlpha=al*k;c.beginPath();c.moveTo(bx,by);c.lineTo(bx+Math.cos(a-s)*L,by+Math.sin(a-s)*L);c.lineTo(bx+Math.cos(a+s)*L,by+Math.sin(a+s)*L);c.closePath();c.fill();}};
+    c.fillStyle='#fff3c4';for(let i=0;i<2;i++)beam(W*(.25+.5*i),H+10,-Math.PI/2+Math.sin(RT*.004+i*2)*.5,H*1.4,.06*w);
+    /* le phare : la tour du monument de la ville le plus proche, même hors écran, balaie le ciel de deux faisceaux */
+    let M=null,md=3200*3200;for(const L of WD.lms)if(L.t==='urban'){const d=dist2(L.x,L.y,CAM.x,CAM.y);if(d<md){md=d;M=L;}}
+    if(M){const d=twOff(M.x,M.y,PHH,TWM*2),sx=(M.x+d[0]-CAM.x)*RZ+W/2,sy=(M.y+d[1]-CAM.y)*RZ+H/2,L=Math.hypot(sx-W/2,sy-H/2)+Math.max(W,H);
+      c.fillStyle='#fff6dc';for(let j=0;j<2;j++)beam(sx,sy,RT*.01+j*Math.PI,L,.12*w);glow(sx,sy,46,'#fff3c4',.6*w);}
+    c.globalAlpha=1;
     vcells(.15,1300,(x,y,r1,r2)=>{if(r1>.3)return;const px=x+((RT*.2+r2*1500)%1500)-750;c.globalAlpha=.14*w;c.fillStyle='#c7a0ff';c.beginPath();c.ellipse(px,y,120,34,0,0,TAU);c.fill();glow(px+60,y+20,10,'#ff2d95',.9);glow(px-60,y+20,10,'#2de2ff',.9);c.globalAlpha=1;});},
   ice:w=>{const c=ctx;c.globalCompositeOperation='lighter';for(let k=0;k<3;k++){const col=['#6dffb4','#6fd8ff','#b58cff'][k];
     for(const [lw,al] of [[70,.05],[34,.07],[10,.1]]){c.strokeStyle=col;c.globalAlpha=al*w;c.lineWidth=lw;c.beginPath();for(let j=0;j<=12;j++){const x=j/12*W*1.2-W*.1-CAM.x*.03%200,y=H*(.12+k*.09)+Math.sin(j*.7+RT*.01+k*2)*H*.05+Math.sin(j*1.9+RT*.017)*H*.02;j?c.lineTo(x,y):c.moveTo(x,y);}c.stroke();}}

@@ -1,22 +1,40 @@
 'use strict';
 /* =========================================================
-   Art du monde : la cuisson d'un chunk produit-elle EXACTEMENT la même séquence d'opérations
-   canvas qu'à la référence ? (PERF-2 : les murs et les pièces de décor sont devenus des
-   générateurs ; seuls des points de pause ont été ajoutés.)
+   Art du monde : GARDE DE PÉRIMÈTRE. La cuisson d'un chunk et le sprite d'un obstacle
+   produisent-ils EXACTEMENT la même séquence d'opérations canvas qu'à la référence — hors des
+   biomes qu'on a explicitement le droit de retoucher ?
 
    node test/art.js                  arbre de travail contre la référence 93b8cfe (avant PERF-2)
    node test/art.js --ref=<commit>   autre référence
    node test/art.js --cible=<commit> compare ce commit au lieu de l'arbre de travail
+   node test/art.js --perim=a,b      autre périmètre ; --perim= (vide) : tout doit être identique
+
+   PÉRIMÈTRE (GRAPHISMES.md) : les biomes dont l'art a été VOULU différent de la référence. Un chunk
+   est « dans le périmètre » s'il touche l'un d'eux, marge comprise (le décor d'un biome déborde
+   jusqu'à 120 px chez ses voisins : DECO est tiré à ±120 px, les lisières à ±80 px) ; un obstacle
+   l'est si son biome (ou celui de son monument) en fait partie. TOUT LE RESTE doit être identique
+   octet pour octet : un changement qui déborde sur un autre biome est un défaut, pas une surprise.
+   Quand le travail est commité, avancer --ref sur ce commit et vider le périmètre : tout redevient
+   figé.
 
    Séquence BRUTE, sans normalisation : chaque appel (méthode + arguments en pleine précision),
    chaque affectation de style, save/restore/clip compris. Deux versions chargées côte à côte dans
    deux contextes vm ; chaque chunk cuit un bakeStep à la fois, dans le même ordre des deux côtés.
-   Couverture : 3 mondes × (7×7 chunks du centre + une grille d'un chunk sur 3 sur tout le monde).
+   Couverture : 3 mondes × (7×7 chunks du centre + une grille d'un chunk sur 3 sur tout le monde),
+   et le sprite de chaque obstacle (hors falaises) de ces chunks.
    ========================================================= */
 const fs = require('fs'), path = require('path'), vm = require('vm'), cp = require('child_process'), crypto = require('crypto');
 const ROOT = path.resolve(__dirname, '..');
 const ARG = k => { const a = process.argv.find(x => x === '--' + k || x.startsWith('--' + k + '=')); return a ? (a.split('=')[1] || true) : null; };
 const REF = ARG('ref') || '93b8cfe';
+/* Biomes dont l'art a été VOULU différent de la référence dans cette passe (GRAPHISMES.md).
+   Doit lister EXACTEMENT ce qui a été retouché : trop large, la garde ne protège plus rien ;
+   trop étroit, elle signale un faux débordement (c'est arrivé : le ciel avait été retouché
+   alors que la liste ne contenait que la ville). Vérifié le 27/09/2026 : hors urban+sky,
+   263/263 chunks hors périmètre identiques octet pour octet. */
+const PERIM_DEF = ['urban','sky'];
+const PERIM = ARG('perim') === null ? PERIM_DEF : (ARG('perim') === true ? [] : String(ARG('perim')).split(',').filter(Boolean));
+const MARGE = 160;
 const ORDER = ['g1.js', 'gw.js', 'gw2.js', 'g2.js', 'gs.js', 'gc.js', 'gi.js', 'gx.js', 'gt.js', 'gv.js', 'g3.js', 'g4.js'];
 
 function build(read) {
@@ -52,38 +70,65 @@ function build(read) {
       const info = call(`(function(){var c=getChunk(${cx},${cy}),w={},i0=Math.round((c.x0-G0)/WC)-1,j0=Math.round((c.y0-G0)/WC)-1;for(var j=j0;j<j0+10;j++)for(var i=i0;i<i0+10;i++)if(wallAt(i,j))w[biomeAt(G0+(i+.5)*WC,G0+(j+.5)*WC)]=1;return JSON.stringify({w:Object.keys(w),sp:c.sp?biomeAt(c.sp.x,c.sp.y):null});})()`);
       return { log, n, info: JSON.parse(info) };
     },
+    /* biomes que le chunk touche, marge comprise (échantillons tous les 32 px) */
+    touche: (cx, cy) => JSON.parse(call(`(function(){var o={},x0=${cx}*CH-${MARGE},y0=${cy}*CH-${MARGE};for(var y=y0;y<=y0+CH+2*${MARGE};y+=32)for(var x=x0;x<=x0+CH+2*${MARGE};x+=32)o[biomeAt(x,y)]=1;return JSON.stringify(Object.keys(o));})()`)),
+    /* sprite de chaque obstacle propre au chunk (falaises exclues : elles sont dans la cuisson) */
+    sprites(cx, cy) {
+      const nb = call(`(function(){var c=getChunk(${cx},${cy});return c?c.obs.length:0;})()`), out = [];
+      for (let i = 0; i < nb; i++) {
+        const b = call(`(function(){var o=getChunk(${cx},${cy}).obs[${i}];return o.wall||o.home!==getChunk(${cx},${cy})?'':(o.b==='lm'?o.lt:o.b);})()`);
+        if (!b) continue;
+        const log = []; GID = 0; LOG = log; call(`obsSprite(getChunk(${cx},${cy}).obs[${i}])`); LOG = null;
+        out.push({ b, log });
+      }
+      return out;
+    },
   };
 }
+const H = l => crypto.createHash('sha256').update(l.join('\n')).digest('hex');
 const A = build(f => cp.execFileSync('git', ['show', REF + ':' + f], { cwd: ROOT, encoding: 'utf8' }));
 const CIBLE = ARG('cible');  /* --cible=<commit> : compare ce commit plutôt que l'arbre de travail (headless.js --ref) */
 const B = build(f => CIBLE ? cp.execFileSync('git', ['show', CIBLE + ':' + f], { cwd: ROOT, encoding: 'utf8' }) : fs.readFileSync(path.join(ROOT, f), 'utf8'));
 const liste = [];
 for (let cx = -3; cx <= 3; cx++) for (let cy = -3; cy <= 3; cy++) liste.push([cx, cy]);
 for (let cx = -13; cx <= 13; cx += 3) for (let cy = -13; cy <= 13; cy += 3) if (Math.abs(cx) > 3 || Math.abs(cy) > 3) liste.push([cx, cy]);
-let n = 0, ko = 0, ops = 0, appA = 0, appB = 0; const murs = {}, pieces = {};
+let n = 0, ko = 0, ops = 0, appA = 0, appB = 0, montres = 0; const murs = {}, pieces = {};
+const hors = { n: 0, ko: 0 }, dans = { n: 0, diff: 0 }, parB = {}, sHors = { n: 0, ko: 0 }, sDans = { n: 0, diff: 0 }, sParB = {};
+const note = (T, b, diff) => { const o = T[b] || (T[b] = { n: 0, diff: 0 }); o.n++; if (diff) o.diff++; };
+const montre = (quoi, la, lb) => { if (montres++ >= 4) return; let i = 0; while (i < la.length && i < lb.length && la[i] === lb[i]) i++;
+  console.log(`  HORS PÉRIMÈTRE, DIFFÉRENT : ${quoi} : opération n°${i} sur ${la.length}/${lb.length}\n     réf.  ${String(la[i]).slice(0, 110)}\n     arbre ${String(lb[i]).slice(0, 110)}`); };
 for (const seed of [20260927, 7, 424242]) {
   A.world(seed); B.world(seed);
   for (const [cx, cy] of liste) {
     const a = A.chunk(cx, cy), b = B.chunk(cx, cy);
     if (!a && !b) continue;
     n++;
-    const ha = a && crypto.createHash('sha256').update(a.log.join('\n')).digest('hex'), hb = b && crypto.createHash('sha256').update(b.log.join('\n')).digest('hex');
-    if (!a || !b || ha !== hb) {
-      ko++;
-      if (ko <= 3) {
-        let i = 0; const la = a ? a.log : [], lb = b ? b.log : []; while (i < la.length && i < lb.length && la[i] === lb[i]) i++;
-        console.log(`  DIFFÉRENT monde ${seed} chunk ${cx},${cy} : opération n°${i} sur ${la.length}/${lb.length}\n     réf.  ${String(la[i]).slice(0, 110)}\n     arbre ${String(lb[i]).slice(0, 110)}`);
-      }
-      continue;
-    }
+    const same = !!(a && b && H(a.log) === H(b.log)), inP = B.touche(cx, cy).filter(x => PERIM.includes(x));
+    if (!same) ko++;
+    if (inP.length) { dans.n++; if (!same) dans.diff++; for (const x of inP) note(parB, x, !same); }
+    else { hors.n++; if (!same) { hors.ko++; montre(`monde ${seed} chunk ${cx},${cy}`, a ? a.log : [], b ? b.log : []); } }
+    if (!a || !b) continue;
     ops += b.log.length; appA += a.n; appB += b.n;
     for (const w of b.info.w) murs[w] = (murs[w] || 0) + 1;
     if (b.info.sp) pieces[b.info.sp] = (pieces[b.info.sp] || 0) + 1;
+    /* sprites d'obstacles : la génération des obstacles n'a pas le droit de changer (même liste) */
+    const sa = A.sprites(cx, cy), sb = B.sprites(cx, cy);
+    if (sa.length !== sb.length || sa.some((s, i) => s.b !== sb[i].b)) { sHors.n++; sHors.ko++; montre(`monde ${seed} chunk ${cx},${cy} : liste d'obstacles changée (${sa.length} -> ${sb.length})`, [], []); continue; }
+    for (let i = 0; i < sb.length; i++) {
+      const d = H(sa[i].log) !== H(sb[i].log);
+      if (PERIM.includes(sb[i].b)) { sDans.n++; if (d) sDans.diff++; note(sParB, sb[i].b, d); }
+      else { sHors.n++; if (d) { sHors.ko++; montre(`monde ${seed} chunk ${cx},${cy} sprite n°${i} (${sb[i].b})`, sa[i].log, sb[i].log); } }
+    }
   }
 }
+const fmt = T => Object.keys(T).sort().map(b => `${b} ${T[b].diff}/${T[b].n}`).join(', ') || '—';
 console.log(`# art : ${CIBLE ? 'git ' + CIBLE : 'arbre de travail'} contre ${REF} — ${n} chunks, 3 mondes, séquence brute`);
-console.log(`  chunks identiques : ${n - ko}/${n} (${ops} opérations comparées) ; appels à bakeStep : réf. ${appA} -> arbre ${appB}`);
+console.log(`  périmètre autorisé à changer : ${PERIM.length ? PERIM.join(', ') : 'aucun'} (marge ${MARGE} px)`);
+console.log(`  chunks HORS périmètre identiques : ${hors.n - hors.ko}/${hors.n} ; sprites d'obstacles HORS périmètre identiques : ${sHors.n - sHors.ko}/${sHors.n}`);
+console.log(`  dans le périmètre, changés (voulu) : chunks ${dans.diff}/${dans.n} [${fmt(parB)}] ; sprites ${sDans.diff}/${sDans.n} [${fmt(sParB)}]`);
+for (const b of PERIM) if (!(parB[b] && parB[b].diff) && !(sParB[b] && sParB[b].diff)) console.log(`  note : « ${b} » est dans le périmètre mais rien n'y a changé — périmètre plus large que nécessaire ?`);
+console.log(`  toutes catégories : chunks identiques ${n - ko}/${n} (${ops} opérations) ; appels à bakeStep : réf. ${appA} -> arbre ${appB}`);
 console.log(`  couverture — groupes de murs par biome : ${JSON.stringify(murs)} ; pièces de décor : ${JSON.stringify(pieces)}`);
-const ok = ko === 0 && n > 0;
-console.log(ok ? 'ART : IDENTIQUE' : 'ART : DIFFÉRENT');
+const ok = n > 0 && hors.ko === 0 && sHors.ko === 0;
+console.log(ok ? (ko || sDans.diff ? 'ART : HORS PÉRIMÈTRE IDENTIQUE' : 'ART : IDENTIQUE') : 'ART : DÉBORDEMENT HORS PÉRIMÈTRE');
 process.exit(ok ? 0 : 1);
