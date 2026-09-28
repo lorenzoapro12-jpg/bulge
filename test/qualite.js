@@ -218,6 +218,28 @@ call(`newRun('bal',false);gsRunStart();gcRunStart();giRunStart();gxRunStart();gt
     `depart qAuto=${B.qa} -> QL/RES=${B.QL}/${B.RES} ; final ${S.QL}/${S.RES} (attendu 3/1)`);
 }
 
+/* ================= S7 — machine lente DES LA PREMIERE SECONDE : elle doit quand meme etre protegee ==
+   Mesure reelle (28/09/2026, PC AMD 1920x1080, Firefox) : le joueur est a ~34 ips des le lancement,
+   `image 29,4 ms`. C'est un MELANGE d'images a 16,7 ms (six sur sept) et a 33,3 ms (une sur sept, un
+   vsync manque) : la MEDIANE vaut donc 16,7 et ne voit rien — c'est le p90 qui porte le symptome, et
+   les drops ressentis sont exactement ces images perdues.
+
+   Sur HEAD, la decision se prend sur la MEDIANE des intervalles : celle-ci vaut 16,7 ms (six images
+   sur sept), donc `med > REFDT*1,35` (22,5 ms) n'est JAMAIS vrai et la qualite ne baisse pas d'un
+   cran, meme apres des minutes. Le regulateur mesurait « la fluidite typique » alors que le symptome
+   est « la proportion d'images perdues » : deux choses differentes, et la mediane est aveugle a la
+   seconde par construction. La decision doit se prendre sur un centile haut (p90). */
+{
+  reset(null);
+  /* une image sur sept manque son vsync — c'est le regime reel mesure chez le joueur */
+  const mixed = (n) => { for (let i = 0; i < n; i++) { const dt = (i % 7 === 3) ? 33.3 : 16.7; CLOCK += dt; PERF(dt); } };
+  mixed(20 * 60);
+  const S = st();
+  check('S7 machine lente des la premiere seconde : la qualite baisse quand meme',
+    S.QL < 3 || S.RES < 1,
+    `apres 20 s a ~34 ips (reference=${S.ref.toFixed(1)} ms) : QL/RES=${S.QL}/${S.RES} (attendu < 3/1)`);
+}
+
 /* ---------- verdict ---------- */
 console.log(`test/qualite.js — ${REF ? 'code ' + REF : 'arbre de travail'}`);
 for (const c of checks) console.log((c.ok ? '  OK   ' : '  ECHEC') + ' ' + c.name + '\n         ' + c.detail);

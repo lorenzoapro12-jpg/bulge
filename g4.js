@@ -227,14 +227,28 @@ function perf(dt){
      compte sur les images DE JEU (qn), plus sur fpsN qui avance aussi hors du jeu. */
   DTH.push(dt);if(DTH.length>120)DTH.shift();
   if(DTH.length<120||(++qn%15))return;
-  const so=DTH.slice().sort((a,b)=>a-b),med=so[60];
+  const so=DTH.slice().sort((a,b)=>a-b),med=so[60],p90=so[108];
   if((meta.q||'auto')!=='auto')return;
-  if(REFN<8){REFDT=(REFDT*REFN+med)/(++REFN);return;}   /* ~2 s : établissement, aucune décision */
+  /* La reference est la PERIODE D'ECRAN, et le minimum des medianes observees en jeu l'estime par le
+     haut : l'intervalle entre deux images ne peut pas etre plus court que la periode. Un MINIMUM et
+     non une moyenne des premieres fenetres — sinon le demarrage (chunks a cuire, chargement) fixe la
+     reference vers le haut et le filet ne joue plus. */
+  REFDT=REFDT>0?Math.min(REFDT,med):med;
+  if(REFN<8){REFN++;return;}   /* ~2 s : etablissement, aucune decision */
   /* Descente rapide (~1 s au-dessus de 1,35x), remontée LENTE et plus exigeante (~5 s sous 1,10x).
      L'asymétrie est voulue : une oscillation entre deux crans saccaderait plus que le défaut, et
      une remontée est indolore (au pire on redescend au cran suivant). Sans elle, la qualité était
-     un cliquet : un seul épisode de lenteur la figeait au plancher à vie. */
-  if(med>REFDT*1.35){
+     un cliquet : un seul épisode de lenteur la figeait au plancher à vie.
+
+     ⚠️ La DESCENTE se decide sur le p90, pas sur la mediane, et c'est le correctif du 28/09/2026.
+     Mesure reelle chez un joueur (PC AMD 1920x1080, Firefox) : ~34 ips des le lancement, `image
+     29,4 ms`, soit six images a 16,7 ms et une a 33,3 ms. La MEDIANE vaut alors 16,7 et ne voit
+     donc RIEN : le regulateur ne baissait jamais la qualite, meme apres des minutes. Ce qu'on
+     cherche a corriger n'est pas « la fluidite typique » mais « la proportion d'images perdues » —
+     le p90 (12e valeur sur 120, seuil de ~10 % d'images perdues) est le bon instrument, et la
+     mediane y est aveugle par construction. La REMONTEE, elle, reste sur la mediane : on ne remonte
+     que si le regime est reellement sain, pas seulement meilleur. */
+  if(p90>REFDT*1.35){
     if((slowT+=15)>60){slowT=0;upT=0;DTH.length=0;
       if(QL>1){QL--;applyRes();if(G)toast('Effets allégés pour garder la fluidité');}
       else if(RES>.8){RES=.8;applyRes();if(G)toast('Résolution réduite pour garder la fluidité');}
