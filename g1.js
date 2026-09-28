@@ -276,7 +276,12 @@ function mkRngA(s){let a=s>>>0||1;return()=>{a=(a*16807)%2147483647;return a/214
    sur un telephone. Avec 200 ms, AU.next passait dans le PASSE et la boucle planifiait des notes
    deja depassees — le moteur audio les jouait entassees ou les jetait : c'est le crachat entendu.
    Et si le retard se produit malgre la marge, on se resynchronise au lieu d'empiler. */
-const LA=.6;
+/* Marge de planification. Mesure du 28/09/2026 : `setInterval(musTick,25)` est AFFAME par les taches
+   consecutives du fil principal — jusqu'a 1 048 ms sans un seul appel — alors qu'aucune tache isolee
+   ne depasse 285 ms. Avec 0,6 s de marge, l'ordonnanceur se resynchronisait et on entendait le trou.
+   Deux reponses : la marge passe a 0,9 s, et musTick() est aussi appele depuis frame() (g4.js), ce qui
+   supprime la famine par construction au lieu de la rattraper. */
+const LA=.9;
 function musTick(){const ac=AU.ac;if(!ac||!AU.st)return;
   if(AU.next<ac.currentTime)AU.next=ac.currentTime+.05;
   while(AU.next<ac.currentTime+LA){schedStep(AU.step,AU.next);AU.step++;AU.next+=STEP;}}

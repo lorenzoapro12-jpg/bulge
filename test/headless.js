@@ -593,6 +593,9 @@ const sub = (f, args) => { const r = cp.spawnSync(process.execPath, [path.join(_
   check('cuisson : aucun chunk entier hors budget, travail continu et unité indivisible plafonnés (test/cuisson.js)', r.ok, r.out.split('\n').filter(l => /^\s+(OK|ECHEC)\s/.test(l)).map(l => l.trim()).join(' | ') || r.out.slice(-300)); }
 { const r = sub('art.js', REF ? ['--cible=' + REF] : []);
   check('cuisson : séquence brute des opérations de chaque chunk identique à 93b8cfe (test/art.js)', r.ok, (r.out.match(/chunks identiques : .*/) || [r.out.slice(-300)])[0]); }
+{ const r = sub('qualite.js', REF ? ['--ref=' + REF] : []);
+  check('qualité : le contrôleur peut remonter, la référence est celle du jeu, applyRes suit chaque cran (test/qualite.js)', r.ok,
+    (r.out.match(/ECHEC [^\n]*/g) || []).map(s => s.trim()).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
 
 /* ---------- verdict ---------- */
 console.log('\n---------------- VERDICT ----------------');

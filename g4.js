@@ -159,43 +159,70 @@ function renderLB(){
 }
 
 /* ---------- boucle ---------- */
-let last=0,acc=0,FPSV=0,fpsN=0,fpsT=0,slowT=0;const STEPMS=1000/60,DTH=[];
+let last=0,acc=0,FPSV=0,fpsN=0,fpsT=0,slowT=0,upT=0;const STEPMS=1000/60,DTH=[];
 /* Qualité. Ancienne méthode : baisse de résolution dès que le temps moyen dépassait 1,22× le meilleur
    temps récent -> se déclenchait sur une simple gigue de vsync, même sur une machine capable.
    Nouvelle méthode : on compare la médiane au rafraîchissement réel de l'écran, sur 3 s, et on retire
    d'abord des effets ; la résolution ne baisse qu'en dernier recours, une seule fois. */
 const QPRE={high:[3,1],mid:[2,1],low:[1,.8]};
-/* En mode auto, la qualité APPRISE survit d'une partie a l'autre (meta.qAuto, donc aussi d'un
-   chargement a l'autre). La remettre au maximum a chaque startGame condamnait chaque debut de
-   partie a resaccader le temps que perf() redescende les crans un par un. */
+/* En mode auto, la qualité APPRISE survit d'une partie à l'autre (meta.qAuto, donc aussi d'un
+   chargement à l'autre). La remettre au maximum à chaque startGame condamnait chaque début de
+   partie à resaccader le temps que perf() redescende les crans un par un. Elle reste un POINT DE
+   DÉPART, jamais un plafond : perf() sait aussi remonter (voir plus bas). */
 function applyQuality(){const q=meta.q||'auto';
   if(q==='auto'){const a=meta.qAuto;if(a&&a.length===2){QL=a[0];RES=a[1];}else{QL=3;RES=1;}}
   else{QL=QPRE[q][0];RES=QPRE[q][1];}
   applyRes();}
-let REFDT=0;
+/* Référence de fluidité = ce que la machine fait RÉELLEMENT en début de partie, pas le meilleur
+   temps jamais vu. Un minimum historique ne peut que descendre : sur un écran 90 ou 120 Hz il vaut
+   11,1 ou 8,3 ms, et un jeu à 60 ips parfaitement fluide est alors compté comme lent en permanence —
+   ce qui rabaissait la qualité jusqu'au plancher sans qu'aucune image ne soit perdue. La référence
+   est donc établie sur les 2 premières secondes de jeu, puis FIGÉE pour la partie : écran 120 Hz
+   mais machine qui tient 60 ips -> référence 16,7 ms -> rien ne se déclenche. Elle n'est jamais
+   mesurée hors du jeu (un menu n'a pas la charge d'une partie) ni héritée de la partie précédente. */
+let REFDT=0,REFN=0,qn=0;
+function refReset(){REFDT=0;REFN=0;qn=0;slowT=0;upT=0;DTH.length=0;}
 function perf(dt){
   fpsN++;fpsT+=dt;if(fpsT>=500){FPSV=Math.round(fpsN*1000/fpsT);fpsN=0;fpsT=0;}
+  /* Hors du jeu (menu, pause, écran de fin), on ne MESURE pas du tout : la fenêtre ne se remplit
+     qu'avec des images de jeu. Avant, elle se remplissait au menu et ces durées — bien plus courtes —
+     entraient dans la référence, qui décrivait alors autre chose que le jeu. */
+  if(!G||G.state!=='play'){refReset();return;}
   /* fenetre de 120 images (2 s a 60 Hz) au lieu de 180 : l'echantillon revient plus vite, donc
-     l'adaptation converge plus vite, sans baisser la robustesse de la mediane. */
-  DTH.push(dt);if(DTH.length>120)DTH.shift();if(DTH.length<120||fpsN%15)return;
+     l'adaptation converge plus vite, sans baisser la robustesse de la mediane. L'echantillonnage est
+     compte sur les images DE JEU (qn), plus sur fpsN qui avance aussi hors du jeu. */
+  DTH.push(dt);if(DTH.length>120)DTH.shift();
+  if(DTH.length<120||(++qn%15))return;
   const so=DTH.slice().sort((a,b)=>a-b),med=so[60];
-  if(!G||G.state!=='play'){REFDT=REFDT?Math.min(REFDT,med):med;slowT=0;return;}
-  if(!REFDT)REFDT=Math.min(med,16.8);
   if((meta.q||'auto')!=='auto')return;
-  /* seuil a 60 (4 echantillons, ~1 s) contre 180 (~3 s) avant : moins de temps perdu en saccade ;
-     le seuil de detection monte a 1,35x pour ne pas declencher sur une simple gigue de vsync. */
-  if(med>REFDT*1.35){if((slowT+=15)>60){slowT=0;DTH.length=0;
-    if(QL>1){QL--;if(G)toast('Effets allégés pour garder la fluidité');}
-    else if(RES>.8){RES=.8;applyRes();if(G)toast('Résolution réduite pour garder la fluidité');}
-    meta.qAuto=[QL,RES];saveMeta();}}
-  else slowT=Math.max(0,slowT-30);
+  if(REFN<8){REFDT=(REFDT*REFN+med)/(++REFN);return;}   /* ~2 s : établissement, aucune décision */
+  /* Descente rapide (~1 s au-dessus de 1,35x), remontée LENTE et plus exigeante (~5 s sous 1,10x).
+     L'asymétrie est voulue : une oscillation entre deux crans saccaderait plus que le défaut, et
+     une remontée est indolore (au pire on redescend au cran suivant). Sans elle, la qualité était
+     un cliquet : un seul épisode de lenteur la figeait au plancher à vie. */
+  if(med>REFDT*1.35){
+    if((slowT+=15)>60){slowT=0;upT=0;DTH.length=0;
+      if(QL>1){QL--;applyRes();if(G)toast('Effets allégés pour garder la fluidité');}
+      else if(RES>.8){RES=.8;applyRes();if(G)toast('Résolution réduite pour garder la fluidité');}
+      else return;
+      meta.qAuto=[QL,RES];saveMeta();}
+  }else{
+    slowT=Math.max(0,slowT-30);
+    /* on rétablit d'abord la résolution (la dégradation la plus visible à l'œil), puis les effets */
+    if(med<REFDT*1.10){if((upT+=15)>150){upT=0;DTH.length=0;
+      if(RES<1){RES=1;applyRes();if(G)toast('Résolution rétablie');}
+      else if(QL<3){QL++;applyRes();if(G)toast('Effets rétablis');}
+      else return;
+      meta.qAuto=[QL,RES];saveMeta();}}
+    else upT=Math.max(0,upT-30);
+  }
 }
 let FRN=0;
 function frame(ts){
   requestAnimationFrame(frame);
   const t0=performance.now();BKMS=0;
   if(!last)last=ts;let dt=ts-last;last=ts;if(dt>100)dt=100;
-  perf(dt);FDT=dt;
+  perf(dt);FDT=dt;musTick();
   let A=1;
   if(G&&(G.state==='play'||G.state==='dying'||G.state==='victory')){
     acc+=dt*G.timeScale;let n=0;while(acc>=STEPMS&&n<5){step();acc-=STEPMS;n++;}if(n>=5)acc=0;
@@ -210,7 +237,7 @@ function frame(ts){
 function startGame(prof,daily){
   if(!shipOK(prof)){SAN_TAB='ships';renderSanct();show('ov-sanct');return;}
   if(storyGate(()=>startGame(prof,daily)))return;
-  applyQuality();DTH.length=0;slowT=0;meta.lastProf=prof;saveMeta();cv.classList.remove('dying');newRun(prof,daily);flashFade('#05030c',900);gsRunStart();gcRunStart();giRunStart();gxRunStart();gtRunStart();gvRunStart();inp.L=inp.R=null;show(null);}
+  applyQuality();refReset();meta.lastProf=prof;saveMeta();cv.classList.remove('dying');newRun(prof,daily);flashFade('#05030c',900);gsRunStart();gcRunStart();giRunStart();gxRunStart();gtRunStart();gvRunStart();inp.L=inp.R=null;show(null);}
 function boot(){
   resize();addEventListener('resize',()=>{CVR=null;resize();});
   cv.addEventListener('pointerdown',onDown,{passive:false});cv.addEventListener('contextmenu',e=>e.preventDefault());
