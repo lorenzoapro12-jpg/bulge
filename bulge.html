@@ -3284,8 +3284,15 @@ function drawLowGlows(){
 }
 function chunksCover(){const c0=Math.floor(VL/CH),c1=Math.floor(VR/CH),r0=Math.floor(VT/CH),r1=Math.floor(VB/CH);
   for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(!c||!c.bake&&!c.bk)return false;}return true;}
+/* Niveau de degradation decide par la boucle (g4.js) : 0 = tout dessiner, 1 = les postes
+   decoratifs cedent, 2 = en plus les halos et la mini-carte. Le jeu n'a aucun budget global
+   par image : seule la cuisson en avait un. Quand l'image ne tient pas dans son budget, ce
+   sont les postes dont l'absence ne se voit pas qui doivent ceder, pas le monde ni le joueur.
+   Le test typeof est volontaire : si la boucle n'expose pas SKIPD, on dessine tout (aucune
+   dependance dure entre les deux modules). */
+function skLev(){return typeof SKIPD==='number'?SKIPD:0;}
 function render(A,dt){
-  FRAME++;RDT=dt||16.7;SPRB=3;ctx=MAINCTX;const c=ctx;
+  FRAME++;RDT=dt||16.7;SPRB=3;ctx=MAINCTX;const c=ctx;const sk=skLev();
   c.setTransform(1,0,0,1,0,0);c.globalAlpha=1;c.globalCompositeOperation='source-over';
   if(!WD){c.fillStyle='#05030c';c.fillRect(0,0,cv.width,cv.height);return;}
   const inGame=!!(G&&G.p);
@@ -3302,11 +3309,11 @@ function render(A,dt){
   worldTf();drawChunks();
   for(const m of mix)if(m.b==='sea'&&m.w>.3&&QL>=2)drawCaustics(m.w);
   /* couche basse résolution : ambiance lointaine + halos */
-  lowBegin();if(QL>=2){lowScreen();drawFar(mix);drawVista(mix);LOWN++;}lowWorld();drawLowGlows();lowEnd();
+  lowBegin();if(QL>=2){lowScreen();drawFar(mix);drawVista(mix);LOWN++;}lowWorld();if(sk<2)drawLowGlows();lowEnd();
   worldTf();drawEdges();drawObstacles();if(inGame){gcDrawWorld();gsDrawWorld();giDrawWorld();gxDrawWorld();gvDrawWorld();}
   if(inGame){drawObjectives();drawPickups();drawShadows(mix);drawTrails();gcDrawUnder();giDrawUnder();drawEnemies();drawBoss();drawPlayer();drawBullets();drawFX();gcDrawOver();}
-  screenTf();drawWeather(mix);
-  if(inGame&&!gvHideHUD()){drawLabels();drawIndicators();drawTexts();}
+  screenTf();if(sk<1)drawWeather(mix);
+  if(inGame&&!gvHideHUD()){if(sk<2)drawLabels();if(sk<1)drawIndicators();drawTexts();}
   postFX();
   if(inGame){screenTf();ctx.translate(SAFE.l,SAFE.t);const w0=W,h0=H;W-=SAFE.l+SAFE.r;H-=SAFE.t+SAFE.b;try{if(!gvHideHUD()){drawHUD();gcHUD();gxHUD();gtHUD();}gvDrawScreen();drawSubs();}finally{W=w0;H=h0;}lerpOut();}
 }
@@ -3650,7 +3657,7 @@ function drawHUD(){
   if(P.muts.length){c.fillStyle=COL.gd;c.fillText(P.muts.map(id=>MUT.find(m=>m.id===id).n).join(' + '),bx,by+32);}
   c.textAlign='right';c.font='700 24px '+FD;c.fillStyle='#fff';c.fillText(fmt(G.score),W-pad,60);
   if(G.combo>=2){c.font='700 15px '+FD;c.fillStyle=COL.gd;c.fillText('×'+G.combo+'  (score ×'+comboMul().toFixed(1)+')',W-pad,88);c.fillStyle=rgba(COL.gd,.6);c.fillRect(W-pad-100,107,100*G.comboT/150,3);}
-  drawMinimap(W-pad-ms,116,ms);
+  if(skLev()<2)drawMinimap(W-pad-ms,116,ms);
   const B=G.boss,Hh=G.arena&&G.arena.kind==='heart'?G.arena.ref:null,big=B&&!B.gone?B:(Hh&&Hh.state==='active'?Hh:null);
   if(big){const w=narrow?W-pad*2:Math.min(460,W-520),x=narrow?pad:(W-w)/2,y=narrow?pad+100:pad+6,fB=Math.max(0,big.hp/big.mhp);
     const y2=narrow?Math.max(y,116+ms+10):y;
