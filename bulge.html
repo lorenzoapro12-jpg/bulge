@@ -1120,8 +1120,14 @@ function mapInto(g,x,y,w,h){const k=256/(2*WR);let sx=(x+WR)*k,sy=(y+WR)*k,sw=w*
   if(sx<0){const f=-sx/sw;dx+=dw*f;dw*=1-f;sw+=sx;sx=0;}if(sy<0){const f=-sy/sh;dy+=dh*f;dh*=1-f;sh+=sy;sy=0;}
   if(sx+sw>256){const f=(sx+sw-256)/sw;dw*=1-f;sw=256-sx;}if(sy+sh>256){const f=(sy+sh-256)/sh;dh*=1-f;sh=256-sy;}
   g.imageSmoothingEnabled=true;if(sw>0&&sh>0&&dw>0&&dh>0)g.drawImage(WD.map,sx,sy,sw,sh,dx,dy,dw,dh);}
-/* ---------- cuisson des chunks : pool de canvas, pas de ré-allocation ---------- */
+/* ---------- cuisson des chunks : pool de canvas, pas de ré-allocation ----------
+   Surface = OffscreenCanvas dans la page aussi, comme dans le worker : clip() n'est pas rasterisé pareil sur
+   HTMLCanvasElement (0,13 % des octets, bords clippés ; test/worker.js). Même surface => mêmes octets, que le
+   chunk vienne du worker ou de la cuisson sur place. Sans OffscreenCanvas (harnais vm, vieux navigateur) :
+   mkCanvas, comme avant. BPOOL ne reçoit que ces surfaces : un ImageBitmap du worker se ferme (evictBakes). */
 const BPOOL=[];
+function isBm(b){return typeof ImageBitmap==='function'&&b instanceof ImageBitmap;}
+function mkBake(){return typeof OffscreenCanvas==='function'?new OffscreenCanvas(CH,CH):mkCanvas(CH,CH);}
 /* ---------- texture fine du sol, par biome ---------- */
 const GTEX={
   plains:(g,x,y,r)=>{g.strokeStyle=r<.5?'rgba(150,230,160,.18)':'rgba(30,80,50,.25)';g.lineWidth=1;g.beginPath();g.moveTo(x,y);g.lineTo(x+(r-.5)*6,y-5-r*4);g.stroke();},
@@ -1239,7 +1245,7 @@ function* drawLms(g,c){for(const L of WD.lms)if(Math.abs(L.x-c.x0-CH/2)<CH/2+L.R
    à la première unité du relief dans le même appel. */
 function bakeStep(c){
   let k=c.bk;
-  if(!k){const cv2=BPOOL.pop()||mkCanvas(CH,CH),g=cv2.getContext('2d',{alpha:false});g.setTransform(1,0,0,1,0,0);g.globalAlpha=1;g.globalCompositeOperation='source-over';
+  if(!k){const cv2=BPOOL.pop()||mkBake(),g=cv2.getContext('2d',{alpha:false});g.setTransform(1,0,0,1,0,0);g.globalAlpha=1;g.globalCompositeOperation='source-over';
     g.fillStyle='#05030c';g.fillRect(0,0,CH,CH);g.translate(-c.x0,-c.y0);mapInto(g,c.x0,c.y0,CH,CH);c.bk={cv:cv2,g,s:0,i:0,rnd:{}};return false;}
   const g=k.g;BK0=c.x0;BK1=c.y0;
   const res=BAKE_STEPS[k.s](g,c,k);
@@ -1250,17 +1256,31 @@ function bakeStep(c){
 /* plus appelée par le jeu (PERF-2 : jamais un chunk d'un bloc) ; gardée pour les instruments qui
    l'enveloppent (bulge-verif/frames.js, blocages.js) — test/unused.js la signale, c'est voulu */
 function bakeChunk(c){while(!bakeStep(c));}
-/* worker de cuisson : SOCLE, pas encore branche sur la boucle (test/worker.js le prouve identique au pixel).
-   Source = bloc #wk-src genere par build.sh (modules du monde + gk.js). null = pas de worker possible
-   (bloc absent, harnais vm, navigateur sans OffscreenCanvas.transferToImageBitmap) : bakeStep sur place.
-   Seul test/worker.js l'appelle pour l'instant — test/unused.js la signale, c'est voulu. */
+/* worker de cuisson. Source = bloc #wk-src genere par build.sh (modules du monde + gk.js). null = pas de worker
+   possible (bloc absent, harnais vm, navigateur sans OffscreenCanvas.transferToImageBitmap) : bakeStep sur place. */
 function bakeWorker(){const s=typeof Worker==='function'&&typeof OffscreenCanvas==='function'&&OffscreenCanvas.prototype.transferToImageBitmap&&$('wk-src');if(!s)return null;
   try{return new Worker(URL.createObjectURL(new Blob([s.textContent],{type:'text/javascript'})));}catch(e){return null;}}
+/* Cuisson deleguee — PAS active par defaut : le repli (cuisson sur place) reste l'etat du jeu tant que la mesure
+   sur telephone ne tranche pas. Activee par ?wk=1 (ou WKW=true avant la premiere image). WK : null = pas encore
+   decide, false = sur place, sinon {w, wd: monde envoye, g: generation, enc: chunks demandes (au plus WKMAX)}.
+   WKMAX=2 : le worker cuit l'un pendant que l'autre attend ; jamais plus, pour que la priorite de streamWorld
+   (visible d'abord, puis direction du mouvement) soit reevaluee a chaque image au lieu d'etre figee dans une
+   file. Un chunk demande (c.wk) n'a ni bake ni bk : chunksCover() le voit non pret -> sol de secours (drawGround). */
+let WKW=typeof location!=='undefined'&&/[?&]wk=1\b/.test(location.search||''),WK=null,WKN=0;const WKMAX=2;
+function wkOn(){if(WK===null){WK=false;const w=WKW&&bakeWorker();if(w){WK={w,wd:null,g:0,enc:[]};w.onmessage=wkRecv;w.onerror=wkFail;}}return WK;}
+/* worker en panne : retour a la cuisson sur place, les chunks demandes redeviennent a cuire */
+function wkFail(){if(!WK)return;for(const c of WK.enc)c.wk=0;try{WK.w.terminate();}catch(e){}WK=false;}
+function wkSync(){if(WK.wd===WD)return;if(WK.wd)for(const c of WK.wd.bakes)if(isBm(c.bake))c.bake.close();
+  for(const c of WK.enc)c.wk=0;WK.enc.length=0;WK.wd=WD;WK.g++;WK.w.postMessage({t:'monde',seed:WD.seed,g:WK.g});}
+function wkAsk(c){c.wk=1;WK.enc.push(c);WK.w.postMessage({t:'cuis',cx:c.cx,cy:c.cy});}
+function wkRecv(e){const m=e.data;if(m.t!=='cuis'||!WK)return;const i=m.g===WK.g&&WK.wd===WD?WK.enc.findIndex(c=>c.cx===m.cx&&c.cy===m.cy):-1;
+  if(i<0){m.bm&&m.bm.close();return;}const c=WK.enc[i];WK.enc.splice(i,1);c.wk=0;if(!m.bm)return;
+  c.bake=m.bm;c.bk=null;c.used=FRAME;WD.bakes.push(c);WKN++;}
 /* lisières (42 lucioles) cuites par lots : voir lisiereStep, plus haut */
 /* éviction LRU : jamais un chunk utilisé à cette frame (plus de boucle cuisson/éviction) */
 function evictBakes(max){
   while(WD.bakes.length>max){let mi=-1;for(let i=0;i<WD.bakes.length;i++){const b=WD.bakes[i];if(b.used>=FRAME)continue;if(mi<0||b.used<WD.bakes[mi].used)mi=i;}
-    if(mi<0)break;const ev=WD.bakes[mi];BPOOL.length<8&&BPOOL.push(ev.bake);ev.bake=null;WD.bakes.splice(mi,1);}
+    if(mi<0)break;const ev=WD.bakes[mi];if(isBm(ev.bake))ev.bake.close();else BPOOL.length<8&&BPOOL.push(ev.bake);ev.bake=null;WD.bakes.splice(mi,1);}
 }
 /* cache des sprites d'obstacles, indépendant des cuissons */
 const OSPR=[];
@@ -1311,12 +1331,16 @@ function streamWorld(budget){
      BURG ms de cuisson par image, comptés depuis ici (les sprites d'obstacles, plus haut, peuvent avoir
      mangé le budget) ; un chunk en cours s'affiche tel quel (drawChunks) — le sol de secours (mapInto)
      plus les couches déjà posées, dans l'ordre d'origine. Puis la file de prewarm, avec le reste. */
-  const tb=performance.now(),ok=u=>performance.now()-t0<budget||u&&performance.now()-tb<BURG;
+  const Q=WD.pq,W=wkOn();
+  /* worker (meme a budget nul, menu : il ne coute rien ici) : on demande dans l'ordre exact de `need` puis de la file de prewarm, au plus WKMAX en vol ; la file
+     n'avance que sur des chunks deja recus (ses sprites d'obstacles restent cuits ici) */
+  if(W){wkSync();for(let i=0;i<need.length&&W.enc.length<WKMAX;i++)if(!need[i][1].wk)wkAsk(need[i][1]);
+    for(let i=0;Q&&i<Q.length&&W.enc.length<WKMAX;i++)if(!Q[i].bake&&!Q[i].wk)wkAsk(Q[i]);}
+  else{const tb=performance.now(),ok=u=>performance.now()-t0<budget||u&&performance.now()-tb<BURG;
   for(let i=0;i<need.length;i++){const c=need[i][1],u=need[i][0]<1e8;
     while(ok(u)){if(bakeStep(c))break;}
-    if(!ok(u))break;}
-  const Q=WD.pq;
-  while(Q&&Q.length&&performance.now()-t0<budget){const c=Q[0];if(!c.bake){bakeStep(c);continue;}let k=0;
+    if(!ok(u))break;}}
+  while(Q&&Q.length&&performance.now()-t0<budget){const c=Q[0];if(!c.bake){if(W)break;bakeStep(c);continue;}let k=0;
     for(const o of c.obs){if(o.wall||o.spr)continue;if(performance.now()-t0>=budget){k=1;break;}obsSprite(o);o.su=1e9;OSPR.push(o);}
     if(!k)Q.shift();}
   evictBakes(Math.max(60,n+8));evictSprites(Math.max(360,OSPR.length>600?360:600));BKMS=performance.now()-t0;
@@ -4918,8 +4942,14 @@ function mapInto(g,x,y,w,h){const k=256/(2*WR);let sx=(x+WR)*k,sy=(y+WR)*k,sw=w*
   if(sx<0){const f=-sx/sw;dx+=dw*f;dw*=1-f;sw+=sx;sx=0;}if(sy<0){const f=-sy/sh;dy+=dh*f;dh*=1-f;sh+=sy;sy=0;}
   if(sx+sw>256){const f=(sx+sw-256)/sw;dw*=1-f;sw=256-sx;}if(sy+sh>256){const f=(sy+sh-256)/sh;dh*=1-f;sh=256-sy;}
   g.imageSmoothingEnabled=true;if(sw>0&&sh>0&&dw>0&&dh>0)g.drawImage(WD.map,sx,sy,sw,sh,dx,dy,dw,dh);}
-/* ---------- cuisson des chunks : pool de canvas, pas de ré-allocation ---------- */
+/* ---------- cuisson des chunks : pool de canvas, pas de ré-allocation ----------
+   Surface = OffscreenCanvas dans la page aussi, comme dans le worker : clip() n'est pas rasterisé pareil sur
+   HTMLCanvasElement (0,13 % des octets, bords clippés ; test/worker.js). Même surface => mêmes octets, que le
+   chunk vienne du worker ou de la cuisson sur place. Sans OffscreenCanvas (harnais vm, vieux navigateur) :
+   mkCanvas, comme avant. BPOOL ne reçoit que ces surfaces : un ImageBitmap du worker se ferme (evictBakes). */
 const BPOOL=[];
+function isBm(b){return typeof ImageBitmap==='function'&&b instanceof ImageBitmap;}
+function mkBake(){return typeof OffscreenCanvas==='function'?new OffscreenCanvas(CH,CH):mkCanvas(CH,CH);}
 /* ---------- texture fine du sol, par biome ---------- */
 const GTEX={
   plains:(g,x,y,r)=>{g.strokeStyle=r<.5?'rgba(150,230,160,.18)':'rgba(30,80,50,.25)';g.lineWidth=1;g.beginPath();g.moveTo(x,y);g.lineTo(x+(r-.5)*6,y-5-r*4);g.stroke();},
@@ -5037,7 +5067,7 @@ function* drawLms(g,c){for(const L of WD.lms)if(Math.abs(L.x-c.x0-CH/2)<CH/2+L.R
    à la première unité du relief dans le même appel. */
 function bakeStep(c){
   let k=c.bk;
-  if(!k){const cv2=BPOOL.pop()||mkCanvas(CH,CH),g=cv2.getContext('2d',{alpha:false});g.setTransform(1,0,0,1,0,0);g.globalAlpha=1;g.globalCompositeOperation='source-over';
+  if(!k){const cv2=BPOOL.pop()||mkBake(),g=cv2.getContext('2d',{alpha:false});g.setTransform(1,0,0,1,0,0);g.globalAlpha=1;g.globalCompositeOperation='source-over';
     g.fillStyle='#05030c';g.fillRect(0,0,CH,CH);g.translate(-c.x0,-c.y0);mapInto(g,c.x0,c.y0,CH,CH);c.bk={cv:cv2,g,s:0,i:0,rnd:{}};return false;}
   const g=k.g;BK0=c.x0;BK1=c.y0;
   const res=BAKE_STEPS[k.s](g,c,k);
@@ -5048,17 +5078,31 @@ function bakeStep(c){
 /* plus appelée par le jeu (PERF-2 : jamais un chunk d'un bloc) ; gardée pour les instruments qui
    l'enveloppent (bulge-verif/frames.js, blocages.js) — test/unused.js la signale, c'est voulu */
 function bakeChunk(c){while(!bakeStep(c));}
-/* worker de cuisson : SOCLE, pas encore branche sur la boucle (test/worker.js le prouve identique au pixel).
-   Source = bloc #wk-src genere par build.sh (modules du monde + gk.js). null = pas de worker possible
-   (bloc absent, harnais vm, navigateur sans OffscreenCanvas.transferToImageBitmap) : bakeStep sur place.
-   Seul test/worker.js l'appelle pour l'instant — test/unused.js la signale, c'est voulu. */
+/* worker de cuisson. Source = bloc #wk-src genere par build.sh (modules du monde + gk.js). null = pas de worker
+   possible (bloc absent, harnais vm, navigateur sans OffscreenCanvas.transferToImageBitmap) : bakeStep sur place. */
 function bakeWorker(){const s=typeof Worker==='function'&&typeof OffscreenCanvas==='function'&&OffscreenCanvas.prototype.transferToImageBitmap&&$('wk-src');if(!s)return null;
   try{return new Worker(URL.createObjectURL(new Blob([s.textContent],{type:'text/javascript'})));}catch(e){return null;}}
+/* Cuisson deleguee — PAS active par defaut : le repli (cuisson sur place) reste l'etat du jeu tant que la mesure
+   sur telephone ne tranche pas. Activee par ?wk=1 (ou WKW=true avant la premiere image). WK : null = pas encore
+   decide, false = sur place, sinon {w, wd: monde envoye, g: generation, enc: chunks demandes (au plus WKMAX)}.
+   WKMAX=2 : le worker cuit l'un pendant que l'autre attend ; jamais plus, pour que la priorite de streamWorld
+   (visible d'abord, puis direction du mouvement) soit reevaluee a chaque image au lieu d'etre figee dans une
+   file. Un chunk demande (c.wk) n'a ni bake ni bk : chunksCover() le voit non pret -> sol de secours (drawGround). */
+let WKW=typeof location!=='undefined'&&/[?&]wk=1\b/.test(location.search||''),WK=null,WKN=0;const WKMAX=2;
+function wkOn(){if(WK===null){WK=false;const w=WKW&&bakeWorker();if(w){WK={w,wd:null,g:0,enc:[]};w.onmessage=wkRecv;w.onerror=wkFail;}}return WK;}
+/* worker en panne : retour a la cuisson sur place, les chunks demandes redeviennent a cuire */
+function wkFail(){if(!WK)return;for(const c of WK.enc)c.wk=0;try{WK.w.terminate();}catch(e){}WK=false;}
+function wkSync(){if(WK.wd===WD)return;if(WK.wd)for(const c of WK.wd.bakes)if(isBm(c.bake))c.bake.close();
+  for(const c of WK.enc)c.wk=0;WK.enc.length=0;WK.wd=WD;WK.g++;WK.w.postMessage({t:'monde',seed:WD.seed,g:WK.g});}
+function wkAsk(c){c.wk=1;WK.enc.push(c);WK.w.postMessage({t:'cuis',cx:c.cx,cy:c.cy});}
+function wkRecv(e){const m=e.data;if(m.t!=='cuis'||!WK)return;const i=m.g===WK.g&&WK.wd===WD?WK.enc.findIndex(c=>c.cx===m.cx&&c.cy===m.cy):-1;
+  if(i<0){m.bm&&m.bm.close();return;}const c=WK.enc[i];WK.enc.splice(i,1);c.wk=0;if(!m.bm)return;
+  c.bake=m.bm;c.bk=null;c.used=FRAME;WD.bakes.push(c);WKN++;}
 /* lisières (42 lucioles) cuites par lots : voir lisiereStep, plus haut */
 /* éviction LRU : jamais un chunk utilisé à cette frame (plus de boucle cuisson/éviction) */
 function evictBakes(max){
   while(WD.bakes.length>max){let mi=-1;for(let i=0;i<WD.bakes.length;i++){const b=WD.bakes[i];if(b.used>=FRAME)continue;if(mi<0||b.used<WD.bakes[mi].used)mi=i;}
-    if(mi<0)break;const ev=WD.bakes[mi];BPOOL.length<8&&BPOOL.push(ev.bake);ev.bake=null;WD.bakes.splice(mi,1);}
+    if(mi<0)break;const ev=WD.bakes[mi];if(isBm(ev.bake))ev.bake.close();else BPOOL.length<8&&BPOOL.push(ev.bake);ev.bake=null;WD.bakes.splice(mi,1);}
 }
 /* cache des sprites d'obstacles, indépendant des cuissons */
 const OSPR=[];
@@ -5109,12 +5153,16 @@ function streamWorld(budget){
      BURG ms de cuisson par image, comptés depuis ici (les sprites d'obstacles, plus haut, peuvent avoir
      mangé le budget) ; un chunk en cours s'affiche tel quel (drawChunks) — le sol de secours (mapInto)
      plus les couches déjà posées, dans l'ordre d'origine. Puis la file de prewarm, avec le reste. */
-  const tb=performance.now(),ok=u=>performance.now()-t0<budget||u&&performance.now()-tb<BURG;
+  const Q=WD.pq,W=wkOn();
+  /* worker (meme a budget nul, menu : il ne coute rien ici) : on demande dans l'ordre exact de `need` puis de la file de prewarm, au plus WKMAX en vol ; la file
+     n'avance que sur des chunks deja recus (ses sprites d'obstacles restent cuits ici) */
+  if(W){wkSync();for(let i=0;i<need.length&&W.enc.length<WKMAX;i++)if(!need[i][1].wk)wkAsk(need[i][1]);
+    for(let i=0;Q&&i<Q.length&&W.enc.length<WKMAX;i++)if(!Q[i].bake&&!Q[i].wk)wkAsk(Q[i]);}
+  else{const tb=performance.now(),ok=u=>performance.now()-t0<budget||u&&performance.now()-tb<BURG;
   for(let i=0;i<need.length;i++){const c=need[i][1],u=need[i][0]<1e8;
     while(ok(u)){if(bakeStep(c))break;}
-    if(!ok(u))break;}
-  const Q=WD.pq;
-  while(Q&&Q.length&&performance.now()-t0<budget){const c=Q[0];if(!c.bake){bakeStep(c);continue;}let k=0;
+    if(!ok(u))break;}}
+  while(Q&&Q.length&&performance.now()-t0<budget){const c=Q[0];if(!c.bake){if(W)break;bakeStep(c);continue;}let k=0;
     for(const o of c.obs){if(o.wall||o.spr)continue;if(performance.now()-t0>=budget){k=1;break;}obsSprite(o);o.su=1e9;OSPR.push(o);}
     if(!k)Q.shift();}
   evictBakes(Math.max(60,n+8));evictSprites(Math.max(360,OSPR.length>600?360:600));BKMS=performance.now()-t0;
@@ -5843,15 +5891,15 @@ function shadowSpr(){return spr('shd',64,g=>{const gr=g.createRadialGradient(32,
    bloc script de type text/js-worker, id wk-src, que bakeWorker() (gw2.js) lance en worker.
    Le worker ne recoit que la GRAINE : il regenere le monde lui-meme (genWorld est deterministe, prouve
    champ par champ par test/worker.js), puis cuit un chunk avec les MEMES bakeStep que la page, sur un
-   OffscreenCanvas neuf (mkCanvas, gw2.js). Rien n'est encore branche sur la boucle de jeu.
-   Protocole : {t:'monde',seed}  -> {t:'monde',seed}
-               {t:'cuis',cx,cy}  -> {t:'cuis',cx,cy,bm}  (ImageBitmap transfere ; null hors du monde)
+   OffscreenCanvas neuf (mkCanvas, gw2.js). Branche par streamWorld (gw2.js, wkAsk/wkRecv) si ?wk=1.
+   Protocole : {t:'monde',seed,g} -> {t:'monde',seed}   (g : generation, renvoyee avec chaque chunk)
+               {t:'cuis',cx,cy}   -> {t:'cuis',cx,cy,g,bm}  (ImageBitmap transfere ; null hors du monde)
    ========================================================= */
-let FRAME=0;
+let FRAME=0,WG=0;
 function wkBake(cx,cy){const c=getChunk(cx,cy);if(!c)return null;c.bake=null;c.bk=null;while(!bakeStep(c));WD.bakes.length=0;const cv=c.bake;c.bake=null;return cv;}
 onmessage=e=>{const m=e.data;
-  if(m.t==='monde'){genWorld(m.seed);postMessage({t:'monde',seed:m.seed});return;}
-  if(m.t==='cuis'){const cv=wkBake(m.cx,m.cy),bm=cv?cv.transferToImageBitmap():null;postMessage({t:'cuis',cx:m.cx,cy:m.cy,bm},bm?[bm]:[]);}};
+  if(m.t==='monde'){genWorld(m.seed);WG=m.g|0;postMessage({t:'monde',seed:m.seed});return;}
+  if(m.t==='cuis'){const cv=wkBake(m.cx,m.cy),bm=cv?cv.transferToImageBitmap():null;postMessage({t:'cuis',cx:m.cx,cy:m.cy,g:WG,bm},bm?[bm]:[]);}};
 </script>
 </body>
 </html>

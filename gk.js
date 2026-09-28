@@ -4,12 +4,12 @@
    bloc script de type text/js-worker, id wk-src, que bakeWorker() (gw2.js) lance en worker.
    Le worker ne recoit que la GRAINE : il regenere le monde lui-meme (genWorld est deterministe, prouve
    champ par champ par test/worker.js), puis cuit un chunk avec les MEMES bakeStep que la page, sur un
-   OffscreenCanvas neuf (mkCanvas, gw2.js). Rien n'est encore branche sur la boucle de jeu.
-   Protocole : {t:'monde',seed}  -> {t:'monde',seed}
-               {t:'cuis',cx,cy}  -> {t:'cuis',cx,cy,bm}  (ImageBitmap transfere ; null hors du monde)
+   OffscreenCanvas neuf (mkCanvas, gw2.js). Branche par streamWorld (gw2.js, wkAsk/wkRecv) si ?wk=1.
+   Protocole : {t:'monde',seed,g} -> {t:'monde',seed}   (g : generation, renvoyee avec chaque chunk)
+               {t:'cuis',cx,cy}   -> {t:'cuis',cx,cy,g,bm}  (ImageBitmap transfere ; null hors du monde)
    ========================================================= */
-let FRAME=0;
+let FRAME=0,WG=0;
 function wkBake(cx,cy){const c=getChunk(cx,cy);if(!c)return null;c.bake=null;c.bk=null;while(!bakeStep(c));WD.bakes.length=0;const cv=c.bake;c.bake=null;return cv;}
 onmessage=e=>{const m=e.data;
-  if(m.t==='monde'){genWorld(m.seed);postMessage({t:'monde',seed:m.seed});return;}
-  if(m.t==='cuis'){const cv=wkBake(m.cx,m.cy),bm=cv?cv.transferToImageBitmap():null;postMessage({t:'cuis',cx:m.cx,cy:m.cy,bm},bm?[bm]:[]);}};
+  if(m.t==='monde'){genWorld(m.seed);WG=m.g|0;postMessage({t:'monde',seed:m.seed});return;}
+  if(m.t==='cuis'){const cv=wkBake(m.cx,m.cy),bm=cv?cv.transferToImageBitmap():null;postMessage({t:'cuis',cx:m.cx,cy:m.cy,g:WG,bm},bm?[bm]:[]);}};
