@@ -75,10 +75,19 @@ function chunksCover(){const c0=Math.floor(VL/CH),c1=Math.floor(VR/CH),r0=Math.f
    Le test typeof est volontaire : si la boucle n'expose pas SKIPD, on dessine tout (aucune
    dependance dure entre les deux modules). */
 function skLev(){return typeof SKIPD==='number'?SKIPD:0;}
+/* Fond gelé. En pause le monde ne change plus : le redessiner entier coûte le prix du jeu pour un
+   résultat identique — et comme le fond n'est rendu qu'une image sur quatre dans cet état, ça donne
+   une image lourde sur quatre (mesuré ×10 : 41 ms par appel, dont 16 ms de cuisson inutile), donc
+   des à-coups de menu. On capture le fond une fois, puis on ne recompose qu'une image. */
+let BGF=null;
 function render(A,dt){
   FRAME++;RDT=dt||16.7;SPRB=3;ctx=MAINCTX;const c=ctx;const sk=skLev();
   c.setTransform(1,0,0,1,0,0);c.globalAlpha=1;c.globalCompositeOperation='source-over';
   if(!WD){c.fillStyle='#05030c';c.fillRect(0,0,cv.width,cv.height);return;}
+  const fige=!!G&&G.state==='pause';
+  if(!fige)BGF=null;
+  else if(BGF&&BGF.width===cv.width&&BGF.height===cv.height){c.drawImage(BGF,0,0);return;}
+  else BGF=null;
   const inGame=!!(G&&G.p);
   if(inGame){RT=G.t+A;
     CAM.x=G.pcx==null?G.cx:G.pcx+(G.cx-G.pcx)*A;CAM.y=G.pcy==null?G.cy:G.pcy+(G.cy-G.pcy)*A;CAM.z=(G.pzoom==null?G.zoom:G.pzoom+(G.zoom-G.pzoom)*A)*(1+G.kick);
@@ -100,6 +109,9 @@ function render(A,dt){
   if(inGame&&!gvHideHUD()){if(sk<2)drawLabels();if(sk<1)drawIndicators();drawTexts();}
   postFX();
   if(inGame){screenTf();ctx.translate(SAFE.l,SAFE.t);const w0=W,h0=H;W-=SAFE.l+SAFE.r;H-=SAFE.t+SAFE.b;try{if(!gvHideHUD()){drawHUD();gcHUD();gxHUD();gtHUD();}gvDrawScreen();drawSubs();}finally{W=w0;H=h0;}lerpOut();}
+  /* capture du fond, une seule fois par entrée en pause : les images suivantes n'auront qu'un
+     composite à faire au lieu du rendu complet */
+  if(fige&&!BGF){BGF=mkCanvas(cv.width,cv.height);BGF.getContext('2d').drawImage(cv,0,0);}
 }
 function drawGround(){
   const k=256/(2*WR),wl=CAM.x-(W/2+RSX)/RZ,wt=CAM.y-(H/2+RSY)/RZ;

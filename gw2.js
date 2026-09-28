@@ -386,7 +386,13 @@ function prewarm(x,y,rad){const q=[];for(let cx=Math.floor((x-rad)/CH);cx<=Math.
    moins de BMIN ; une image manquée (FDT > 1,5 P : raster, GPU, que le temps JS ne voit pas) le divise
    par deux. Sans mesure (harnais qui appelle render seul), les valeurs fixes d'avant. */
 let FWK=-1,FDT=0,BKMS=0;const BMIN=1.5,BURG=4;
-function bakeBudget(){if(FWK<0)return G&&G.state==='play'?3:5;const P=REFDT||16.7,J=P*.6;let b=clamp(J-FWK,BMIN,J);if(FDT>P*1.5)b=Math.max(BMIN,b/2);return b;}
+/* Hors jeu (menu, pause, evolution, duel, fin), le monde ne change plus : cuire serait du travail
+   pur perdu. Mesure (x10, pause) : `streamWorld` passait de 6,6 a 15,9 ms par appel et `render`
+   de 28 a 41 ms, parce que le budget de cuisson vaut « periode d'ecran moins le JS de l'image
+   precedente » — et dans un menu ce JS est nul, donc la cuisson recevait tout le temps libre.
+   Resultat : une image lourde sur quatre (le fond n'est rendu qu'une fois sur quatre), donc des
+   saccades de menu. Le rattrapage se fera a la reprise, ou il coute le meme prix qu'en jeu. */
+function bakeBudget(){const jouable=!!G&&(G.state==='play'||G.state==='dying'||G.state==='victory');if(!jouable)return 0;if(FWK<0)return 3;const P=REFDT||16.7,J=P*.6;let b=clamp(J-FWK,BMIN,J);if(FDT>P*1.5)b=Math.max(BMIN,b/2);return b;}
 /* streaming : cuit en avance dans la direction du mouvement, avec un budget de temps par frame */
 const STRM={x:0,y:0,vx:0,vy:0};
 function streamWorld(budget){
