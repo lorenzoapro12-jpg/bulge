@@ -91,8 +91,8 @@ exécute le jeu dans un `vm.createContext` : chaque accès à une globale y pass
 intercepteur, jusqu'à ~180× plus lent qu'en portée réelle. Mesuré le 27/09/2026 :
 `genWorld` semblait prendre 1,9 s sous `vm`, contre ~54 ms en contexte principal. Un
 « goulot » vu sous `vm` est très probablement un artefact du banc. Pour chronométrer :
-`test/trace.js` (contexte principal), et pour le rendu, un vrai navigateur — qu'il n'y a
-pas ici.
+`test/trace.js` (contexte principal). Pour le rendu, un **vrai navigateur** : voir la section
+Environnement — `chromium` démarre ici, contrairement à ce que ce fichier affirmait.
 
 ## Environnement
 
@@ -103,9 +103,18 @@ pas ici.
   serveur. Écrire ailleurs : `--screenshot=/root/shots/x.png`. Exemple de capture :
   `chromium --headless=new --no-sandbox --disable-gpu --hide-scrollbars --window-size=390,780 \
    --virtual-time-budget=40000 --screenshot=/root/shots/jeu.png file:///chemin/page.html`
-  Pour MESURER (et non capturer), piloter par CDP : voir `/root/work/bulge-verif/perf-run.js`
-  (`node perf-run.js <page.html> <ralentissement CPU> <durée s> <label>`), qui lit de vrais
-  intervalles d'image avec `Emulation.setCPUThrottlingRate`.
+  Pour MESURER (et non capturer), piloter par CDP. Outils dans `/root/work/bulge-verif/` :
+  - `perf-run.js <page.html> <ralentissement> <durée> <label>` — intervalles d'image réels
+    et travail JS par image, avec `Emulation.setCPUThrottlingRate` ;
+  - `profil.py` + `profil-run.js` — profil **par fonction** (appels, cumul, PIRE appel) ;
+  - `verif-raster.js` — coût du premier `drawImage` d'un chunk (rasterisation différée) ;
+  - `verif-neufs.js` — **combien de chunks neufs par image**, avec un pilote de voyage.
+    ⚠️ Il embarquera son propre pilote : en mode `__SIM` le jeu n'appelle pas `readInput()`,
+    il attend `window.__SIM_INPUT` — sans quoi le joueur ne bouge pas et on ne mesure **rien**
+    (0 chunk neuf sur 414 images, mesuré le 28/09/2026).
+  - `micro-async.js` — mesure si une opération **bloque le fil principal** (images rAF qui
+    passent pendant l'opération). C'est le seul verdict qui vaille : une durée murale ne dit
+    pas si la boucle a été gelée.
   Le harnais `vm` reste la voie d'exécution déterministe pour les tests.
 - Écrire dans ce dépôt uniquement. Ne pas toucher à `/root/.hermes/`, `~/.claude/` ni
   aux autres projets.
