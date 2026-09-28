@@ -160,6 +160,16 @@ function renderLB(){
 
 /* ---------- boucle ---------- */
 let last=0,acc=0,FPSV=0,fpsN=0,fpsT=0,slowT=0,upT=0;const STEPMS=1000/60,DTH=[];
+/* ---------- DIAGNOSTIC EMBARQUE (compteur d'images) ----------
+   Sert a trancher sur l'APPAREIL REEL, ou aucun banc ne peut aller : le temps de l'image est-il
+   du JavaScript, ou de la composition/rasterisation (« hors-JS » = intervalle - JS) ?
+   - intervalle ≈ JS + periode d'ecran  -> le goulot est le JavaScript ;
+   - intervalle >> JS                   -> le goulot est la peinture, donc proportionnel a PS².
+   La marge audio (AU.next - currentTime) dit en plus si l'ordonnanceur musical garde de l'avance.
+   Agregats publies une fois par seconde : drawHUD est appele plusieurs fois par seconde et
+   lirait sinon des moyennes d'une seule image. */
+let DIAG_CJS=0,DIAG_CDT=0,DIAG_N=0,DIAG_T=0,DIAG_MX=0,DIAG_AUM=1e9;
+let DIAG_JS=0,DIAG_DT=0,DIAG_PEAK=0,DIAG_MARGIN=-1;
 /* Qualité. Ancienne méthode : baisse de résolution dès que le temps moyen dépassait 1,22× le meilleur
    temps récent -> se déclenchait sur une simple gigue de vsync, même sur une machine capable.
    Nouvelle méthode : on compare la médiane au rafraîchissement réel de l'écran, sur 3 s, et on retire
@@ -233,6 +243,11 @@ function frame(ts){
   if(!bgOnly||FRN%(G&&G.state!=='evo'?4:2)===0||!G&&FRN%2===0)render(A,dt);
   /* travail JS réel de cette image, hors cuisson : la mesure dont bakeBudget() part à l'image suivante */
   FWK=performance.now()-t0-BKMS;
+  /* ---------- diagnostic embarque : cumul sur une seconde, puis publication ---------- */
+  DIAG_T+=dt;DIAG_N++;DIAG_CJS+=FWK+BKMS;DIAG_CDT+=dt;if(dt>DIAG_MX)DIAG_MX=dt;
+  if(AU.ac&&AU.next!=null){const m=AU.next-AU.ac.currentTime;if(m<DIAG_AUM)DIAG_AUM=m;}
+  if(DIAG_T>=1000){DIAG_JS=DIAG_CJS/DIAG_N;DIAG_DT=DIAG_CDT/DIAG_N;DIAG_PEAK=DIAG_MX;
+    DIAG_MARGIN=DIAG_AUM>=1e9?-1:DIAG_AUM;DIAG_CJS=0;DIAG_CDT=0;DIAG_MX=0;DIAG_AUM=1e9;DIAG_N=0;DIAG_T=0;}
 }
 function startGame(prof,daily){
   if(!shipOK(prof)){SAN_TAB='ships';renderSanct();show('ov-sanct');return;}
