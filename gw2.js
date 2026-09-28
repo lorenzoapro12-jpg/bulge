@@ -391,7 +391,17 @@ let FWK=-1,FDT=0,BKMS=0;const BMIN=1.5,BURG=4;
    de 28 a 41 ms, parce que le budget de cuisson vaut « periode d'ecran moins le JS de l'image
    precedente » — et dans un menu ce JS est nul, donc la cuisson recevait tout le temps libre.
    Resultat : une image lourde sur quatre (le fond n'est rendu qu'une fois sur quatre), donc des
-   saccades de menu. Le rattrapage se fera a la reprise, ou il coute le meme prix qu'en jeu. */
+   saccades de menu. Le rattrapage se fera a la reprise, ou il coute le meme prix qu'en jeu.
+
+   ATTENTION — une piste a ete TESTEE puis ANNULEE ici, le 28/09/2026, et il faut le noter pour
+   ne pas la retenter : plafonner la cuisson a 30 % de la periode et la ramener au minimum des
+   que l'intervalle depasse 1,15x la periode (au lieu de 1,5x) paraissait juste, parce que le
+   budget de cuisson ne voit pas le cout de COMPOSITION qu'il provoque (un chunk frais doit etre
+   rasterise : 13 a 28 ms hors du JS). Un premier A/B sur le banc donnait +19 % d'ips ; trois
+   runs supplementaires ont donne 15,2 ips (ancien budget) contre 14,3 (plafonne), et le travail
+   JS max variait de 462 a 98 ms AVEC LE MEME CODE. La variance du banc depasse l'effet : le
+   plafonnement n'est pas demontre, il est annule. Lecon : sur ce banc, un A/B d'un seul run ne
+   prouve rien — les pics se baladent d'un facteur 5. */
 function bakeBudget(){const jouable=!!G&&(G.state==='play'||G.state==='dying'||G.state==='victory');if(!jouable)return 0;if(FWK<0)return 3;const P=REFDT||16.7,J=P*.6;let b=clamp(J-FWK,BMIN,J);if(FDT>P*1.5)b=Math.max(BMIN,b/2);return b;}
 /* streaming : cuit en avance dans la direction du mouvement, avec un budget de temps par frame */
 const STRM={x:0,y:0,vx:0,vy:0};

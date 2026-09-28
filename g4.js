@@ -170,6 +170,30 @@ let last=0,acc=0,FPSV=0,fpsN=0,fpsT=0,slowT=0,upT=0;const STEPMS=1000/60,DTH=[];
    lirait sinon des moyennes d'une seule image. */
 let DIAG_CJS=0,DIAG_CDT=0,DIAG_N=0,DIAG_T=0,DIAG_MX=0,DIAG_AUM=1e9;
 let DIAG_JS=0,DIAG_DT=0,DIAG_PEAK=0,DIAG_MARGIN=-1;
+/* ---------- PROFIL EMBARQUE ----------
+   Le compteur dit COMBIEN de temps JS par image ; celui-ci dit OU. On enveloppe les postes
+   chauds une fois, et le cout est nul tant que le compteur d'images est eteint (une garde en
+   tete, pas un accumulateur). Le banc de mesure de l'atelier est un autre processeur que celui
+   de Lorenzo : seul ce profil dit ou passent SES millisecondes. */
+const JSPROF={};let JSPROF_ON=false,JSPROFTOP=[];
+const JSPROF_N=['render','step','streamWorld','bakeStep','genChunk','getChunk','perf',
+  'drawChunks','drawLive','drawHUD','gcHUD','gxHUD','gtHUD','drawMinimap',
+  'drawEdges','drawObstacles','drawEnemies','drawBoss','drawPlayer','drawBullets',
+  'drawFX','drawWeather','drawLabels','drawIndicators','drawTexts','drawShadows',
+  'drawTrails','drawPickups','drawObjectives','postFX','lowBegin','lowWorld','lowEnd',
+  'lowScreen','drawLowGlows','drawFar','drawVista','drawGround',
+  'gcDrawWorld','gsDrawWorld','giDrawWorld','gxDrawWorld','gvDrawWorld',
+  'gcDrawUnder','gcDrawOver','gvDrawScreen','soft','softSpr','glow','worldTf','screenTf'];
+function jsProfStart(){
+  if(JSPROF_ON)return;JSPROF_ON=true;
+  for(const n of JSPROF_N){
+    const f=globalThis[n];if(typeof f!=='function')continue;
+    JSPROF[n]=[0,0];
+    globalThis[n]=function(){if(!meta.fps)return f.apply(this,arguments);
+      const a=performance.now();try{return f.apply(this,arguments);}
+      finally{const d=performance.now()-a;const s=JSPROF[n];s[0]+=d;if(d>s[1])s[1]=d;}};
+  }
+}
 /* Qualité. Ancienne méthode : baisse de résolution dès que le temps moyen dépassait 1,22× le meilleur
    temps récent -> se déclenchait sur une simple gigue de vsync, même sur une machine capable.
    Nouvelle méthode : on compare la médiane au rafraîchissement réel de l'écran, sur 3 s, et on retire
@@ -272,7 +296,12 @@ function frame(ts){
   /* ---------- diagnostic embarque : cumul sur une seconde, puis publication ---------- */
   DIAG_T+=dt;DIAG_N++;DIAG_CJS+=FWK+BKMS;DIAG_CDT+=dt;if(dt>DIAG_MX)DIAG_MX=dt;
   if(AU.ac&&AU.next!=null){const m=AU.next-AU.ac.currentTime;if(m<DIAG_AUM)DIAG_AUM=m;}
-  if(DIAG_T>=1000){DIAG_JS=DIAG_CJS/DIAG_N;DIAG_DT=DIAG_CDT/DIAG_N;DIAG_PEAK=DIAG_MX;
+  if(DIAG_T>=1000){
+    /* profil : on publie le top des postes (ms par image) puis on remet les compteurs a zero */
+    JSPROFTOP=[];
+    for(const k in JSPROF){const s=JSPROF[k];if(s[0]>=1)JSPROFTOP.push([k,s[0]/DIAG_N,s[1]]);s[0]=0;s[1]=0;}
+    JSPROFTOP.sort((a,b)=>b[1]-a[1]);if(JSPROFTOP.length>6)JSPROFTOP.length=6;
+    DIAG_JS=DIAG_CJS/DIAG_N;DIAG_DT=DIAG_CDT/DIAG_N;DIAG_PEAK=DIAG_MX;
     DIAG_MARGIN=DIAG_AUM>=1e9?-1:DIAG_AUM;DIAG_CJS=0;DIAG_CDT=0;DIAG_MX=0;DIAG_AUM=1e9;DIAG_N=0;DIAG_T=0;}
 }
 function startGame(prof,daily){
@@ -280,6 +309,7 @@ function startGame(prof,daily){
   if(storyGate(()=>startGame(prof,daily)))return;
   applyQuality();refReset();meta.lastProf=prof;saveMeta();cv.classList.remove('dying');newRun(prof,daily);flashFade('#05030c',900);gsRunStart();gcRunStart();giRunStart();gxRunStart();gtRunStart();gvRunStart();inp.L=inp.R=null;show(null);}
 function boot(){
+  jsProfStart();
   resize();addEventListener('resize',()=>{CVR=null;resize();});
   cv.addEventListener('pointerdown',onDown,{passive:false});cv.addEventListener('contextmenu',e=>e.preventDefault());
   cv.addEventListener('pointermove',onMove,{passive:true});

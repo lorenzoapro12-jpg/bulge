@@ -470,10 +470,11 @@ function drawHUD(){
     if(!rdy){c.lineWidth=4;c.beginPath();c.arc(db.x,db.y,db.r-5,-Math.PI/2,-Math.PI/2+TAU*(1-P.dashT/P.dashMax));c.stroke();}
     c.textAlign='center';c.textBaseline='middle';c.font='700 22px '+FD;c.fillStyle='#fff';c.fillText('⚡',db.x,db.y);c.globalAlpha=1;}
   else{c.textAlign='left';c.textBaseline='bottom';c.font='500 12px '+FD;c.fillStyle=P.dashT<=0?COL.cy:'#6d6890';c.fillText(P.dashT<=0?'Dash prêt (Espace)':'Dash '+Math.ceil(P.dashT/60)+' s',pad,H-pad);}
-  if(meta.fps){c.textAlign='left';c.textBaseline='bottom';c.font='500 12px '+FD;c.fillStyle='#8f89b3';const dy=inp.touch?22:18,y1=H-pad,y2=y1-dy,y3=y2-dy;
+  if(meta.fps){c.textAlign='left';c.textBaseline='bottom';c.font='500 12px '+FD;c.fillStyle='#8f89b3';const dy=inp.touch?22:18,y1=H-pad,y2=y1-dy,y3=y2-dy,y4=y3-dy;
     c.fillText(FPSV+' ips · image '+DIAG_DT.toFixed(1)+' ms · pire '+DIAG_PEAK.toFixed(0)+' ms',pad,y1);
     c.fillText('JS '+DIAG_JS.toFixed(1)+' ms · hors-JS '+Math.max(0,DIAG_DT-DIAG_JS).toFixed(1)+' ms · effets '+QL+'/3 · resol '+Math.round(RES*100)+' %',pad,y2);
-    c.fillText('PS '+PS.toFixed(2)+' · canvas '+cv.width+'×'+cv.height+' · DPR '+DPR+' · ref '+REFDT.toFixed(1)+' ms'+(DIAG_MARGIN>=0?' · marge audio '+DIAG_MARGIN.toFixed(2)+' s':''),pad,y3);}
+    c.fillText('PS '+PS.toFixed(2)+' · canvas '+cv.width+'×'+cv.height+' · DPR '+DPR+' · ref '+REFDT.toFixed(1)+' ms'+(DIAG_MARGIN>=0?' · marge audio '+DIAG_MARGIN.toFixed(2)+' s':''),pad,y3);
+    if(typeof JSPROFTOP!=='undefined'&&JSPROFTOP.length)c.fillText('où : '+JSPROFTOP.map(p=>p[0]+' '+p[1].toFixed(2)+'/'+p[2].toFixed(0)).join(' · '),pad,y4);}
   if(G.help>0){c.globalAlpha=Math.min(1,G.help/60);c.textAlign='center';c.textBaseline='bottom';c.font='500 14px '+FD;c.fillStyle='#e6e2ff';
     const hl=inp.touch?['Pouce gauche : bouger','Pouce droit : viser (auto sinon)','⚡ : dash']:['ZQSD ou flèches : bouger','Souris : viser (auto sinon)','Espace : dash'];
     if(narrow)hl.forEach((s,i)=>c.fillText(s,W/2,H-250+i*22));else c.fillText(hl.join('   ·   '),W/2,H-44);c.globalAlpha=1;}
