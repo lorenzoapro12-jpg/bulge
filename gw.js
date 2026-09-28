@@ -51,7 +51,7 @@ function biomeMix(x,y){const q=warpXY(x,y),S=WD.sites;let b1=0,b2=0,d1=1e18,d2=1
   return S[b1].t===S[b2].t?[{b:S[b1].t,w:1}]:[{b:S[b1].t,w},{b:S[b2].t,w:1-w}];}
 function buildMaps(){
   const N=256,k=2*WR/N,S=WD.sites;
-  const cm=document.createElement('canvas');cm.width=cm.height=N;const gm=cm.getContext('2d'),img=gm.createImageData(N,N),d=img.data;
+  const cm=mkCanvas(N,N);const gm=cm.getContext('2d'),img=gm.createImageData(N,N),d=img.data;
   for(let j=0;j<N;j++)for(let i=0;i<N;i++){
     const x=-WR+(i+.5)*k,y=-WR+(j+.5)*k,o=(j*N+i)*4,r0=Math.hypot(x,y);d[o+3]=255;
     if(r0>WR+80){d[o]=5;d[o+1]=3;d[o+2]=12;continue;}
@@ -64,7 +64,7 @@ function buildMaps(){
     for(let q2=0;q2<3;q2++)d[o+q2]=clamp((c1[q2]*m+c2[q2]*(1-m))*n*e+5*(1-e),0,255);
   }
   gm.putImageData(img,0,0);{const bl=mkCanvas(256,256),bg=bl.getContext('2d');bg.fillStyle='#05030c';bg.fillRect(0,0,256,256);bg.filter='blur(2.2px)';bg.drawImage(cm,0,0);bg.filter='none';WD.map=bl;}
-  const M=128,km=2*WR/M,cn=document.createElement('canvas');cn.width=cn.height=M;const gn=cn.getContext('2d'),im2=gn.createImageData(M,M),d2=im2.data;
+  const M=128,km=2*WR/M,cn=mkCanvas(M,M);const gn=cn.getContext('2d'),im2=gn.createImageData(M,M),d2=im2.data;
   for(let j=0;j<M;j++)for(let i=0;i<M;i++){const x=-WR+(i+.5)*km,y=-WR+(j+.5)*km,o=(j*M+i)*4;if(Math.hypot(x,y)>WR){d2[o+3]=0;continue;}
     const b=BIO[biomeAt(x,y)],c1=rgb(b.g),c2=rgb(b.a);for(let q2=0;q2<3;q2++)d2[o+q2]=c1[q2]*.55+c2[q2]*.45;d2[o+3]=255;}
   gn.putImageData(im2,0,0);
@@ -72,7 +72,7 @@ function buildMaps(){
    gn.strokeStyle='rgba(255,240,200,.5)';gn.lineWidth=.8;gn.beginPath();for(const sg of WD.segs){gn.moveTo((sg.ax+WR)*q,(sg.ay+WR)*q);gn.lineTo((sg.bx+WR)*q,(sg.by+WR)*q);}gn.stroke();
    gn.fillStyle='#fff';for(const L of WD.lms){gn.beginPath();gn.arc((L.x+WR)*q,(L.y+WR)*q,1.6,0,TAU);gn.fill();}}
   WD.mini=cn;
-  const cf=document.createElement('canvas');cf.width=cf.height=64;const gf=cf.getContext('2d');gf.fillStyle='rgba(6,3,14,.9)';gf.fillRect(0,0,64,64);WD.fog=cf;WD.fogG=gf;
+  const cf=mkCanvas(64,64);const gf=cf.getContext('2d');gf.fillStyle='rgba(6,3,14,.9)';gf.fillRect(0,0,64,64);WD.fog=cf;WD.fogG=gf;
 }
 function revealFog(x,y,rad){
   const n=64,k=2*WR/n,i0=Math.floor((x-rad+WR)/k),i1=Math.floor((x+rad+WR)/k),j0=Math.floor((y-rad+WR)/k),j1=Math.floor((y+rad+WR)/k);let c=0;

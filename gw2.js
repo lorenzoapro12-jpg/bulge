@@ -1,7 +1,9 @@
 /* =========================================================
    ART DU MONDE : décor, obstacles, parallaxe, météo
    ========================================================= */
-function mkCanvas(w,h){const c=document.createElement('canvas');c.width=Math.max(1,Math.ceil(w));c.height=Math.max(1,Math.ceil(h));return c;}
+/* FRONTIERE page/worker : la seule fonction du monde qui fabrique une surface. Page : un <canvas> du DOM ;
+   worker de cuisson (pas de `document`, voir gk.js) : un OffscreenCanvas de meme taille. */
+function mkCanvas(w,h){w=Math.max(1,Math.ceil(w));h=Math.max(1,Math.ceil(h));if(typeof document==='undefined')return new OffscreenCanvas(w,h);const c=document.createElement('canvas');c.width=w;c.height=h;return c;}
 function poly(g,pts){g.beginPath();g.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)g.lineTo(pts[i][0],pts[i][1]);g.closePath();}
 function shadowCircle(g,x,y,r,b,a){g.save();g.globalAlpha=(a||.5)*1.4;const R=r+(b||8);g.drawImage(shadowSpr(),x-R,y-R,R*2,R*2);g.restore();}
 function shadowPoly(g,pts,dx,dy,b,a){let cx=0,cy=0;for(const p of pts){cx+=p[0];cy+=p[1];}cx/=pts.length;cy/=pts.length;let r=0;for(const p of pts)r=Math.max(r,Math.hypot(p[0]-cx,p[1]-cy));shadowCircle(g,cx+dx,cy+dy,r,b,a);}
@@ -374,6 +376,12 @@ function bakeStep(c){
 /* plus appelée par le jeu (PERF-2 : jamais un chunk d'un bloc) ; gardée pour les instruments qui
    l'enveloppent (bulge-verif/frames.js, blocages.js) — test/unused.js la signale, c'est voulu */
 function bakeChunk(c){while(!bakeStep(c));}
+/* worker de cuisson : SOCLE, pas encore branche sur la boucle (test/worker.js le prouve identique au pixel).
+   Source = bloc #wk-src genere par build.sh (modules du monde + gk.js). null = pas de worker possible
+   (bloc absent, harnais vm, navigateur sans OffscreenCanvas.transferToImageBitmap) : bakeStep sur place.
+   Seul test/worker.js l'appelle pour l'instant — test/unused.js la signale, c'est voulu. */
+function bakeWorker(){const s=typeof Worker==='function'&&typeof OffscreenCanvas==='function'&&OffscreenCanvas.prototype.transferToImageBitmap&&$('wk-src');if(!s)return null;
+  try{return new Worker(URL.createObjectURL(new Blob([s.textContent],{type:'text/javascript'})));}catch(e){return null;}}
 /* lisières (42 lucioles) cuites par lots : voir lisiereStep, plus haut */
 /* éviction LRU : jamais un chunk utilisé à cette frame (plus de boucle cuisson/éviction) */
 function evictBakes(max){
