@@ -227,6 +227,28 @@ function perf(dt){
     else upT=Math.max(0,upT-30);
   }
 }
+/* ---------- BUDGET PAR IMAGE ----------
+   SKIPD, lu par le rendu : 0 = tout dessiner ; 1 = sauter les postes décoratifs ; 2 = sauter aussi les halos.
+   perf() ne règle que QL/RES, donc les PIXELS ; le travail JS n'en dépend pas : ce filet agit sur lui.
+   Image « hors budget » (SKBAD) : intervalle réel > 1,4× la période d'écran (au moins un vsync manqué),
+   ou travail JS de l'image (FWK+BKMS) > la période à lui seul.
+   SKP = période d'écran RÉELLE, enveloppe basse des intervalles : elle descend vite vers un intervalle
+   court, et ne remonte (constante ~50 images) que sur des images où le JS n'explique pas la durée (écran
+   30 Hz, mode économie) — sinon un jeu lent redéfinirait sa propre référence et le filet ne jouerait jamais.
+   Hystérésis : montée d'un cran après 400 ms d'images hors budget (des images saines en effacent la
+   moitié de leur durée : un raté isolé ne compte pas) ; descente d'un cran après SKW ms d'images TOUTES
+   saines. Si le cran revient moins de 2 s après une descente, la descente était prématurée : SKW double
+   (3 s -> 60 s max), et ne revient à 3 s qu'après 30 s saines au cran 0. Sans ce recul, 1 -> 0 -> 1
+   battrait toutes les 3 s, puisqu'au cran 1 les images redeviennent justement saines.
+   Tourne aussi sans partie (G nul) : ne dépend que de l'horloge. */
+let SKIPD=0,SKBAD=false,SKP=1000/60,SKS=0,SKO=0,SKW=3000,SKT=1e9;
+function skipCtl(w,dt){
+  if(dt<SKP)SKP+=(dt-SKP)*.1;else if(w<dt*.5)SKP+=(Math.min(dt,50)-SKP)*.02;
+  SKT+=dt;SKBAD=dt>SKP*1.4||w>SKP;
+  if(SKBAD){SKO=0;if((SKS+=dt)>=400&&SKIPD<2){SKIPD++;SKS=0;if(SKT<2000)SKW=Math.min(60000,SKW*2);}}
+  else{SKS=Math.max(0,SKS-dt*.5);SKO+=dt;
+    if(SKIPD>0){if(SKO>=SKW){SKIPD--;SKO=0;SKT=0;}}else if(SKO>=30000)SKW=3000;}
+}
 let FRN=0;
 function frame(ts){
   requestAnimationFrame(frame);
@@ -235,14 +257,18 @@ function frame(ts){
   perf(dt);FDT=dt;musTick();
   let A=1;
   if(G&&(G.state==='play'||G.state==='dying'||G.state==='victory')){
-    acc+=dt*G.timeScale;let n=0;while(acc>=STEPMS&&n<5){step();acc-=STEPMS;n++;}if(n>=5)acc=0;
+    /* Rattrapage : machine saine -> jusqu'à 5 pas, comme avant. Image précédente hors budget -> 2 pas
+       au plus et l'excédent est ABANDONNÉ : rattraper une image lente la rendait plus lente encore
+       (rétroaction positive). Temps réel conservé jusqu'à 30 ips ; en dessous le jeu ralentit. */
+    const nx=SKBAD?2:5;
+    acc+=dt*G.timeScale;let n=0;while(acc>=STEPMS&&n<nx){step();acc-=STEPMS;n++;}if(n>=nx)acc=nx<5?acc%STEPMS:0;
     if(G&&(G.state==='play'||G.state==='dying'||G.state==='victory'))A=clamp(acc/STEPMS,0,1);
   }
   if(REDUCED&&G){G.trauma*=.5;G.glitch=Math.min(G.glitch,2);}
   const bgOnly=!G||['pause','duel','end','evo'].includes(G.state);FRN=(FRN+1)%4;
   if(!bgOnly||FRN%(G&&G.state!=='evo'?4:2)===0||!G&&FRN%2===0)render(A,dt);
   /* travail JS réel de cette image, hors cuisson : la mesure dont bakeBudget() part à l'image suivante */
-  FWK=performance.now()-t0-BKMS;
+  FWK=performance.now()-t0-BKMS;skipCtl(FWK+BKMS,dt);
   /* ---------- diagnostic embarque : cumul sur une seconde, puis publication ---------- */
   DIAG_T+=dt;DIAG_N++;DIAG_CJS+=FWK+BKMS;DIAG_CDT+=dt;if(dt>DIAG_MX)DIAG_MX=dt;
   if(AU.ac&&AU.next!=null){const m=AU.next-AU.ac.currentTime;if(m<DIAG_AUM)DIAG_AUM=m;}

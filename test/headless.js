@@ -596,6 +596,9 @@ const sub = (f, args) => { const r = cp.spawnSync(process.execPath, [path.join(_
 { const r = sub('qualite.js', REF ? ['--ref=' + REF] : []);
   check('qualité : le contrôleur peut remonter, la référence est celle du jeu, applyRes suit chaque cran (test/qualite.js)', r.ok,
     (r.out.match(/ECHEC [^\n]*/g) || []).map(s => s.trim()).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
+{ const r = sub('degradation.js', REF ? ['--ref=' + REF] : []);
+  check('dégradation : les postes décoratifs cèdent sous budget, jamais le monde ni le joueur (test/degradation.js)', r.ok,
+    (r.out.match(/ECHEC [^\n]*/g) || []).map(s => s.trim()).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
 
 /* ---------- verdict ---------- */
 console.log('\n---------------- VERDICT ----------------');
