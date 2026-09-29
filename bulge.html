@@ -680,7 +680,7 @@ function genWorld(seed){
   WD={seed,sites,core:{x:core.x,y:core.y},hearts,chunks:new Array(NC*NC),bakes:[],warp:[rnd()*100,rnd()*100],map:null,mini:null,fog:null,fogG:null,fogA:new Uint8Array(64*64),used:false};
   for(const h of hearts)if(!h.t)h.t=biomeAt(h.x,h.y);
   WD.hs=(seed%9973)+17;
-  buildTrails(rnd);buildLandmarks(rnd);buildWalls();gcWorld(rnd);gxWorld(rnd);gvWorld();
+  buildTrails(rnd);buildLandmarks(rnd);buildWalls();gcWorld(rnd);gxWorld(rnd);gvWorld();gcBranches();
   buildMaps();
 }
 function warpXY(x,y){const w=WD.warp;return[x+Math.sin(y*.0013+w[0])*190+Math.sin(y*.0041+w[1])*60,y+Math.sin(x*.0012+w[1])*190+Math.sin(x*.0037+w[0])*60];}
@@ -2347,19 +2347,63 @@ function gcWorld(rnd){
   E.forEach(([a,b],ei)=>{const L=bySeg[ei];if(!L||L.length<8)return;const len=Math.hypot(S[a].x-S[b].x,S[a].y-S[b].y);
     for(const [from,to,k] of [[a,b,4],[b,a,L.length-5]]){const s=L[k];if(!s||deg[from]<3)continue;const fw=from===a,dx=fw?s.bx-s.ax:s.ax-s.bx,dy=fw?s.by-s.ay:s.ay-s.by;
       const px=fw?s.bx:s.ax,py=fw?s.by:s.ay,nl=Math.hypot(dx,dy)||1;
-      WD.signs.push({x:px-dy/nl*54,y:py+dx/nl*54,a:Math.atan2(dy,dx),to:S[to].t,dist:Math.round(len*(1-4/L.length)/10)});}
-    if(len>1500&&WD.alts.length<8){const s=L[Math.floor(L.length/2)];WD.alts.push({x:s.bx,y:s.by,q:WD.alts.length%ALT_Q.length});}});
+      WD.signs.push({x:px-dy/nl*54,y:py+dx/nl*54,a:Math.atan2(dy,dx),to:S[to].t,dist:Math.round(len*(1-4/L.length)/10),e:ei,o:from});}
+    if(len>1500&&WD.alts.length<8){const s=L[Math.floor(L.length/2)];WD.alts.push({x:s.bx,y:s.by,q:WD.alts.length%ALT_Q.length,e:ei});}});
   let g=0;while(WD.rifts.length<6&&g++<400){const s=WD.segs[Math.floor(rnd()*WD.segs.length)];if(s.k<3||s.k>s.n-3)continue;const x=s.bx,y=s.by;
     if(Math.hypot(x,y)<900||Math.hypot(x-WD.core.x,y-WD.core.y)<1400)continue;let ok=true;
     for(const A of WD.alts)if(dist2(A.x,A.y,x,y)<900*900)ok=false;for(const R of WD.rifts)if(dist2(R.x,R.y,x,y)<1800*1800)ok=false;for(const L of WD.lms)if(dist2(L.x,L.y,x,y)<700*700)ok=false;
     if(ok)WD.rifts.push({x,y});}
+}
+/* ---------- embranchements : à chaque carrefour (degré >= 3), l'arête du chemin principal et des BRANCHES typées.
+   Chaque arête hors chemin principal est classée UNE fois, depuis son extrémité la plus proche du chemin principal
+   (son origine) : branche si l'origine est un carrefour, sinon « suite » d'une branche. Le type est matérialisé au
+   bout (nid, trésor, sanctuaire = autel, évènement = souvenir d'Iris, raccourci = rejoint le chemin plus loin),
+   annoncé par le panneau posé à L[4] depuis le carrefour (quoi, à combien de mètres, 10 px = 1 m comme les
+   panneaux existants) et signalé de loin par une colonne de lumière (gcDrawWorld). Appelé APRÈS gxWorld/gvWorld,
+   sans consommer rnd : autels, souvenirs, décor lointain et cuisson des chunks restent ceux d'avant. */
+const BRT={nid:{n:'Nid',ic:'▲',col:'#ff3355'},tresor:{n:'Trésor',ic:'◆',col:'#ffd166'},sanctuaire:{n:'Sanctuaire',ic:'✚',col:'#c89bff'},
+  evenement:{n:'Souvenir d’Iris',ic:'✦',col:'#2de2ff'},raccourci:{n:'Raccourci',ic:'»',col:'#7dff4a'}};
+function gcBranches(){
+  const S=WD.sites,E=WD.edges,M=WD.mainPath,ME=WD.mainE,n=S.length,bySeg={},EK=new Map();for(const s of WD.segs)(bySeg[s.e]=bySeg[s.e]||[]).push(s);
+  const deg=new Array(n).fill(0),adj=S.map(()=>[]);E.forEach(([a,b],i)=>{deg[a]++;deg[b]++;adj[a].push([b,i]);adj[b].push([a,i]);EK.set(Math.min(a,b)*64+Math.max(a,b),i);});
+  const pts=(ei,o)=>{const L=bySeg[ei],p=[[L[0].ax,L[0].ay],...L.map(s=>[s.bx,s.by])];return E[ei][0]===o?p:p.reverse();};
+  const plen=(p,i,j)=>{let d=0;for(let k=i;k<j;k++)d+=Math.hypot(p[k+1][0]-p[k][0],p[k+1][1]-p[k][1]);return d;};
+  const elen=E.map((e,i)=>{const p=pts(i,e[0]);return plen(p,0,p.length-1);});
+  const dm=new Float64Array(n).fill(1e18),dn=new Uint8Array(n);for(const i of M)dm[i]=0;
+  for(;;){let m=-1;for(let i=0;i<n;i++)if(!dn[i]&&dm[i]<1e18&&(m<0||dm[i]<dm[m]))m=i;if(m<0)break;dn[m]=1;for(const [j,ei] of adj[m])if(dm[m]+elen[ei]<dm[j])dm[j]=dm[m]+elen[ei];}
+  const p0=new Map(),p1=new Map(),cum=[0];M.forEach((i,k)=>{if(!p0.has(i))p0.set(i,k);p1.set(i,k);if(k)cum.push(cum[k-1]+elen[EK.get(Math.min(i,M[k-1])*64+Math.max(i,M[k-1]))]);});
+  const far=(x,y,d)=>{for(const L of [...WD.alts,...WD.rifts,...WD.lms,...WD.scn,...WD.hunt,...WD.hearts])if(dist2(L.x,L.y,x,y)<d*d)return false;return dist2(x,y,WD.core.x,WD.core.y)>1400*1400;};
+  WD.brE=E.map(()=>null);WD.br=[];const byO={};let nA=0,nS=0;
+  E.forEach(([a,b],ei)=>{if(ME.has(ei)){WD.brE[ei]={c:'main'};return;}
+    const both=!dm[a]&&!dm[b],o=both?(p0.get(a)<=p0.get(b)?a:b):dm[a]!==dm[b]?(dm[a]<dm[b]?a:b):Math.min(a,b),f=o===a?b:a;
+    if(deg[o]<3){WD.brE[ei]={c:'suite',o};return;}(byO[o]=byO[o]||[]).push({ei,o,f,both});});
+  for(const o in byO){const used=new Set(),L=byO[o],r=mkRng(hash2(+o,L.length,WD.seed)),rot=Math.floor(r()*4);
+    /* d'abord les contenus imposés par le monde (raccourci, autel ou souvenir déjà sur l'arête, une fois par carrefour), puis les autres */
+    for(const q of L){const p=pts(q.ei,q.o),N=p.length-1,O=S[q.o],oc=Math.min(1,(WR-240)/Math.hypot(O.x,O.y));q.p=p;q.si=Math.min(5,N-2);while(q.si>1&&Math.hypot(p[q.si][0]-O.x*oc,p[q.si][1]-O.y*oc)>420)q.si--;
+      if(q.both&&p1.get(q.f)>p0.get(q.o)+1){const g=cum[p1.get(q.f)]-cum[p0.get(q.o)]-elen[q.ei];if(g>0){q.t='raccourci';q.k=N;q.g=g;used.add(q.t);continue;}}
+      const ai=WD.alts.findIndex(A=>A.e===q.ei);if(ai>=0){const k=p.findIndex(v=>v[0]===WD.alts[ai].x&&v[1]===WD.alts[ai].y);if(k>=q.si+2&&!used.has('sanctuaire')){q.t='sanctuaire';q.k=k;q.ref=ai;used.add(q.t);continue;}}
+      const sc=WD.scn.findIndex(s=>p.some(v=>v[0]===s.x&&v[1]===s.y));if(sc>=0){const k=p.findIndex(v=>v[0]===WD.scn[sc].x&&v[1]===WD.scn[sc].y);if(k>=q.si+2&&!used.has('evenement')){q.t='evenement';q.k=k;q.ref=sc;used.add(q.t);}}}
+    for(const q of L){if(q.t)continue;const p=q.p,N=p.length-1,k=Math.min(N-1,Math.max(q.si+1,N-4)),x=p[k][0],y=p[k][1];q.k=k;
+      const ok=t=>t==='sanctuaire'?nA<3&&N>=10&&far(x,y,700):t==='evenement'?nS<2&&N>=18&&far(x,y,700):true;
+      const ord=['tresor','nid','sanctuaire','evenement'].map((_,j,A)=>A[(j+rot)%4]).filter(ok);
+      q.t=ord.find(t=>!used.has(t))||ord[0];used.add(q.t);
+      if(q.t==='sanctuaire'){q.ref=WD.alts.length;WD.alts.push({x,y,q:WD.alts.length%ALT_Q.length,e:q.ei});nA++;}
+      else if(q.t==='evenement'){const k2=Math.max(q.si+2,N-14);q.k=k2;const path=[];for(let j=k2;j<Math.min(N,k2+20);j++)path.push([p[j][0],p[j][1]]);
+        q.ref=WD.scn.length;WD.scn.push({x:p[k2][0],y:p[k2][1],t:['convoi','balises','course'][WD.scn.length%3],path});nS++;}}
+    for(const q of L){const p=q.p,si=q.si,b={e:q.ei,o:q.o,f:q.f,t:q.t,x:p[q.k][0],y:p[q.k][1],k:q.k,sx:p[si][0],sy:p[si][1],d:Math.round(plen(p,si,q.k)/10),g:q.g?Math.round(q.g/10):0,ref:q.ref};
+      WD.brE[q.ei]={c:'br',o:q.o,i:WD.br.length};
+      let s=WD.signs.find(z=>z.e===q.ei&&z.o===q.o);
+      if(!s)WD.signs.push(s={to:S[q.f].t,dist:0,e:q.ei,o:q.o});
+      {const dx=p[si][0]-p[si-1][0],dy=p[si][1]-p[si-1][1],nl=Math.hypot(dx,dy)||1;s.x=p[si][0]-dy/nl*54;s.y=p[si][1]+dx/nl*54;s.a=Math.atan2(dy,dx);}
+      s.br=WD.br.length;WD.br.push(b);}}
+  for(const s of WD.signs)if(ME.has(s.e)&&s.br===undefined){const [a,b]=E[s.e],nx=s.o===a?b:a;if(p0.has(nx)&&p1.get(nx)>p0.get(s.o))s.main=1;}
 }
 
 /* ---------- état de partie ---------- */
 function gcRunStart(){
   const P=G.p,sig=SIG[G.prof]||'shock';
   P.sk=[{id:sig,l:1,cd:0},null];P.evo['sk_'+sig]=1;P.ultC=0;P.cdMul=1;P.ultA=null;P.shieldT=0;P.siphT=0;
-  G.gc={beams:[],holes:[],bolts:[],bombs:[],strikes:[],sentries:[],marks:[],altNext:null,altPool:null,altUsed:{},riftDone:{},altT:0,altI:-1,rift:null,ultFlash:0,firstRift:0};
+  G.gc={beams:[],holes:[],bolts:[],bombs:[],strikes:[],sentries:[],marks:[],altNext:null,altPool:null,altUsed:{},riftDone:{},brDone:{},nest:{},altT:0,altI:-1,rift:null,ultFlash:0,firstRift:0};
   G.tstop=0;
   /* le duel (gx.js) lit DSK[id].d : sans entrée, une compétence nouvelle y plantait */
   if(typeof DSK==='object')for(const k in SKL)if(!DSK[k])DSK[k]={d:SKL[k].dd||'',c:2};
@@ -2434,7 +2478,9 @@ function gcKill(e){const P=G.p;if(!P||P.ultA)return;
 function gcElite(e,opt){
   if(!G||!G.gc||(opt&&opt.noElite)||e.t==='mite'||e.t==='cache'||e.t==='life')return;
   const ch=G.gc.rift?.28:Math.min(.14,.03+.025*(G.room-1));if(R()>=ch)return;
-  const k=AFFK[Math.floor(R()*AFFK.length)];e.aff=k;e.d=Object.assign({},e.d);e.hp*=2.2;e.mhp=e.hp;e.bubMul*=3;e.r*=1.12;
+  gcAff(e,AFFK[Math.floor(R()*AFFK.length)]);
+}
+function gcAff(e,k){e.aff=k;e.d=Object.assign({},e.d);e.hp*=2.2;e.mhp=e.hp;e.bubMul*=3;e.r*=1.12;
   if(k==='swift')e.d.spd*=1.45;
 }
 
@@ -2488,7 +2534,18 @@ function gcTick(){
   else if(G.t%6===0&&!C.dorm)for(let i=0;i<WD.rifts.length;i++){if(C.riftDone[i])continue;const f=WD.rifts[i];if(dist2(f.x,f.y,P.x,P.y)<80*80&&!G.arena){
     C.rift={x:f.x,y:f.y,r:430,t:0,dur:1200,i};banner('Faille','Tiens 20 secondes dans le cercle',COL.mg,110);G.glitch=24;SFX.bossIn();
     if(!C.firstRift&&G.gs){C.firstRift=1;gsSay('Les failles sont des blessures du rêve. Scelle-la.','',COL.mg,1,1);}break;}}
+  /* branches : trésor ramassé au passage ; nid réveillé à l'approche, payé quand sa garde est détruite */
+  if(G.t%10===0&&WD.br)for(let i=0;i<WD.br.length;i++){const b=WD.br[i];if(C.brDone[i]||(b.t!=='tresor'&&b.t!=='nid'))continue;const d=dist2(b.x,b.y,P.x,P.y),T=BRT[b.t];
+    if(b.t==='tresor'){if(d<80*80){C.brDone[i]=1;gsShard&&gsShard(8);giDrop(b.x,b.y,'elite');dropBubbles(b.x,b.y,Math.round(24*P.greed),60,false);ringFX(b.x,b.y,20,140,T.col,24,6);banner('Trésor','Butin et éclats · fin de la branche',T.col,110);SFX.ach();}continue;}
+    const N=C.nest[i];
+    if(!N){if(d<360*360&&!G.arena){const w=BIO[biomeAt(b.x,b.y)].en,L=[];
+        for(let j=0;j<7;j++){const a=j/7*TAU,ex=b.x+Math.cos(a)*150,ey=b.y+Math.sin(a)*150,t=wpick(w);if(pointHit(ex,ey,ET[t].r+6))continue;const e=mkEnemy(t,ex,ey,{aggro:true,keep:true,noElite:true});if(j<2)gcAff(e,AFFK[(i+j)%AFFK.length]);L.push(e);}
+        if(!L.length)continue;C.nest[i]=L;ringFX(b.x,b.y,20,200,T.col,24,6);banner('Nid','Détruis sa garde',T.col,100);SFX.bossIn();}}
+    else if(N.every(e=>e.dead)){C.brDone[i]=1;gsShard&&gsShard(12);giDrop(b.x,b.y,'rift');dropBubbles(b.x,b.y,Math.round(30*P.greed),70,false);ringFX(b.x,b.y,20,200,COL.gd,30,8);banner('Nid détruit','Butin rare et éclats',COL.gd,110);SFX.ach();}}
 }
+/* une branche est-elle épuisée ? (le raccourci ne l'est jamais : c'est un chemin) */
+function gcBrDone(i){const b=WD.br[i],C=G&&G.gc;if(!C)return false;
+  return b.t==='sanctuaire'?!!C.altUsed[b.ref]:b.t==='evenement'?!!(G.gx&&G.gx.done[b.ref]):!!C.brDone[i];}
 function openAltar(i,pg){
   const P=G.p,C=G.gc,ch=[],have=P.sk.filter(Boolean).map(s=>s.id);pg=pg||0;
   if(i>=0&&!pg&&G.gs)gsSay(ALT_Q[WD.alts[i].q],'Autel d’Iris',COL.gd,1,1);
@@ -2553,12 +2610,19 @@ function gcDrawOver(){
 }
 function gcDrawWorld(){
   const c=ctx,C=G.gc;
-  for(const s of WD.signs){if(!vis(s.x,s.y,160))continue;const sd=dist2(s.x,s.y,G.p.x,G.p.y);if(sd>600*600)continue;const B=BIO[s.to]||BIO.plains;c.globalAlpha=Math.min(1,(600*600-sd)/(250*250));
+  /* colonnes de lumière au bout des branches : visibles de loin, tant que la branche n'est pas épuisée */
+  if(WD.br){c.globalCompositeOperation='lighter';for(let i=0;i<WD.br.length;i++){const b=WD.br[i];if(!vis(b.x,b.y-300,340)||gcBrDone(i))continue;const T=BRT[b.t],p=.75+.25*Math.sin(RT*.05+i),h=b.t==='raccourci'?260:640;
+      c.fillStyle=T.col;for(const [w,al] of [[46,.07],[20,.13],[7,.35]]){c.globalAlpha=al*p;c.fillRect(b.x-w/2,b.y-h,w,h);}
+      glow(b.x,b.y,70,T.col,.35*p);}
+    c.globalCompositeOperation='source-over';c.globalAlpha=1;
+    for(let i=0;i<WD.br.length;i++){const b=WD.br[i];if(b.t==='raccourci'||!vis(b.x,b.y,60)||gcBrDone(i))continue;c.font='700 22px '+FD;c.textAlign='center';c.textBaseline='middle';c.fillStyle=BRT[b.t].col;c.fillText(BRT[b.t].ic,b.x,b.y);}}
+  for(const s of WD.signs){if(!vis(s.x,s.y,160))continue;const sd=dist2(s.x,s.y,G.p.x,G.p.y),bq=s.br!==undefined?WD.br[s.br]:null,rg=bq?900:600;if(sd>rg*rg)continue;const B=BIO[s.to]||BIO.plains;c.globalAlpha=Math.min(1,(rg*rg-sd)/(250*250));
     c.fillStyle='rgba(8,4,18,.8)';c.fillRect(s.x-3,s.y-36,6,40);c.save();c.translate(s.x,s.y-44);
-    const ca=Math.cos(s.a),left=ca<0,txt=s.txt||(s.txt=B.n+' · '+s.dist+' m');c.font='700 13px '+FD;const w=s.w||(s.w=c.measureText(txt).width+34);
-    c.fillStyle='rgba(8,4,18,.86)';c.strokeStyle=B.a;c.lineWidth=2;c.beginPath();
+    const ca=Math.cos(s.a),left=ca<0,T=bq&&BRT[bq.t],dn=!!bq&&gcBrDone(s.br);if(s.dn!==dn){s.dn=dn;s.txt=s.w=0;}if(dn)c.globalAlpha*=.5;
+    const txt=s.txt||(s.txt=T?T.ic+' '+T.n+(dn?' · vide':' · '+bq.d+' m'+(bq.g?' · '+bq.g+' m de gagnés':'')):(s.main?'➤ ':'')+B.n+' · '+s.dist+' m');c.font='700 13px '+FD;const w=s.w||(s.w=c.measureText(txt).width+34);
+    c.fillStyle='rgba(8,4,18,.86)';c.strokeStyle=T?T.col:B.a;c.lineWidth=T||s.main?3:2;c.beginPath();
     if(left){c.moveTo(-w/2,0);c.lineTo(-w/2+12,-13);c.lineTo(w/2,-13);c.lineTo(w/2,13);c.lineTo(-w/2+12,13);}else{c.moveTo(w/2,0);c.lineTo(w/2-12,-13);c.lineTo(-w/2,-13);c.lineTo(-w/2,13);c.lineTo(w/2-12,13);}
-    c.closePath();c.fill();c.stroke();c.fillStyle=B.a;c.textAlign='center';c.textBaseline='middle';c.fillText(txt,left?6:-6,1);c.restore();c.globalAlpha=1;}
+    c.closePath();c.fill();c.stroke();c.fillStyle=T?T.col:B.a;c.textAlign='center';c.textBaseline='middle';c.fillText(txt,left?6:-6,1);c.restore();c.globalAlpha=1;}
   for(let i=0;i<WD.alts.length;i++){const a=WD.alts[i];if(!vis(a.x,a.y,120))continue;const used=C&&C.altUsed[i],p=.5+.5*Math.sin(RT*.07+i);
     c.globalAlpha=used?.35:1;c.fillStyle='rgba(10,6,20,.9)';c.strokeStyle=COL.gd;c.lineWidth=2.5;c.beginPath();c.moveTo(a.x,a.y-64);c.lineTo(a.x+20,a.y-10);c.lineTo(a.x,a.y+6);c.lineTo(a.x-20,a.y-10);c.closePath();c.fill();c.stroke();
     if(!used){c.globalCompositeOperation='lighter';glow(a.x,a.y-30,46,COL.gd,.35+.25*p);c.globalCompositeOperation='source-over';
@@ -2591,13 +2655,22 @@ function gcHUD(){
     else{c.globalAlpha=.5;c.strokeStyle='rgba(255,255,255,.25)';c.lineWidth=1.5;c.setLineDash([4,4]);c.beginPath();c.arc(s.x,s.y,s.r-1,0,TAU);c.stroke();c.setLineDash([]);c.font='700 9px '+FD;c.fillStyle='#9d95c9';c.fillText('AUTEL',s.x,s.y);}
     if(!inp.touch){c.globalAlpha=.9;c.font='700 11px '+FD;c.fillStyle='#fff';c.fillText(KEYL[i],s.x-s.r+2,s.y-s.r+2);}
     c.globalAlpha=1;}
+  /* près d'un carrefour : une pastille au bord de l'écran par branche dont le bout est hors champ (quoi, combien de mètres, où) */
+  if(WD.br&&!G.arena){let o=-1,bd=700*700;for(const b of WD.br){const q=WD.sites[b.o],d=dist2(q.x,q.y,P.x,P.y);if(d<bd){bd=d;o=b.o;}}
+    if(o>=0){c.font='700 12px '+FD;c.textAlign='center';c.textBaseline='middle';
+      for(let i=0;i<WD.br.length;i++){const b=WD.br[i];if(b.o!==o||gcBrDone(i))continue;const sx=(b.x-CAM.x)*RZ+W/2,sy=(b.y-CAM.y)*RZ+H/2;if(sx>40&&sx<W-40&&sy>110&&sy<H-170)continue;
+        const T=BRT[b.t],a=Math.atan2(sy-H/2,sx-W/2),k=Math.min((W/2-70)/Math.abs(Math.cos(a)||1e-9),(H/2-150)/Math.abs(Math.sin(a)||1e-9)),x=W/2+Math.cos(a)*k,y=H/2+Math.sin(a)*k,txt=T.ic+' '+T.n+' '+b.d+' m',w=c.measureText(txt).width+16;
+        c.globalAlpha=.9;c.fillStyle='rgba(8,4,18,.86)';c.strokeStyle=T.col;c.lineWidth=2;c.beginPath();c.rect(x-w/2,y-11,w,22);c.fill();c.stroke();
+        c.fillStyle=T.col;c.beginPath();c.moveTo(x+Math.cos(a)*(w/2+12),y+Math.sin(a)*22);c.lineTo(x+Math.cos(a+.5)*(w/2+2),y+Math.sin(a+.5)*14);c.lineTo(x+Math.cos(a-.5)*(w/2+2),y+Math.sin(a-.5)*14);c.fill();
+        c.globalAlpha=1;c.fillText(txt,x,y+1);}}}
   const Rf=G.gc.rift;if(Rf){fitFont(c,'Faille : 20 s · reste dans le cercle',W-30,16,'700');c.fillStyle=COL.mg;c.fillText('Faille : '+Math.ceil((Rf.dur-Rf.t)/60)+' s · reste dans le cercle',W/2,W<600?222:86);}
   cssOp('tfrz',G.tstop>0?.28:0);
   if(G.tstop>0){c.font='700 14px '+FD;c.fillStyle='#b9dcff';c.fillText('Temps figé : '+Math.ceil(G.tstop/60)+' s',W/2,W<600?222:108);}
 }
 function gcMini(x,y,k){const c=ctx;
   c.fillStyle=COL.gd;for(let i=0;i<WD.alts.length;i++){if(G.gc&&G.gc.altUsed[i])continue;const a=WD.alts[i];c.fillRect(x+(a.x+WR)*k-1.5,y+(a.y+WR)*k-1.5,3,3);}
-  c.fillStyle=COL.mg;for(let i=0;i<WD.rifts.length;i++){if(G.gc&&(G.gc.riftDone[i]||G.gc.dorm))continue;const f=WD.rifts[i];c.beginPath();c.arc(x+(f.x+WR)*k,y+(f.y+WR)*k,2.4,0,TAU);c.fill();}}
+  c.fillStyle=COL.mg;for(let i=0;i<WD.rifts.length;i++){if(G.gc&&(G.gc.riftDone[i]||G.gc.dorm))continue;const f=WD.rifts[i];c.beginPath();c.arc(x+(f.x+WR)*k,y+(f.y+WR)*k,2.4,0,TAU);c.fill();}
+  if(WD.br)for(let i=0;i<WD.br.length;i++){const b=WD.br[i];if(b.t==='sanctuaire'||b.t==='evenement'||gcBrDone(i))continue;c.fillStyle=BRT[b.t].col;c.fillRect(x+(b.x+WR)*k-2,y+(b.y+WR)*k-2,4,4);}}
 
 /* ---------- ambiance de biome : teinte continue + fondu à l'entrée ---------- */
 function biomeWash(b){const B=BIO[b];if(!B)return;const t=$('vig'),w=$('wash');if(t)t.style.backgroundColor=rgba(B.a,.07);
@@ -4633,7 +4706,7 @@ function genWorld(seed){
   WD={seed,sites,core:{x:core.x,y:core.y},hearts,chunks:new Array(NC*NC),bakes:[],warp:[rnd()*100,rnd()*100],map:null,mini:null,fog:null,fogG:null,fogA:new Uint8Array(64*64),used:false};
   for(const h of hearts)if(!h.t)h.t=biomeAt(h.x,h.y);
   WD.hs=(seed%9973)+17;
-  buildTrails(rnd);buildLandmarks(rnd);buildWalls();gcWorld(rnd);gxWorld(rnd);gvWorld();
+  buildTrails(rnd);buildLandmarks(rnd);buildWalls();gcWorld(rnd);gxWorld(rnd);gvWorld();gcBranches();
   buildMaps();
 }
 function warpXY(x,y){const w=WD.warp;return[x+Math.sin(y*.0013+w[0])*190+Math.sin(y*.0041+w[1])*60,y+Math.sin(x*.0012+w[1])*190+Math.sin(x*.0037+w[0])*60];}
@@ -5480,19 +5553,63 @@ function gcWorld(rnd){
   E.forEach(([a,b],ei)=>{const L=bySeg[ei];if(!L||L.length<8)return;const len=Math.hypot(S[a].x-S[b].x,S[a].y-S[b].y);
     for(const [from,to,k] of [[a,b,4],[b,a,L.length-5]]){const s=L[k];if(!s||deg[from]<3)continue;const fw=from===a,dx=fw?s.bx-s.ax:s.ax-s.bx,dy=fw?s.by-s.ay:s.ay-s.by;
       const px=fw?s.bx:s.ax,py=fw?s.by:s.ay,nl=Math.hypot(dx,dy)||1;
-      WD.signs.push({x:px-dy/nl*54,y:py+dx/nl*54,a:Math.atan2(dy,dx),to:S[to].t,dist:Math.round(len*(1-4/L.length)/10)});}
-    if(len>1500&&WD.alts.length<8){const s=L[Math.floor(L.length/2)];WD.alts.push({x:s.bx,y:s.by,q:WD.alts.length%ALT_Q.length});}});
+      WD.signs.push({x:px-dy/nl*54,y:py+dx/nl*54,a:Math.atan2(dy,dx),to:S[to].t,dist:Math.round(len*(1-4/L.length)/10),e:ei,o:from});}
+    if(len>1500&&WD.alts.length<8){const s=L[Math.floor(L.length/2)];WD.alts.push({x:s.bx,y:s.by,q:WD.alts.length%ALT_Q.length,e:ei});}});
   let g=0;while(WD.rifts.length<6&&g++<400){const s=WD.segs[Math.floor(rnd()*WD.segs.length)];if(s.k<3||s.k>s.n-3)continue;const x=s.bx,y=s.by;
     if(Math.hypot(x,y)<900||Math.hypot(x-WD.core.x,y-WD.core.y)<1400)continue;let ok=true;
     for(const A of WD.alts)if(dist2(A.x,A.y,x,y)<900*900)ok=false;for(const R of WD.rifts)if(dist2(R.x,R.y,x,y)<1800*1800)ok=false;for(const L of WD.lms)if(dist2(L.x,L.y,x,y)<700*700)ok=false;
     if(ok)WD.rifts.push({x,y});}
+}
+/* ---------- embranchements : à chaque carrefour (degré >= 3), l'arête du chemin principal et des BRANCHES typées.
+   Chaque arête hors chemin principal est classée UNE fois, depuis son extrémité la plus proche du chemin principal
+   (son origine) : branche si l'origine est un carrefour, sinon « suite » d'une branche. Le type est matérialisé au
+   bout (nid, trésor, sanctuaire = autel, évènement = souvenir d'Iris, raccourci = rejoint le chemin plus loin),
+   annoncé par le panneau posé à L[4] depuis le carrefour (quoi, à combien de mètres, 10 px = 1 m comme les
+   panneaux existants) et signalé de loin par une colonne de lumière (gcDrawWorld). Appelé APRÈS gxWorld/gvWorld,
+   sans consommer rnd : autels, souvenirs, décor lointain et cuisson des chunks restent ceux d'avant. */
+const BRT={nid:{n:'Nid',ic:'▲',col:'#ff3355'},tresor:{n:'Trésor',ic:'◆',col:'#ffd166'},sanctuaire:{n:'Sanctuaire',ic:'✚',col:'#c89bff'},
+  evenement:{n:'Souvenir d’Iris',ic:'✦',col:'#2de2ff'},raccourci:{n:'Raccourci',ic:'»',col:'#7dff4a'}};
+function gcBranches(){
+  const S=WD.sites,E=WD.edges,M=WD.mainPath,ME=WD.mainE,n=S.length,bySeg={},EK=new Map();for(const s of WD.segs)(bySeg[s.e]=bySeg[s.e]||[]).push(s);
+  const deg=new Array(n).fill(0),adj=S.map(()=>[]);E.forEach(([a,b],i)=>{deg[a]++;deg[b]++;adj[a].push([b,i]);adj[b].push([a,i]);EK.set(Math.min(a,b)*64+Math.max(a,b),i);});
+  const pts=(ei,o)=>{const L=bySeg[ei],p=[[L[0].ax,L[0].ay],...L.map(s=>[s.bx,s.by])];return E[ei][0]===o?p:p.reverse();};
+  const plen=(p,i,j)=>{let d=0;for(let k=i;k<j;k++)d+=Math.hypot(p[k+1][0]-p[k][0],p[k+1][1]-p[k][1]);return d;};
+  const elen=E.map((e,i)=>{const p=pts(i,e[0]);return plen(p,0,p.length-1);});
+  const dm=new Float64Array(n).fill(1e18),dn=new Uint8Array(n);for(const i of M)dm[i]=0;
+  for(;;){let m=-1;for(let i=0;i<n;i++)if(!dn[i]&&dm[i]<1e18&&(m<0||dm[i]<dm[m]))m=i;if(m<0)break;dn[m]=1;for(const [j,ei] of adj[m])if(dm[m]+elen[ei]<dm[j])dm[j]=dm[m]+elen[ei];}
+  const p0=new Map(),p1=new Map(),cum=[0];M.forEach((i,k)=>{if(!p0.has(i))p0.set(i,k);p1.set(i,k);if(k)cum.push(cum[k-1]+elen[EK.get(Math.min(i,M[k-1])*64+Math.max(i,M[k-1]))]);});
+  const far=(x,y,d)=>{for(const L of [...WD.alts,...WD.rifts,...WD.lms,...WD.scn,...WD.hunt,...WD.hearts])if(dist2(L.x,L.y,x,y)<d*d)return false;return dist2(x,y,WD.core.x,WD.core.y)>1400*1400;};
+  WD.brE=E.map(()=>null);WD.br=[];const byO={};let nA=0,nS=0;
+  E.forEach(([a,b],ei)=>{if(ME.has(ei)){WD.brE[ei]={c:'main'};return;}
+    const both=!dm[a]&&!dm[b],o=both?(p0.get(a)<=p0.get(b)?a:b):dm[a]!==dm[b]?(dm[a]<dm[b]?a:b):Math.min(a,b),f=o===a?b:a;
+    if(deg[o]<3){WD.brE[ei]={c:'suite',o};return;}(byO[o]=byO[o]||[]).push({ei,o,f,both});});
+  for(const o in byO){const used=new Set(),L=byO[o],r=mkRng(hash2(+o,L.length,WD.seed)),rot=Math.floor(r()*4);
+    /* d'abord les contenus imposés par le monde (raccourci, autel ou souvenir déjà sur l'arête, une fois par carrefour), puis les autres */
+    for(const q of L){const p=pts(q.ei,q.o),N=p.length-1,O=S[q.o],oc=Math.min(1,(WR-240)/Math.hypot(O.x,O.y));q.p=p;q.si=Math.min(5,N-2);while(q.si>1&&Math.hypot(p[q.si][0]-O.x*oc,p[q.si][1]-O.y*oc)>420)q.si--;
+      if(q.both&&p1.get(q.f)>p0.get(q.o)+1){const g=cum[p1.get(q.f)]-cum[p0.get(q.o)]-elen[q.ei];if(g>0){q.t='raccourci';q.k=N;q.g=g;used.add(q.t);continue;}}
+      const ai=WD.alts.findIndex(A=>A.e===q.ei);if(ai>=0){const k=p.findIndex(v=>v[0]===WD.alts[ai].x&&v[1]===WD.alts[ai].y);if(k>=q.si+2&&!used.has('sanctuaire')){q.t='sanctuaire';q.k=k;q.ref=ai;used.add(q.t);continue;}}
+      const sc=WD.scn.findIndex(s=>p.some(v=>v[0]===s.x&&v[1]===s.y));if(sc>=0){const k=p.findIndex(v=>v[0]===WD.scn[sc].x&&v[1]===WD.scn[sc].y);if(k>=q.si+2&&!used.has('evenement')){q.t='evenement';q.k=k;q.ref=sc;used.add(q.t);}}}
+    for(const q of L){if(q.t)continue;const p=q.p,N=p.length-1,k=Math.min(N-1,Math.max(q.si+1,N-4)),x=p[k][0],y=p[k][1];q.k=k;
+      const ok=t=>t==='sanctuaire'?nA<3&&N>=10&&far(x,y,700):t==='evenement'?nS<2&&N>=18&&far(x,y,700):true;
+      const ord=['tresor','nid','sanctuaire','evenement'].map((_,j,A)=>A[(j+rot)%4]).filter(ok);
+      q.t=ord.find(t=>!used.has(t))||ord[0];used.add(q.t);
+      if(q.t==='sanctuaire'){q.ref=WD.alts.length;WD.alts.push({x,y,q:WD.alts.length%ALT_Q.length,e:q.ei});nA++;}
+      else if(q.t==='evenement'){const k2=Math.max(q.si+2,N-14);q.k=k2;const path=[];for(let j=k2;j<Math.min(N,k2+20);j++)path.push([p[j][0],p[j][1]]);
+        q.ref=WD.scn.length;WD.scn.push({x:p[k2][0],y:p[k2][1],t:['convoi','balises','course'][WD.scn.length%3],path});nS++;}}
+    for(const q of L){const p=q.p,si=q.si,b={e:q.ei,o:q.o,f:q.f,t:q.t,x:p[q.k][0],y:p[q.k][1],k:q.k,sx:p[si][0],sy:p[si][1],d:Math.round(plen(p,si,q.k)/10),g:q.g?Math.round(q.g/10):0,ref:q.ref};
+      WD.brE[q.ei]={c:'br',o:q.o,i:WD.br.length};
+      let s=WD.signs.find(z=>z.e===q.ei&&z.o===q.o);
+      if(!s)WD.signs.push(s={to:S[q.f].t,dist:0,e:q.ei,o:q.o});
+      {const dx=p[si][0]-p[si-1][0],dy=p[si][1]-p[si-1][1],nl=Math.hypot(dx,dy)||1;s.x=p[si][0]-dy/nl*54;s.y=p[si][1]+dx/nl*54;s.a=Math.atan2(dy,dx);}
+      s.br=WD.br.length;WD.br.push(b);}}
+  for(const s of WD.signs)if(ME.has(s.e)&&s.br===undefined){const [a,b]=E[s.e],nx=s.o===a?b:a;if(p0.has(nx)&&p1.get(nx)>p0.get(s.o))s.main=1;}
 }
 
 /* ---------- état de partie ---------- */
 function gcRunStart(){
   const P=G.p,sig=SIG[G.prof]||'shock';
   P.sk=[{id:sig,l:1,cd:0},null];P.evo['sk_'+sig]=1;P.ultC=0;P.cdMul=1;P.ultA=null;P.shieldT=0;P.siphT=0;
-  G.gc={beams:[],holes:[],bolts:[],bombs:[],strikes:[],sentries:[],marks:[],altNext:null,altPool:null,altUsed:{},riftDone:{},altT:0,altI:-1,rift:null,ultFlash:0,firstRift:0};
+  G.gc={beams:[],holes:[],bolts:[],bombs:[],strikes:[],sentries:[],marks:[],altNext:null,altPool:null,altUsed:{},riftDone:{},brDone:{},nest:{},altT:0,altI:-1,rift:null,ultFlash:0,firstRift:0};
   G.tstop=0;
   /* le duel (gx.js) lit DSK[id].d : sans entrée, une compétence nouvelle y plantait */
   if(typeof DSK==='object')for(const k in SKL)if(!DSK[k])DSK[k]={d:SKL[k].dd||'',c:2};
@@ -5567,7 +5684,9 @@ function gcKill(e){const P=G.p;if(!P||P.ultA)return;
 function gcElite(e,opt){
   if(!G||!G.gc||(opt&&opt.noElite)||e.t==='mite'||e.t==='cache'||e.t==='life')return;
   const ch=G.gc.rift?.28:Math.min(.14,.03+.025*(G.room-1));if(R()>=ch)return;
-  const k=AFFK[Math.floor(R()*AFFK.length)];e.aff=k;e.d=Object.assign({},e.d);e.hp*=2.2;e.mhp=e.hp;e.bubMul*=3;e.r*=1.12;
+  gcAff(e,AFFK[Math.floor(R()*AFFK.length)]);
+}
+function gcAff(e,k){e.aff=k;e.d=Object.assign({},e.d);e.hp*=2.2;e.mhp=e.hp;e.bubMul*=3;e.r*=1.12;
   if(k==='swift')e.d.spd*=1.45;
 }
 
@@ -5621,7 +5740,18 @@ function gcTick(){
   else if(G.t%6===0&&!C.dorm)for(let i=0;i<WD.rifts.length;i++){if(C.riftDone[i])continue;const f=WD.rifts[i];if(dist2(f.x,f.y,P.x,P.y)<80*80&&!G.arena){
     C.rift={x:f.x,y:f.y,r:430,t:0,dur:1200,i};banner('Faille','Tiens 20 secondes dans le cercle',COL.mg,110);G.glitch=24;SFX.bossIn();
     if(!C.firstRift&&G.gs){C.firstRift=1;gsSay('Les failles sont des blessures du rêve. Scelle-la.','',COL.mg,1,1);}break;}}
+  /* branches : trésor ramassé au passage ; nid réveillé à l'approche, payé quand sa garde est détruite */
+  if(G.t%10===0&&WD.br)for(let i=0;i<WD.br.length;i++){const b=WD.br[i];if(C.brDone[i]||(b.t!=='tresor'&&b.t!=='nid'))continue;const d=dist2(b.x,b.y,P.x,P.y),T=BRT[b.t];
+    if(b.t==='tresor'){if(d<80*80){C.brDone[i]=1;gsShard&&gsShard(8);giDrop(b.x,b.y,'elite');dropBubbles(b.x,b.y,Math.round(24*P.greed),60,false);ringFX(b.x,b.y,20,140,T.col,24,6);banner('Trésor','Butin et éclats · fin de la branche',T.col,110);SFX.ach();}continue;}
+    const N=C.nest[i];
+    if(!N){if(d<360*360&&!G.arena){const w=BIO[biomeAt(b.x,b.y)].en,L=[];
+        for(let j=0;j<7;j++){const a=j/7*TAU,ex=b.x+Math.cos(a)*150,ey=b.y+Math.sin(a)*150,t=wpick(w);if(pointHit(ex,ey,ET[t].r+6))continue;const e=mkEnemy(t,ex,ey,{aggro:true,keep:true,noElite:true});if(j<2)gcAff(e,AFFK[(i+j)%AFFK.length]);L.push(e);}
+        if(!L.length)continue;C.nest[i]=L;ringFX(b.x,b.y,20,200,T.col,24,6);banner('Nid','Détruis sa garde',T.col,100);SFX.bossIn();}}
+    else if(N.every(e=>e.dead)){C.brDone[i]=1;gsShard&&gsShard(12);giDrop(b.x,b.y,'rift');dropBubbles(b.x,b.y,Math.round(30*P.greed),70,false);ringFX(b.x,b.y,20,200,COL.gd,30,8);banner('Nid détruit','Butin rare et éclats',COL.gd,110);SFX.ach();}}
 }
+/* une branche est-elle épuisée ? (le raccourci ne l'est jamais : c'est un chemin) */
+function gcBrDone(i){const b=WD.br[i],C=G&&G.gc;if(!C)return false;
+  return b.t==='sanctuaire'?!!C.altUsed[b.ref]:b.t==='evenement'?!!(G.gx&&G.gx.done[b.ref]):!!C.brDone[i];}
 function openAltar(i,pg){
   const P=G.p,C=G.gc,ch=[],have=P.sk.filter(Boolean).map(s=>s.id);pg=pg||0;
   if(i>=0&&!pg&&G.gs)gsSay(ALT_Q[WD.alts[i].q],'Autel d’Iris',COL.gd,1,1);
@@ -5686,12 +5816,19 @@ function gcDrawOver(){
 }
 function gcDrawWorld(){
   const c=ctx,C=G.gc;
-  for(const s of WD.signs){if(!vis(s.x,s.y,160))continue;const sd=dist2(s.x,s.y,G.p.x,G.p.y);if(sd>600*600)continue;const B=BIO[s.to]||BIO.plains;c.globalAlpha=Math.min(1,(600*600-sd)/(250*250));
+  /* colonnes de lumière au bout des branches : visibles de loin, tant que la branche n'est pas épuisée */
+  if(WD.br){c.globalCompositeOperation='lighter';for(let i=0;i<WD.br.length;i++){const b=WD.br[i];if(!vis(b.x,b.y-300,340)||gcBrDone(i))continue;const T=BRT[b.t],p=.75+.25*Math.sin(RT*.05+i),h=b.t==='raccourci'?260:640;
+      c.fillStyle=T.col;for(const [w,al] of [[46,.07],[20,.13],[7,.35]]){c.globalAlpha=al*p;c.fillRect(b.x-w/2,b.y-h,w,h);}
+      glow(b.x,b.y,70,T.col,.35*p);}
+    c.globalCompositeOperation='source-over';c.globalAlpha=1;
+    for(let i=0;i<WD.br.length;i++){const b=WD.br[i];if(b.t==='raccourci'||!vis(b.x,b.y,60)||gcBrDone(i))continue;c.font='700 22px '+FD;c.textAlign='center';c.textBaseline='middle';c.fillStyle=BRT[b.t].col;c.fillText(BRT[b.t].ic,b.x,b.y);}}
+  for(const s of WD.signs){if(!vis(s.x,s.y,160))continue;const sd=dist2(s.x,s.y,G.p.x,G.p.y),bq=s.br!==undefined?WD.br[s.br]:null,rg=bq?900:600;if(sd>rg*rg)continue;const B=BIO[s.to]||BIO.plains;c.globalAlpha=Math.min(1,(rg*rg-sd)/(250*250));
     c.fillStyle='rgba(8,4,18,.8)';c.fillRect(s.x-3,s.y-36,6,40);c.save();c.translate(s.x,s.y-44);
-    const ca=Math.cos(s.a),left=ca<0,txt=s.txt||(s.txt=B.n+' · '+s.dist+' m');c.font='700 13px '+FD;const w=s.w||(s.w=c.measureText(txt).width+34);
-    c.fillStyle='rgba(8,4,18,.86)';c.strokeStyle=B.a;c.lineWidth=2;c.beginPath();
+    const ca=Math.cos(s.a),left=ca<0,T=bq&&BRT[bq.t],dn=!!bq&&gcBrDone(s.br);if(s.dn!==dn){s.dn=dn;s.txt=s.w=0;}if(dn)c.globalAlpha*=.5;
+    const txt=s.txt||(s.txt=T?T.ic+' '+T.n+(dn?' · vide':' · '+bq.d+' m'+(bq.g?' · '+bq.g+' m de gagnés':'')):(s.main?'➤ ':'')+B.n+' · '+s.dist+' m');c.font='700 13px '+FD;const w=s.w||(s.w=c.measureText(txt).width+34);
+    c.fillStyle='rgba(8,4,18,.86)';c.strokeStyle=T?T.col:B.a;c.lineWidth=T||s.main?3:2;c.beginPath();
     if(left){c.moveTo(-w/2,0);c.lineTo(-w/2+12,-13);c.lineTo(w/2,-13);c.lineTo(w/2,13);c.lineTo(-w/2+12,13);}else{c.moveTo(w/2,0);c.lineTo(w/2-12,-13);c.lineTo(-w/2,-13);c.lineTo(-w/2,13);c.lineTo(w/2-12,13);}
-    c.closePath();c.fill();c.stroke();c.fillStyle=B.a;c.textAlign='center';c.textBaseline='middle';c.fillText(txt,left?6:-6,1);c.restore();c.globalAlpha=1;}
+    c.closePath();c.fill();c.stroke();c.fillStyle=T?T.col:B.a;c.textAlign='center';c.textBaseline='middle';c.fillText(txt,left?6:-6,1);c.restore();c.globalAlpha=1;}
   for(let i=0;i<WD.alts.length;i++){const a=WD.alts[i];if(!vis(a.x,a.y,120))continue;const used=C&&C.altUsed[i],p=.5+.5*Math.sin(RT*.07+i);
     c.globalAlpha=used?.35:1;c.fillStyle='rgba(10,6,20,.9)';c.strokeStyle=COL.gd;c.lineWidth=2.5;c.beginPath();c.moveTo(a.x,a.y-64);c.lineTo(a.x+20,a.y-10);c.lineTo(a.x,a.y+6);c.lineTo(a.x-20,a.y-10);c.closePath();c.fill();c.stroke();
     if(!used){c.globalCompositeOperation='lighter';glow(a.x,a.y-30,46,COL.gd,.35+.25*p);c.globalCompositeOperation='source-over';
@@ -5724,13 +5861,22 @@ function gcHUD(){
     else{c.globalAlpha=.5;c.strokeStyle='rgba(255,255,255,.25)';c.lineWidth=1.5;c.setLineDash([4,4]);c.beginPath();c.arc(s.x,s.y,s.r-1,0,TAU);c.stroke();c.setLineDash([]);c.font='700 9px '+FD;c.fillStyle='#9d95c9';c.fillText('AUTEL',s.x,s.y);}
     if(!inp.touch){c.globalAlpha=.9;c.font='700 11px '+FD;c.fillStyle='#fff';c.fillText(KEYL[i],s.x-s.r+2,s.y-s.r+2);}
     c.globalAlpha=1;}
+  /* près d'un carrefour : une pastille au bord de l'écran par branche dont le bout est hors champ (quoi, combien de mètres, où) */
+  if(WD.br&&!G.arena){let o=-1,bd=700*700;for(const b of WD.br){const q=WD.sites[b.o],d=dist2(q.x,q.y,P.x,P.y);if(d<bd){bd=d;o=b.o;}}
+    if(o>=0){c.font='700 12px '+FD;c.textAlign='center';c.textBaseline='middle';
+      for(let i=0;i<WD.br.length;i++){const b=WD.br[i];if(b.o!==o||gcBrDone(i))continue;const sx=(b.x-CAM.x)*RZ+W/2,sy=(b.y-CAM.y)*RZ+H/2;if(sx>40&&sx<W-40&&sy>110&&sy<H-170)continue;
+        const T=BRT[b.t],a=Math.atan2(sy-H/2,sx-W/2),k=Math.min((W/2-70)/Math.abs(Math.cos(a)||1e-9),(H/2-150)/Math.abs(Math.sin(a)||1e-9)),x=W/2+Math.cos(a)*k,y=H/2+Math.sin(a)*k,txt=T.ic+' '+T.n+' '+b.d+' m',w=c.measureText(txt).width+16;
+        c.globalAlpha=.9;c.fillStyle='rgba(8,4,18,.86)';c.strokeStyle=T.col;c.lineWidth=2;c.beginPath();c.rect(x-w/2,y-11,w,22);c.fill();c.stroke();
+        c.fillStyle=T.col;c.beginPath();c.moveTo(x+Math.cos(a)*(w/2+12),y+Math.sin(a)*22);c.lineTo(x+Math.cos(a+.5)*(w/2+2),y+Math.sin(a+.5)*14);c.lineTo(x+Math.cos(a-.5)*(w/2+2),y+Math.sin(a-.5)*14);c.fill();
+        c.globalAlpha=1;c.fillText(txt,x,y+1);}}}
   const Rf=G.gc.rift;if(Rf){fitFont(c,'Faille : 20 s · reste dans le cercle',W-30,16,'700');c.fillStyle=COL.mg;c.fillText('Faille : '+Math.ceil((Rf.dur-Rf.t)/60)+' s · reste dans le cercle',W/2,W<600?222:86);}
   cssOp('tfrz',G.tstop>0?.28:0);
   if(G.tstop>0){c.font='700 14px '+FD;c.fillStyle='#b9dcff';c.fillText('Temps figé : '+Math.ceil(G.tstop/60)+' s',W/2,W<600?222:108);}
 }
 function gcMini(x,y,k){const c=ctx;
   c.fillStyle=COL.gd;for(let i=0;i<WD.alts.length;i++){if(G.gc&&G.gc.altUsed[i])continue;const a=WD.alts[i];c.fillRect(x+(a.x+WR)*k-1.5,y+(a.y+WR)*k-1.5,3,3);}
-  c.fillStyle=COL.mg;for(let i=0;i<WD.rifts.length;i++){if(G.gc&&(G.gc.riftDone[i]||G.gc.dorm))continue;const f=WD.rifts[i];c.beginPath();c.arc(x+(f.x+WR)*k,y+(f.y+WR)*k,2.4,0,TAU);c.fill();}}
+  c.fillStyle=COL.mg;for(let i=0;i<WD.rifts.length;i++){if(G.gc&&(G.gc.riftDone[i]||G.gc.dorm))continue;const f=WD.rifts[i];c.beginPath();c.arc(x+(f.x+WR)*k,y+(f.y+WR)*k,2.4,0,TAU);c.fill();}
+  if(WD.br)for(let i=0;i<WD.br.length;i++){const b=WD.br[i];if(b.t==='sanctuaire'||b.t==='evenement'||gcBrDone(i))continue;c.fillStyle=BRT[b.t].col;c.fillRect(x+(b.x+WR)*k-2,y+(b.y+WR)*k-2,4,4);}}
 
 /* ---------- ambiance de biome : teinte continue + fondu à l'entrée ---------- */
 function biomeWash(b){const B=BIO[b];if(!B)return;const t=$('vig'),w=$('wash');if(t)t.style.backgroundColor=rgba(B.a,.07);
