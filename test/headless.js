@@ -614,6 +614,9 @@ const sub = (f, args) => { const r = cp.spawnSync(process.execPath, [path.join(_
 { const r = sub('colonne.js', REF ? ['--ref=' + REF] : []);
   check('colonne : chemin principal = plus court chemin 0 → Hypernoyau, 3 cœurs jalons dessus, 3 biomes distincts (test/colonne.js)', r.ok,
     (r.out.match(/ECHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim()).join(' | ') || (r.out.match(/\d+ graines : [^\n]*/) || [''])[0]); }
+{ const r = sub('annonces.js', REF ? ['--ref=' + REF] : []);
+  check('annonces : Lentille ÷2 (partie = Hangar), puissance des classes, Intouchable, niveau des reliques (test/annonces.js)', r.ok,
+    (r.out.match(/ECHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim()).join(' | ') || (r.out.match(/TOUT PASSE[^\n]*/) || [''])[0]); }
 
 /* ---------- verdict ---------- */
 console.log('\n---------------- VERDICT ----------------');

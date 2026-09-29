@@ -52,7 +52,7 @@ const ARTS={
 const PROF={
   scout:{n:'Éclaireur',d:'Petit, rapide, fragile. Dash qui recharge vite.',spd:4.1,rate:1.15,dmg:.85,size:.85,bub:7,armor:1.1,dash:.7,col:'#7dff4a',ic:'➤'},
   bal:{n:'Équilibré',d:'Rien d\'extrême. Le choix sûr pour apprendre.',spd:3.4,rate:1,dmg:1,size:1,bub:10,armor:1,dash:1,col:'#2de2ff',ic:'◯'},
-  tank:{n:'Colosse',d:'Lent et très blindé, canon un peu faible au départ.',spd:2.8,rate:.9,dmg:1.12,size:1.15,bub:16,armor:.67,dash:1.25,col:'#ffc93c',ic:'⬤'},
+  tank:{n:'Colosse',d:'Lent et très blindé. Tir plus lent mais plus lourd.',spd:2.8,rate:.9,dmg:1.12,size:1.15,bub:16,armor:.67,dash:1.25,col:'#ffc93c',ic:'⬤'},
 };
 const UPG=[
   {id:'twin',n:'Canons jumeaux',d:'+1 canon, tir en éventail.',c:'Arme',ic:'⋔',max:3,f:p=>{p.turrets++;}},
@@ -101,7 +101,7 @@ const ACH=[
   {id:'boss',n:'Brise-noyau',d:'Vaincre l\'Hypernoyau'},
   {id:'lvl10',n:'Géant',d:'Atteindre le niveau 10'},
   {id:'combo25',n:'Réaction en chaîne',d:'Enchaîner un combo ×25'},
-  {id:'nohit',n:'Intouchable',d:'Purger une salle 5+ sans dégât'},
+  {id:'nohit',n:'Intouchable',d:'Briser un cœur sans être touché pendant son combat'},
   {id:'scout',n:'Fil du rasoir',d:'Gagner en Éclaireur'},
   {id:'tank',n:'Forteresse',d:'Gagner en Colosse'},
   {id:'fast',n:'Éclair',d:'Gagner en moins de 5 min'},

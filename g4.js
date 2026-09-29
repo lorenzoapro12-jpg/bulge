@@ -84,7 +84,7 @@ function renderProf(){
     return '<button class="card prof'+(ok?'':' locked')+'" data-p="'+k+'" style="--c:'+p.col+'"><span class="key">'+(i+1)+'</span><span class="ic">'+(ok?p.ic:'🔒')+'</span><span class="nm">'+p.n+'</span><span class="ds">'+(ok?p.d:(p.cost?p.cost+' ◇ au Sanctuaire':'Débloqué par le récit'))+'</span>'+
     '<span class="bars"><span>Vitesse</span>'+bars(p.spd/4.2)+'<span>Puissance</span>'+bars(p.dmg*p.rate/1.2)+'<span>Robustesse</span>'+bars((p.bub/16)/(p.armor*1.4))+'</span></button>';}).join('');
 }
-const ROMAN=['','I','II','III','IV','V'];
+const ROMAN=['','I','II','III','IV','V','VI','VII','VIII','IX','X'];
 function renderEvo(){
   const P=G.p;
   if(G.evoAlt){$('evoT').textContent=G.evoAlt[0];$('evoS').textContent=G.evoAlt[1];}else{
@@ -131,7 +131,7 @@ function showEnd(){
   const wrap=$('endArts');
   if(G.artChoices.length){
     $('endArtsL').textContent='Choisis une relique. Elle te suivra dans toutes tes prochaines parties.';
-    wrap.innerHTML=G.artChoices.map(k=>{const a=ARTS[k],n=meta.arts[k]||0;return '<button class="card relic" data-k="'+k+'"><span class="ic">'+a.ic+'</span><span class="nm">'+a.n+(n?' '+ROMAN[Math.min(5,n+1)]||'':'')+'</span><span class="ds">'+a.d+'</span></button>';}).join('');
+    wrap.innerHTML=G.artChoices.map(k=>{const a=ARTS[k],n=meta.arts[k]||0;return '<button class="card relic" data-k="'+k+'"><span class="ic">'+a.ic+'</span><span class="nm">'+a.n+artLvl(n,a.max)+'</span><span class="ds">'+a.d+'</span></button>';}).join('');
     setEndBtns(false);
   }else{
     $('endArtsL').textContent=G.daily?'Le défi du jour se joue sans reliques, à armes égales.':'Détruis un cœur de zone ou survis 2 minutes pour gagner une relique.';
@@ -139,10 +139,12 @@ function showEnd(){
   }
   show('ov-end');
 }
+/* niveau atteint en prenant la relique (le 1er ne porte pas de numéro, comme les évolutions) ; au maximum, le dire */
+function artLvl(n,mx){return n>=mx?' · max atteint':n?' '+ROMAN[n+1]+(n+1===mx?' · max':''):'';}
 function setEndBtns(on){$('bAgain').disabled=!on;$('bMenu').disabled=!on;}
 function pickArt(k,btn){
   if(!G||G.artPicked)return;G.artPicked=true;
-  meta.arts[k]=(meta.arts[k]||0)+1;saveMeta();SFX.evo();
+  meta.arts[k]=Math.min(ARTS[k].max,(meta.arts[k]||0)+1);saveMeta();SFX.evo();
   document.querySelectorAll('#endArts .card').forEach(b=>{b.disabled=true;b.classList.toggle('chosen',b===btn);});
   setEndBtns(true);$('bAgain').focus({preventScroll:true});
 }

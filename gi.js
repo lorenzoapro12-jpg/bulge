@@ -111,7 +111,7 @@ function pilotA(){return meta.pilot.a||{};}
 function giRunStart(){
   const P=G.p,D=giStats(G.daily?{}:giEquipped(),G.daily?{}:pilotA());
   G.gi={bag:[],drops:[],rg:0,echo:[],guard:0,xp0:meta.pilot.xp};
-  P.dmg*=D.dmgMul;P.fireI/=D.rateMul;P.crit=Math.min(.9,P.crit+D.crit);if(D.U.verre)P.crit*=.5;P.critM=D.critM;
+  P.dmg*=D.dmgMul;P.fireI/=D.rateMul;P.crit=Math.min(.9,P.crit*(D.U.verre?.5:1)+D.crit);P.critM=D.critM;
   P.blife*=D.range;P.bspd*=D.bspd;P.cdMul*=D.cdMul;P.ultM=D.ultM;P.st=D.el;P.stp=D.stp;P.skM=D.skM;
   P.armor*=D.armorMul;P.dodge=D.dodge;P.spd*=D.spdMul;P.dashMax*=D.dashMul;P.magnet*=D.magMul;P.bub+=D.bub;P.rg=D.rgn;
   P.baseR*=D.size;P.r=P.baseR;P.contact=D.contact;P.greed*=D.greed;P.exec=D.exec;P.u=D.U;

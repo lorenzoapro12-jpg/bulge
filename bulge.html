@@ -353,7 +353,7 @@ const ARTS={
 const PROF={
   scout:{n:'Éclaireur',d:'Petit, rapide, fragile. Dash qui recharge vite.',spd:4.1,rate:1.15,dmg:.85,size:.85,bub:7,armor:1.1,dash:.7,col:'#7dff4a',ic:'➤'},
   bal:{n:'Équilibré',d:'Rien d\'extrême. Le choix sûr pour apprendre.',spd:3.4,rate:1,dmg:1,size:1,bub:10,armor:1,dash:1,col:'#2de2ff',ic:'◯'},
-  tank:{n:'Colosse',d:'Lent et très blindé, canon un peu faible au départ.',spd:2.8,rate:.9,dmg:1.12,size:1.15,bub:16,armor:.67,dash:1.25,col:'#ffc93c',ic:'⬤'},
+  tank:{n:'Colosse',d:'Lent et très blindé. Tir plus lent mais plus lourd.',spd:2.8,rate:.9,dmg:1.12,size:1.15,bub:16,armor:.67,dash:1.25,col:'#ffc93c',ic:'⬤'},
 };
 const UPG=[
   {id:'twin',n:'Canons jumeaux',d:'+1 canon, tir en éventail.',c:'Arme',ic:'⋔',max:3,f:p=>{p.turrets++;}},
@@ -402,7 +402,7 @@ const ACH=[
   {id:'boss',n:'Brise-noyau',d:'Vaincre l\'Hypernoyau'},
   {id:'lvl10',n:'Géant',d:'Atteindre le niveau 10'},
   {id:'combo25',n:'Réaction en chaîne',d:'Enchaîner un combo ×25'},
-  {id:'nohit',n:'Intouchable',d:'Purger une salle 5+ sans dégât'},
+  {id:'nohit',n:'Intouchable',d:'Briser un cœur sans être touché pendant son combat'},
   {id:'scout',n:'Fil du rasoir',d:'Gagner en Éclaireur'},
   {id:'tank',n:'Forteresse',d:'Gagner en Colosse'},
   {id:'fast',n:'Éclair',d:'Gagner en moins de 5 min'},
@@ -2711,7 +2711,7 @@ function pilotA(){return meta.pilot.a||{};}
 function giRunStart(){
   const P=G.p,D=giStats(G.daily?{}:giEquipped(),G.daily?{}:pilotA());
   G.gi={bag:[],drops:[],rg:0,echo:[],guard:0,xp0:meta.pilot.xp};
-  P.dmg*=D.dmgMul;P.fireI/=D.rateMul;P.crit=Math.min(.9,P.crit+D.crit);if(D.U.verre)P.crit*=.5;P.critM=D.critM;
+  P.dmg*=D.dmgMul;P.fireI/=D.rateMul;P.crit=Math.min(.9,P.crit*(D.U.verre?.5:1)+D.crit);P.critM=D.critM;
   P.blife*=D.range;P.bspd*=D.bspd;P.cdMul*=D.cdMul;P.ultM=D.ultM;P.st=D.el;P.stp=D.stp;P.skM=D.skM;
   P.armor*=D.armorMul;P.dodge=D.dodge;P.spd*=D.spdMul;P.dashMax*=D.dashMul;P.magnet*=D.magMul;P.bub+=D.bub;P.rg=D.rgn;
   P.baseR*=D.size;P.r=P.baseR;P.contact=D.contact;P.greed*=D.greed;P.exec=D.exec;P.u=D.U;
@@ -3969,7 +3969,7 @@ function renderProf(){
     return '<button class="card prof'+(ok?'':' locked')+'" data-p="'+k+'" style="--c:'+p.col+'"><span class="key">'+(i+1)+'</span><span class="ic">'+(ok?p.ic:'🔒')+'</span><span class="nm">'+p.n+'</span><span class="ds">'+(ok?p.d:(p.cost?p.cost+' ◇ au Sanctuaire':'Débloqué par le récit'))+'</span>'+
     '<span class="bars"><span>Vitesse</span>'+bars(p.spd/4.2)+'<span>Puissance</span>'+bars(p.dmg*p.rate/1.2)+'<span>Robustesse</span>'+bars((p.bub/16)/(p.armor*1.4))+'</span></button>';}).join('');
 }
-const ROMAN=['','I','II','III','IV','V'];
+const ROMAN=['','I','II','III','IV','V','VI','VII','VIII','IX','X'];
 function renderEvo(){
   const P=G.p;
   if(G.evoAlt){$('evoT').textContent=G.evoAlt[0];$('evoS').textContent=G.evoAlt[1];}else{
@@ -4016,7 +4016,7 @@ function showEnd(){
   const wrap=$('endArts');
   if(G.artChoices.length){
     $('endArtsL').textContent='Choisis une relique. Elle te suivra dans toutes tes prochaines parties.';
-    wrap.innerHTML=G.artChoices.map(k=>{const a=ARTS[k],n=meta.arts[k]||0;return '<button class="card relic" data-k="'+k+'"><span class="ic">'+a.ic+'</span><span class="nm">'+a.n+(n?' '+ROMAN[Math.min(5,n+1)]||'':'')+'</span><span class="ds">'+a.d+'</span></button>';}).join('');
+    wrap.innerHTML=G.artChoices.map(k=>{const a=ARTS[k],n=meta.arts[k]||0;return '<button class="card relic" data-k="'+k+'"><span class="ic">'+a.ic+'</span><span class="nm">'+a.n+artLvl(n,a.max)+'</span><span class="ds">'+a.d+'</span></button>';}).join('');
     setEndBtns(false);
   }else{
     $('endArtsL').textContent=G.daily?'Le défi du jour se joue sans reliques, à armes égales.':'Détruis un cœur de zone ou survis 2 minutes pour gagner une relique.';
@@ -4024,10 +4024,12 @@ function showEnd(){
   }
   show('ov-end');
 }
+/* niveau atteint en prenant la relique (le 1er ne porte pas de numéro, comme les évolutions) ; au maximum, le dire */
+function artLvl(n,mx){return n>=mx?' · max atteint':n?' '+ROMAN[n+1]+(n+1===mx?' · max':''):'';}
 function setEndBtns(on){$('bAgain').disabled=!on;$('bMenu').disabled=!on;}
 function pickArt(k,btn){
   if(!G||G.artPicked)return;G.artPicked=true;
-  meta.arts[k]=(meta.arts[k]||0)+1;saveMeta();SFX.evo();
+  meta.arts[k]=Math.min(ARTS[k].max,(meta.arts[k]||0)+1);saveMeta();SFX.evo();
   document.querySelectorAll('#endArts .card').forEach(b=>{b.disabled=true;b.classList.toggle('chosen',b===btn);});
   setEndBtns(true);$('bAgain').focus({preventScroll:true});
 }
@@ -4300,7 +4302,7 @@ const ARTS={
 const PROF={
   scout:{n:'Éclaireur',d:'Petit, rapide, fragile. Dash qui recharge vite.',spd:4.1,rate:1.15,dmg:.85,size:.85,bub:7,armor:1.1,dash:.7,col:'#7dff4a',ic:'➤'},
   bal:{n:'Équilibré',d:'Rien d\'extrême. Le choix sûr pour apprendre.',spd:3.4,rate:1,dmg:1,size:1,bub:10,armor:1,dash:1,col:'#2de2ff',ic:'◯'},
-  tank:{n:'Colosse',d:'Lent et très blindé, canon un peu faible au départ.',spd:2.8,rate:.9,dmg:1.12,size:1.15,bub:16,armor:.67,dash:1.25,col:'#ffc93c',ic:'⬤'},
+  tank:{n:'Colosse',d:'Lent et très blindé. Tir plus lent mais plus lourd.',spd:2.8,rate:.9,dmg:1.12,size:1.15,bub:16,armor:.67,dash:1.25,col:'#ffc93c',ic:'⬤'},
 };
 const UPG=[
   {id:'twin',n:'Canons jumeaux',d:'+1 canon, tir en éventail.',c:'Arme',ic:'⋔',max:3,f:p=>{p.turrets++;}},
@@ -4349,7 +4351,7 @@ const ACH=[
   {id:'boss',n:'Brise-noyau',d:'Vaincre l\'Hypernoyau'},
   {id:'lvl10',n:'Géant',d:'Atteindre le niveau 10'},
   {id:'combo25',n:'Réaction en chaîne',d:'Enchaîner un combo ×25'},
-  {id:'nohit',n:'Intouchable',d:'Purger une salle 5+ sans dégât'},
+  {id:'nohit',n:'Intouchable',d:'Briser un cœur sans être touché pendant son combat'},
   {id:'scout',n:'Fil du rasoir',d:'Gagner en Éclaireur'},
   {id:'tank',n:'Forteresse',d:'Gagner en Colosse'},
   {id:'fast',n:'Éclair',d:'Gagner en moins de 5 min'},
