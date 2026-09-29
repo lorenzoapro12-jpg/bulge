@@ -4123,7 +4123,7 @@ function renderLB(){
 }
 
 /* ---------- boucle ---------- */
-let last=0,acc=0,FPSV=0,fpsN=0,fpsT=0,slowT=0,upT=0;const STEPMS=1000/60,DTH=[];
+let last=0,acc=0,FPSV=0,slowT=0,upT=0;const STEPMS=1000/60,DTH=[];
 /* ---------- DIAGNOSTIC EMBARQUE (compteur d'images) ----------
    Sert a trancher sur l'APPAREIL REEL, ou aucun banc ne peut aller : le temps de l'image est-il
    du JavaScript, ou de la composition/rasterisation (« hors-JS » = intervalle - JS) ?
@@ -4181,14 +4181,17 @@ function applyQuality(){const q=meta.q||'auto';
 let REFDT=0,REFN=0,qn=0;
 function refReset(){REFDT=0;REFN=0;qn=0;slowT=0;upT=0;DTH.length=0;}
 function perf(dt){
-  fpsN++;fpsT+=dt;if(fpsT>=500){FPSV=Math.round(fpsN*1000/fpsT);fpsN=0;fpsT=0;}
+  /* Les ips ne se calculent plus ici. Un compteur de 500 ms qui avancait sur TOUTES les images
+     (menu, pause, ecran de fin compris, bien moins cheres) pouvait afficher 84 ips quand le jeu en
+     tenait 34 : le chiffre mentait sur l'appareil meme ou l'on cherche a trancher. Ils derivent
+     desormais du cumul du diagnostic, dont la fenetre est une seconde de JEU (voir plus bas). */
   /* Hors du jeu (menu, pause, écran de fin), on ne MESURE pas du tout : la fenêtre ne se remplit
      qu'avec des images de jeu. Avant, elle se remplissait au menu et ces durées — bien plus courtes —
      entraient dans la référence, qui décrivait alors autre chose que le jeu. */
   if(!G||G.state!=='play'){refReset();return;}
   /* fenetre de 120 images (2 s a 60 Hz) au lieu de 180 : l'echantillon revient plus vite, donc
      l'adaptation converge plus vite, sans baisser la robustesse de la mediane. L'echantillonnage est
-     compte sur les images DE JEU (qn), plus sur fpsN qui avance aussi hors du jeu. */
+     compte sur les images DE JEU (qn). */
   DTH.push(dt);if(DTH.length>120)DTH.shift();
   if(DTH.length<120||(++qn%15))return;
   const so=DTH.slice().sort((a,b)=>a-b),med=so[60],p90=so[108];
@@ -4272,14 +4275,22 @@ function frame(ts){
   /* travail JS réel de cette image, hors cuisson : la mesure dont bakeBudget() part à l'image suivante */
   FWK=performance.now()-t0-BKMS;skipCtl(FWK+BKMS,dt);
   /* ---------- diagnostic embarque : cumul sur une seconde, puis publication ---------- */
-  DIAG_T+=dt;DIAG_N++;DIAG_CJS+=FWK+BKMS;DIAG_CDT+=dt;if(dt>DIAG_MX)DIAG_MX=dt;
-  if(AU.ac&&AU.next!=null){const m=AU.next-AU.ac.currentTime;if(m<DIAG_AUM)DIAG_AUM=m;}
+  /* On ne cumule que les images qui JOUENT : la meme condition que la boucle de simulation ci-dessus.
+     Avant, les images d'interface entraient dans la fenetre d'une seconde, donc « image : N ms »
+     decrivait un melange de deux choses, et les ips gonflaient d'autant. */
+  if(G&&(G.state==='play'||G.state==='dying'||G.state==='victory')){
+    DIAG_T+=dt;DIAG_N++;DIAG_CJS+=FWK+BKMS;DIAG_CDT+=dt;if(dt>DIAG_MX)DIAG_MX=dt;
+    if(AU.ac&&AU.next!=null){const m=AU.next-AU.ac.currentTime;if(m<DIAG_AUM)DIAG_AUM=m;}}
   if(DIAG_T>=1000){
     /* profil : on publie le top des postes (ms par image) puis on remet les compteurs a zero */
     JSPROFTOP=[];
     for(const k in JSPROF){const s=JSPROF[k];if(s[0]>=1)JSPROFTOP.push([k,s[0]/DIAG_N,s[1]]);s[0]=0;s[1]=0;}
     JSPROFTOP.sort((a,b)=>b[1]-a[1]);if(JSPROFTOP.length>6)JSPROFTOP.length=6;
     DIAG_JS=DIAG_CJS/DIAG_N;DIAG_DT=DIAG_CDT/DIAG_N;DIAG_PEAK=DIAG_MX;
+    /* Les ips derivent du MEME cumul que « image : N ms » : deux compteurs separes finissaient par
+       afficher, sur la meme ligne, deux nombres qui ne se correspondaient pas. 1000/ips = ms, par
+       construction, et non par coincidence. */
+    FPSV=DIAG_DT>0?Math.round(1000/DIAG_DT):0;
     DIAG_MARGIN=DIAG_AUM>=1e9?-1:DIAG_AUM;DIAG_CJS=0;DIAG_CDT=0;DIAG_MX=0;DIAG_AUM=1e9;DIAG_N=0;DIAG_T=0;}
 }
 function startGame(prof,daily){

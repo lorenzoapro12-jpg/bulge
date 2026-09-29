@@ -208,6 +208,41 @@ const TOP = [['render', 6.06, 12], ['glow', 1.28, 4], ['drawHUD', 1.09, 5], ['dr
   check('avant la premiere image : le compteur ne ment pas (cuisson ?)', L2.some(f => f.s.indexOf('cuisson ?') >= 0), L2.map(f => f.s).join(' | ').slice(0, 90));
 }
 
+/* ============ S6 — les nombres du compteur decrivent le JEU, et se correspondent ============
+   Deux defauts corriges le 29/09/2026, gardes ici pour qu'ils ne reviennent pas :
+   - les ips venaient d'un compteur de 500 ms qui avancait sur TOUTES les images ; les images de
+     menu, de pause et d'ecran de fin (bien moins cheres) entraient donc dans la fenetre. Mesure sur
+     l'appareil : 84 ips affiches pour un jeu qui en tenait 34 ;
+   - « image : N ms » et « N ips » venaient de deux cumuls DIFFERENTS : les deux nombres de la meme
+     ligne pouvaient ne pas se correspondre, et rien ne le disait.
+   On appelle ici de VRAIES images (frame(ts)) avec une horloge controlee. */
+{
+  EM = 0.50;
+  /* UNE seule horloge continue : frame() plafonne a 100 ms tout saut d'horloge, donc deux blocs
+     separes avec des temps eloignes injecteraient une image a 100 ms dans la moyenne et fausseraient
+     la mesure — c'est ce qui a fait echouer la premiere version de ce test, a juste titre. */
+  const r = JSON.parse(call(`(()=>{const o={};
+    DIAG_T=0;DIAG_N=0;DIAG_CDT=0;DIAG_CJS=0;FPSV=0;DIAG_DT=0;
+    last=0;let t=1e6;G.state='pause';frame(t);          /* cette image saute de 1e6 ms : plafonnee a 100, et NON cumulee */
+    for(let i=0;i<40;i++){t+=2;frame(t);}                /* 40 images de menu a 2 ms */
+    o.pause={n:DIAG_N,ips:FPSV,dt:DIAG_DT};
+    G.state='play';for(let i=0;i<60;i++){t+=29;frame(t);}   /* 60 images de jeu a 29 ms */
+    o.mix={ips:FPSV,dt:+DIAG_DT.toFixed(2)};
+    DIAG_T=0;DIAG_N=0;DIAG_CDT=0;DIAG_CJS=0;FPSV=0;DIAG_DT=0;
+    for(let i=0;i<70;i++){t+=16.7;frame(t);}             /* 70 images de jeu a 16,7 ms */
+    o.reg={ips:FPSV,dt:+DIAG_DT.toFixed(2)};
+    return JSON.stringify(o);})()`));
+  check('80 images de menu seules : rien n\'est mesure (ni ips, ni temps par image)',
+    r.pause.n === 0 && r.pause.ips === 0 && r.pause.dt === 0,
+    'images cumulees=' + r.pause.n + ' · ips=' + r.pause.ips + ' · image=' + r.pause.dt + ' ms');
+  check('apres 40 images de menu, 60 images de jeu a 29 ms : les ips sont ceux du JEU, et 1000/ips = ms',
+    r.mix.ips >= 33 && r.mix.ips <= 35 && Math.abs(1000 / r.mix.ips - r.mix.dt) <= 1,
+    'ips=' + r.mix.ips + ' (attendu ~34) · image=' + r.mix.dt + ' ms · 1000/ips=' + (1000 / r.mix.ips).toFixed(2) + ' ms');
+  check('la mesure reste juste : 70 images a 16,7 ms donnent ~60 ips et 1000/ips = ms',
+    r.reg.ips >= 58 && r.reg.ips <= 62 && Math.abs(1000 / r.reg.ips - r.reg.dt) <= 1,
+    'ips=' + r.reg.ips + ' (attendu ~60) · image=' + r.reg.dt + ' ms · 1000/ips=' + (1000 / r.reg.ips).toFixed(2) + ' ms');
+}
+
 /* ================= verdict ================= */
 let all = true;
 for (const c of checks) { if (!c.ok) all = false; console.log((c.ok ? '  OK  ' : ' ECHEC') + ' ' + c.name + (c.detail ? '  — ' + c.detail : '')); }
