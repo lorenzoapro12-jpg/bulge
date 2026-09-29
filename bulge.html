@@ -145,9 +145,11 @@ p.sub{color:#c9c3ea;font-size:16px;max-width:52ch;line-height:1.4}
 .ita{font-size:13px}.ita.base{color:#cfc9ee}.itu{margin-top:6px;font-size:13px;color:var(--gd);font-style:italic}
 .lootrow{display:flex;flex-wrap:wrap;gap:6px}.syn summary{cursor:pointer;font-weight:700}.syn p{font-size:13px;line-height:1.5;margin-top:6px}
 .pill.tank{border-color:rgba(255,201,60,.5);background:rgba(255,201,60,.08)}
-#prompt{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(112px + env(safe-area-inset-bottom));width:min(430px,calc(100% - 24px));z-index:9;display:flex;flex-direction:column;gap:6px;padding:14px 16px;border-radius:16px;background:rgba(10,5,22,.92);border:1px solid rgba(45,226,255,.5);text-align:left;font-size:14px;line-height:1.4;animation:ovin .2s}
-#prompt[hidden]{display:none}#prompt .pc{color:var(--cy)}#prompt .ph{color:#ff5570}#prompt .pr{color:var(--gd);font-size:13px}#prompt .btn{min-height:42px;padding:8px 18px;font-size:15px}
-@media (max-width:600px){#prompt{bottom:calc(228px + env(safe-area-inset-bottom))}}
+#prompt{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(112px + env(safe-area-inset-bottom));width:min(430px,calc(100% - 24px));z-index:9;display:flex;flex-direction:column;gap:6px;padding:14px 16px;border-radius:16px;background:rgba(10,5,22,.92);border:1px solid rgba(45,226,255,.5);text-align:left;font-size:14px;line-height:1.4;animation:ovin .2s;pointer-events:none}
+#prompt[hidden]{display:none}#prompt .pc{color:var(--cy)}#prompt .ph{color:#ff5570}#prompt .pr{color:var(--gd);font-size:13px}#prompt .btn{pointer-events:auto;min-height:42px;padding:8px 18px;font-size:15px}
+/* L'invite ne capte que son bouton (pointer-events), et sur téléphone elle reste au-dessus du tiers bas : c'est là que
+   le pouce gauche pose le joystick (g4.js onDown : moitié gauche). Le bouton est à droite, loin du pouce gauche. */
+@media (max-width:600px){#prompt{bottom:calc(36% + env(safe-area-inset-bottom))}#prompt .btn{align-self:flex-end}}
 .jr{display:grid;grid-template-columns:20px 1fr auto;gap:8px;font-size:14px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)}
 .ov.duel{background:radial-gradient(ellipse at 50% 30%,rgba(70,10,30,.92),rgba(6,2,10,.98))}
 .dvin{max-width:760px;gap:12px}.dvhead{display:flex;justify-content:space-between;width:100%;font-size:18px}.dvhead span{color:var(--dim)}
@@ -159,20 +161,28 @@ p.sub{color:#c9c3ea;font-size:16px;max-width:52ch;line-height:1.4}
 .dvlog{width:100%;min-height:74px;text-align:left;font-size:13px;line-height:1.45;padding:8px 12px;border-radius:12px;background:rgba(255,255,255,.04)}
 .dvme{width:100%;text-align:left;padding:10px 12px;border-radius:14px;border:1px solid rgba(45,226,255,.5);background:rgba(6,10,22,.85);display:flex;flex-direction:column;gap:4px}
 .en{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--dim)}.en i{width:14px;height:14px;border-radius:50%;border:1px solid var(--gd)}.en i.on{background:var(--gd)}.en .ul{margin-left:auto;color:var(--gd)}
-.dvact{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;width:100%}
+.dvact{width:100%}.dvgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;width:100%}
+/* Duel : seule .dvin défile, et elle s'arrête AU-DESSUS de la barre Fuir / Fin du tour (--dvb). La barre (dans #dvAct
+   pour le DOM, mais positionnée sur #ov-duel) ne recouvre donc jamais une carte, quelle que soit la hauteur d'écran.
+   Fuir à gauche, Fin du tour à droite (sous le pouce droit), séparés de 48 px ≈ 7,5 mm sur S22 (≈ 2 fois l'erreur du pouce). */
+#ov-duel{--dvb:calc(68px + env(safe-area-inset-bottom));padding:0;overflow:hidden}
+#ov-duel>.dvin{max-width:none;margin:0;height:calc(100% - var(--dvb));overflow-y:auto;padding:28px max(18px,calc(50% - 380px)) 12px}
+#ov-duel>.dvin>*{flex-shrink:0}#ov-duel>.dvin::before,#ov-duel>.dvin::after{content:'';margin:auto}
+.dvbar{position:absolute;left:0;right:0;bottom:0;height:var(--dvb);display:flex;justify-content:space-between;gap:48px;padding:10px max(18px,calc(50% - 380px)) 0;background:rgba(6,2,10,.96);border-top:1px solid rgba(45,226,255,.25)}
+.dvbar .btn{min-height:48px;max-height:48px;padding:4px 14px;font-size:15px;line-height:1.2}.dvbar #dvFlee{flex:0 1 auto}.dvbar #dvEnd{flex:1 1 auto}
+.dvbar #dvFlee.arm{border-color:#ff5570;color:#ff5570;font-size:13px}
 .dact{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:10px 12px;border-radius:12px;border:1px solid rgba(45,226,255,.4);background:rgba(8,4,18,.85);color:inherit;cursor:pointer;min-height:64px}
 .dact b{font-size:14px}.dact span{font-size:11px;color:#b7b0d8;line-height:1.3}.dact em{font-style:normal;font-size:12px;color:var(--gd)}.dact:disabled{opacity:.35;cursor:default}
 .dvact kbd{font-family:inherit;font-size:11px;font-weight:700;color:var(--dim);border:1px solid rgba(143,137,179,.5);border-radius:4px;padding:0 5px;margin-right:7px;vertical-align:1px}.dvact .btn kbd{margin:0 0 0 8px;color:inherit;opacity:.7}
-.dvact .btn{min-height:46px}.dvact #dvEnd{position:sticky;bottom:calc(8px + env(safe-area-inset-bottom));z-index:2}
 @media (max-width:600px){.dvfoes{grid-template-columns:1fr 1fr}.foe.cmd{grid-column:1/-1}.foe{padding:8px 10px}.dvlog{min-height:0;font-size:12px}.dact{min-height:56px;padding:8px 10px}.dvin{gap:8px}}
 .gtip{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-left:3px solid var(--cy);background:rgba(255,255,255,.04);border-radius:8px;font-size:13px;line-height:1.45}.gtip.locked{opacity:.4;border-color:#4a4468}
 #cxGuide{width:min(640px,100%)}.btn.lockedb{opacity:.45}
 #fade{position:absolute;inset:0;z-index:30;pointer-events:none;opacity:0}#fade.go{animation:fadeout var(--d,.8s) ease-out}
 @keyframes fadeout{from{opacity:1}to{opacity:0}}
 .ov.on>.in{animation:inrise .38s cubic-bezier(.2,.8,.2,1)}@keyframes inrise{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:none}}
-#ov-duel.on>.dvin{animation:duelin .5s cubic-bezier(.2,.8,.2,1)}@keyframes duelin{from{opacity:0;transform:scale(1.08);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
+#ov-duel.on>.dvin{animation:none}#ov-duel.on #dvAct{animation:ovin .5s}#ov-duel.on>.dvin>:not(.dvact){animation:duelin .5s cubic-bezier(.2,.8,.2,1)}@keyframes duelin{from{opacity:0;transform:scale(1.08);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
 #cv{transition:filter 1.2s ease}#cv.dying{filter:grayscale(.85) brightness(.72) contrast(1.1)}
-@media (prefers-reduced-motion:reduce){.ov.on>.in,#ov-duel.on>.dvin{animation:none}#cv{transition:none}}
+@media (prefers-reduced-motion:reduce){.ov.on>.in,#ov-duel.on>.dvin>:not(.dvact){animation:none}#cv{transition:none}}
 #low{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;mix-blend-mode:screen;z-index:1}#cv.dying+#low{opacity:.4;transition:opacity 1.2s}
 .shake{animation:shk .35s}@keyframes shk{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
 table{width:100%;border-collapse:collapse;font-size:15px}
@@ -3228,12 +3238,17 @@ function renderDuel(){
   acts.push(['garde','Se retrancher','Bouclier 20 % et +1 énergie au prochain tour',1,1],['scan','Analyser','Révèle la faiblesse, prochain coup critique',1,!(tg&&tg.rev&&me.crit)],['ult',(ULT[G.prof]||ULT.bal).n,'Ultime',0,me.ult>=100]);
   /* touches affichées au clavier seulement : la touche N déclenche DU.keys[N-1] (g4.js onKey) */
   const kb=s=>inp.touch?'':'<kbd>'+s+'</kbd>';
-  DU.keys=acts.map(x=>x[0]);$('dvAct').innerHTML=acts.map(([a,n,d,c,ok],i)=>'<button class="dact" data-a="'+a+'" '+(DU.busy||!ok||me.en<c?'disabled':'')+'><b>'+kb(i+1)+n+'</b><span>'+d+'</span><em>'+'⚡'.repeat(c)+'</em></button>').join('')+
-    '<button class="btn pri" id="dvEnd" '+(DU.busy?'disabled':'')+'>Fin du tour'+kb('Entrée')+'</button><button class="btn ghost" id="dvFlee" '+(DU.busy?'disabled':'')+'>Fuir (-20 % bulles)</button>';
+  /* .dvbar : hors de la zone qui défile (position absolue sur #ov-duel, shell_head.html) — rien ne passe jamais par-dessus une carte */
+  DU.keys=acts.map(x=>x[0]);$('dvAct').innerHTML='<div class="dvgrid">'+acts.map(([a,n,d,c,ok],i)=>'<button class="dact" data-a="'+a+'" '+(DU.busy||!ok||me.en<c?'disabled':'')+'><b>'+kb(i+1)+n+'</b><span>'+d+'</span><em>'+'⚡'.repeat(c)+'</em></button>').join('')+
+    '</div><div class="dvbar"><button class="btn ghost'+(DU.fleeT?' arm':'')+'" id="dvFlee" '+(DU.busy?'disabled':'')+'>'+(DU.fleeT?'Confirmer : fuir (-20 %)':'Fuir (-20 %)')+'</button><button class="btn pri" id="dvEnd" '+(DU.busy?'disabled':'')+'>Fin du tour'+kb('Entrée')+'</button></div>';
 }
 function gxBindUI(){
   $('dvFoes').onclick=e=>{const b=e.target.closest('[data-f]');if(b&&DU&&DU.foes[+b.dataset.f].hp>0){DU.sel=+b.dataset.f;renderDuel();}};
-  $('dvAct').onclick=e=>{const b=e.target.closest('button');if(!b||!DU)return;if(b.id==='dvEnd')duelEndTurn();else if(b.id==='dvFlee')duelFlee();else if(b.dataset.a)duelAct(b.dataset.a);};
+  /* Fuir coûte 20 % : un appui l'arme (3 s), un second appui, au moins 350 ms plus tard (pas un rebond du pouce), la confirme */
+  $('dvAct').onclick=e=>{const b=e.target.closest('button');if(!b||!DU)return;const t=performance.now(),D=DU;
+    if(b.id==='dvFlee'){if(!D.fleeT){D.fleeT=t;renderDuel();setTimeout(()=>{if(DU===D&&D.fleeT===t){D.fleeT=0;renderDuel();}},3000);}else if(t-D.fleeT>=350)duelFlee();return;}
+    if(D.fleeT){D.fleeT=0;renderDuel();}
+    if(b.id==='dvEnd')duelEndTurn();else if(b.dataset.a)duelAct(b.dataset.a);};
 }
 /* =========================================================
    gt.js : LE PROLOGUE JOUABLE
@@ -6159,12 +6174,17 @@ function renderDuel(){
   acts.push(['garde','Se retrancher','Bouclier 20 % et +1 énergie au prochain tour',1,1],['scan','Analyser','Révèle la faiblesse, prochain coup critique',1,!(tg&&tg.rev&&me.crit)],['ult',(ULT[G.prof]||ULT.bal).n,'Ultime',0,me.ult>=100]);
   /* touches affichées au clavier seulement : la touche N déclenche DU.keys[N-1] (g4.js onKey) */
   const kb=s=>inp.touch?'':'<kbd>'+s+'</kbd>';
-  DU.keys=acts.map(x=>x[0]);$('dvAct').innerHTML=acts.map(([a,n,d,c,ok],i)=>'<button class="dact" data-a="'+a+'" '+(DU.busy||!ok||me.en<c?'disabled':'')+'><b>'+kb(i+1)+n+'</b><span>'+d+'</span><em>'+'⚡'.repeat(c)+'</em></button>').join('')+
-    '<button class="btn pri" id="dvEnd" '+(DU.busy?'disabled':'')+'>Fin du tour'+kb('Entrée')+'</button><button class="btn ghost" id="dvFlee" '+(DU.busy?'disabled':'')+'>Fuir (-20 % bulles)</button>';
+  /* .dvbar : hors de la zone qui défile (position absolue sur #ov-duel, shell_head.html) — rien ne passe jamais par-dessus une carte */
+  DU.keys=acts.map(x=>x[0]);$('dvAct').innerHTML='<div class="dvgrid">'+acts.map(([a,n,d,c,ok],i)=>'<button class="dact" data-a="'+a+'" '+(DU.busy||!ok||me.en<c?'disabled':'')+'><b>'+kb(i+1)+n+'</b><span>'+d+'</span><em>'+'⚡'.repeat(c)+'</em></button>').join('')+
+    '</div><div class="dvbar"><button class="btn ghost'+(DU.fleeT?' arm':'')+'" id="dvFlee" '+(DU.busy?'disabled':'')+'>'+(DU.fleeT?'Confirmer : fuir (-20 %)':'Fuir (-20 %)')+'</button><button class="btn pri" id="dvEnd" '+(DU.busy?'disabled':'')+'>Fin du tour'+kb('Entrée')+'</button></div>';
 }
 function gxBindUI(){
   $('dvFoes').onclick=e=>{const b=e.target.closest('[data-f]');if(b&&DU&&DU.foes[+b.dataset.f].hp>0){DU.sel=+b.dataset.f;renderDuel();}};
-  $('dvAct').onclick=e=>{const b=e.target.closest('button');if(!b||!DU)return;if(b.id==='dvEnd')duelEndTurn();else if(b.id==='dvFlee')duelFlee();else if(b.dataset.a)duelAct(b.dataset.a);};
+  /* Fuir coûte 20 % : un appui l'arme (3 s), un second appui, au moins 350 ms plus tard (pas un rebond du pouce), la confirme */
+  $('dvAct').onclick=e=>{const b=e.target.closest('button');if(!b||!DU)return;const t=performance.now(),D=DU;
+    if(b.id==='dvFlee'){if(!D.fleeT){D.fleeT=t;renderDuel();setTimeout(()=>{if(DU===D&&D.fleeT===t){D.fleeT=0;renderDuel();}},3000);}else if(t-D.fleeT>=350)duelFlee();return;}
+    if(D.fleeT){D.fleeT=0;renderDuel();}
+    if(b.id==='dvEnd')duelEndTurn();else if(b.dataset.a)duelAct(b.dataset.a);};
 }
 /* =========================================================
    gv.js : LE RÊVE À CONTEMPLER

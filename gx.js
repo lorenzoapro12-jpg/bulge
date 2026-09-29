@@ -265,10 +265,15 @@ function renderDuel(){
   acts.push(['garde','Se retrancher','Bouclier 20 % et +1 énergie au prochain tour',1,1],['scan','Analyser','Révèle la faiblesse, prochain coup critique',1,!(tg&&tg.rev&&me.crit)],['ult',(ULT[G.prof]||ULT.bal).n,'Ultime',0,me.ult>=100]);
   /* touches affichées au clavier seulement : la touche N déclenche DU.keys[N-1] (g4.js onKey) */
   const kb=s=>inp.touch?'':'<kbd>'+s+'</kbd>';
-  DU.keys=acts.map(x=>x[0]);$('dvAct').innerHTML=acts.map(([a,n,d,c,ok],i)=>'<button class="dact" data-a="'+a+'" '+(DU.busy||!ok||me.en<c?'disabled':'')+'><b>'+kb(i+1)+n+'</b><span>'+d+'</span><em>'+'⚡'.repeat(c)+'</em></button>').join('')+
-    '<button class="btn pri" id="dvEnd" '+(DU.busy?'disabled':'')+'>Fin du tour'+kb('Entrée')+'</button><button class="btn ghost" id="dvFlee" '+(DU.busy?'disabled':'')+'>Fuir (-20 % bulles)</button>';
+  /* .dvbar : hors de la zone qui défile (position absolue sur #ov-duel, shell_head.html) — rien ne passe jamais par-dessus une carte */
+  DU.keys=acts.map(x=>x[0]);$('dvAct').innerHTML='<div class="dvgrid">'+acts.map(([a,n,d,c,ok],i)=>'<button class="dact" data-a="'+a+'" '+(DU.busy||!ok||me.en<c?'disabled':'')+'><b>'+kb(i+1)+n+'</b><span>'+d+'</span><em>'+'⚡'.repeat(c)+'</em></button>').join('')+
+    '</div><div class="dvbar"><button class="btn ghost'+(DU.fleeT?' arm':'')+'" id="dvFlee" '+(DU.busy?'disabled':'')+'>'+(DU.fleeT?'Confirmer : fuir (-20 %)':'Fuir (-20 %)')+'</button><button class="btn pri" id="dvEnd" '+(DU.busy?'disabled':'')+'>Fin du tour'+kb('Entrée')+'</button></div>';
 }
 function gxBindUI(){
   $('dvFoes').onclick=e=>{const b=e.target.closest('[data-f]');if(b&&DU&&DU.foes[+b.dataset.f].hp>0){DU.sel=+b.dataset.f;renderDuel();}};
-  $('dvAct').onclick=e=>{const b=e.target.closest('button');if(!b||!DU)return;if(b.id==='dvEnd')duelEndTurn();else if(b.id==='dvFlee')duelFlee();else if(b.dataset.a)duelAct(b.dataset.a);};
+  /* Fuir coûte 20 % : un appui l'arme (3 s), un second appui, au moins 350 ms plus tard (pas un rebond du pouce), la confirme */
+  $('dvAct').onclick=e=>{const b=e.target.closest('button');if(!b||!DU)return;const t=performance.now(),D=DU;
+    if(b.id==='dvFlee'){if(!D.fleeT){D.fleeT=t;renderDuel();setTimeout(()=>{if(DU===D&&D.fleeT===t){D.fleeT=0;renderDuel();}},3000);}else if(t-D.fleeT>=350)duelFlee();return;}
+    if(D.fleeT){D.fleeT=0;renderDuel();}
+    if(b.id==='dvEnd')duelEndTurn();else if(b.dataset.a)duelAct(b.dataset.a);};
 }
