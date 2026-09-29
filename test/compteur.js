@@ -41,6 +41,7 @@ const TIMERS = [];
 /* avance moyenne d'un caractere, en em. 0,50 : police etroite ; 0,68 : police large. */
 let EM = 0.50;
 const FILLS = [];
+const RECTS = [];
 
 const pxOf = f => { const m = /(\d+(?:\.\d+)?)px/.exec(String(f || '')); return m ? parseFloat(m[1]) : 12; };
 function mkCtx() {
@@ -49,10 +50,11 @@ function mkCtx() {
     createImageData: (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
     getImageData: (x, y, w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
     createRadialGradient: () => grad, createLinearGradient: () => grad, createPattern: () => ({}),
-    font: '12px x', textAlign: 'left', textBaseline: 'top', globalAlpha: 1,
+    font: '12px x', textAlign: 'left', textBaseline: 'top', globalAlpha: 1, fillStyle: '#000',
     measureText: s => ({ width: String(s || '').length * EM * pxOf(base.font) }),
     fillText: (s, x, y) => { const t = String(s); FILLS.push({ s: t, x, y, w: t.length * EM * pxOf(base.font) }); },
     strokeText: (s, x, y) => { const t = String(s); FILLS.push({ s: t, x, y, w: t.length * EM * pxOf(base.font) }); },
+    fillRect: (x, y, w, h) => { RECTS.push({ x, y, w, h, fill: String(base.fillStyle) }); },
   };
   return new Proxy(base, { get: (t, p) => (p in t ? t[p] : () => {}), set: (t, p, v) => (t[p] = v, true) });
 }
@@ -116,15 +118,24 @@ function drawBlock(o) {
      617x1351 de surface pour 411x900 de dessin, donc PS 1.50. */
   call(`W=${o.W};H=${o.H};PS=${o.PS == null ? 1 : o.PS};cv.width=${o.cw || o.W};cv.height=${o.ch || o.H};`);
   call(`JSPROFTOP=${JSON.stringify(o.top || [])};FPSV=${o.ips == null ? 53 : o.ips};DIAG_DT=${o.dt == null ? 18.6 : o.dt};DIAG_JS=${o.js == null ? 6.6 : o.js};DIAG_PEAK=${o.peak == null ? 34 : o.peak};DIAG_MARGIN=${o.margin == null ? 0.89 : o.margin};`);
+  call(`inp.touch=${o.deskt ? 'false' : 'true'};`);
   call(o.wk ? `WK={w:1};WKN=${o.wkn == null ? 37 : o.wkn};` : `WK=false;WKN=0;`);
   if (o.noWk) call(`WK=null;WKN=0;`);
   const before = FILLS.length;
+  const rbefore = RECTS.length;
   call('drawHUD()');
   const H = o.H;
-  return FILLS.slice(before).filter(f => f.x === PAD && f.y > H * 0.5);
+  /* sur poste fixe le texte « Dash pret (Espace) » est lui aussi pose a x = pad, tout en bas :
+     ce n'est pas une ligne du bloc de diagnostic, on l'ecarte par son prefixe. */
+  const lines = FILLS.slice(before).filter(f => f.x === PAD && f.y > H * 0.5 && !/^Dash /.test(f.s));
+  lines.rects = RECTS.slice(rbefore);
+  return lines;
 }
 const fits = (l, o) => l.x + l.w <= o.W - PAD + 0.5;
 const WKSTATE = 'worker 37';
+/* Zone interdite du bouton de dash (g3.js:434) : centre (W-62, H-92), rayon 34. */
+const dansDash = (l, o) => (l.x + l.w > o.W - 96) && (l.y > o.H - 126);
+const fond = (L, o) => L.rects.find(r => /rgba\(8,5,18/.test(r.fill) && r.w >= Math.max(...L.map(l => l.w)) - 1 && r.y < Math.min(...L.map(l => l.y)));
 
 /* La ligne « ou : » du joueur : 6 postes, celui du haut est le plus couteux. */
 const TOP = [['render', 6.06, 12], ['glow', 1.28, 4], ['drawHUD', 1.09, 5], ['drawWeather', 1.04, 8], ['drawDistant', 0.92, 3], ['drawLabels', 0.71, 2]];
@@ -145,6 +156,10 @@ const TOP = [['render', 6.06, 12], ['glow', 1.28, 4], ['drawHUD', 1.09, 5], ['dr
   check('S22 : l\'etat de la cuisson est affiche et nomme le worker', L.some(f => f.s.indexOf('cuisson ' + WKSTATE) >= 0), L.map(f => f.s).join(' | ').slice(0, 90));
   const ou = L.find(f => f.s.startsWith('où : '));
   check('S22 : la ligne « où » garde le poste le plus couteux', !!ou && ou.s.indexOf('render 6.06/12') >= 0, ou ? ou.s : 'absente');
+  check('S22 : aucune ligne ne passe SOUS le bouton de dash (centre W-62, H-92, rayon 34)',
+    L.every(l => !dansDash(l, o)), 'y max ' + Math.max(...L.map(l => l.y)) + ' / limite ' + (o.H - 132) + ' · droite max ' + Math.max(...L.map(l => l.x + l.w)) + ' / limite ' + (o.W - 96));
+  check('S22 : le bloc a un fond sombre (lisible sur un terrain clair)', !!fond(L, o),
+    L.rects.filter(r => /rgba\(8,5,18/.test(r.fill)).map(r => `${Math.round(r.w)}×${Math.round(r.h)} en ${Math.round(r.x)},${Math.round(r.y)}`).join(' ') || 'aucun');
 }
 
 /* ================= S2 — meme telephone, police LARGE (0,68 em) ================= */
@@ -172,11 +187,14 @@ const TOP = [['render', 6.06, 12], ['glow', 1.28, 4], ['drawHUD', 1.09, 5], ['dr
 /* ================= S4 — PC large : rien ne doit avoir ete casse ================= */
 {
   const o = { W: 1536, H: 864, DPR: 1, COARSE: false, top: TOP, wk: true };
+  o.deskt = true;
   const L = drawBlock(o);
   check('PC 1536 px : aucune ligne ne depasse', L.every(l => fits(l, o)),
     L.map(l => (l.x + l.w).toFixed(0) + '/' + (o.W - PAD)).join(' '));
   check('PC 1536 px : le bloc reste compact (au plus 4 lignes)', L.length <= 4, L.length + ' lignes');
   check('PC 1536 px : la ligne « où » garde ses 6 postes', L.some(f => f.s.indexOf('drawLabels 0.71/2') > 0), L.map(f => f.s).find(s => s.startsWith('où : ')) || 'absente');
+  check('PC 1536 px : le bloc ne se superpose pas à « Dash prêt (Espace) » (y = H-pad)',
+    L.every(l => l.y <= o.H - PAD - 19.5), 'y max ' + Math.max(...L.map(l => l.y)) + ' / limite ' + (o.H - PAD - 20));
 }
 
 /* ================= S5 — la cuisson sur place est dite, et non pas supposee ================= */

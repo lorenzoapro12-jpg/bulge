@@ -3759,6 +3759,12 @@ function drawHUD(){
        Sans ce mot, une comparaison « avec / sans ?wk=1 » peut comparer deux fois le meme chemin.
        « worker N » : N = chunks recus du worker ; 0 = rien n'est encore passe par lui. */
     const MW=W-pad*2,PX0=narrow?10:12,DYS=narrow?15:16;
+    /* Le bloc est ancre AU-DESSUS des controles du bas, jamais colle au bord : sur tactile le
+       bouton de dash occupe (W-62, H-92) avec un rayon de 34, et sur poste fixe la ligne
+       « Dash pret (Espace) » occupe deja y = H-pad. Colle au bord, le compteur passait SOUS le
+       bouton de dash (constate a l'ecran le 29/09/2026) : « cuisson worker N » etait a moitie
+       masque — soit exactement le mot qu'on est venu lire. */
+    const YB=inp.touch?H-132:H-pad-20;
     const cuis=(typeof WK==='undefined'||WK===null)?'?':(WK?'worker '+WKN:'sur place');
     const seg3=['PS '+PS.toFixed(2),'canvas '+cv.width+'×'+cv.height,'DPR '+DPR,'ref '+REFDT.toFixed(1)+' ms','cuisson '+cuis];
     if(DIAG_MARGIN>=0)seg3.push('marge audio '+DIAG_MARGIN.toFixed(2)+' s');
@@ -3772,13 +3778,20 @@ function drawHUD(){
     let cu=[];for(const s of seg3){if(cu.length&&MWj(cu.concat([s]))>MW){out.push(cu);cu=[];}cu.push(s);}
     if(cu.length)out.push(cu);
     if(typeof JSPROFTOP!=='undefined'&&JSPROFTOP.length)out.push(['où :'].concat(JSPROFTOP.map(q=>q[0]+' '+q[1].toFixed(2)+'/'+q[2].toFixed(0))));
-    const y0=H-pad-(out.length-1)*DYS;
+    const y0=YB-(out.length-1)*DYS,dr=[];
     for(let i=0;i<out.length;i++){let n=out[i].length,p=PX0;c.font='500 '+p+'px '+FD;
       const tex=k=>jn(out[i].slice(0,k))+(k<n?' …':'');
       while(n>1&&c.measureText(tex(n)).width>MW)n--;
-      const t=tex(n),w=c.measureText(t).width;
-      if(w>MW&&p>9){p=Math.max(9,Math.floor(p*MW/w));c.font='500 '+p+'px '+FD;}
-      c.fillText(t,pad,y0+i*DYS);}}
+      const t=tex(n);let w=c.measureText(t).width;
+      if(w>MW&&p>9){p=Math.max(9,Math.floor(p*MW/w));c.font='500 '+p+'px '+FD;w=MW;}
+      dr.push([t,Math.min(w,MW)]);}
+    /* Fond : en gris clair sur un terrain clair le compteur devient illisible (constate a
+       l'ecran). Un bandeau sombre derriere le bloc, pose AVANT le texte, garantit la lecture
+       quel que soit le biome dessous. */
+    let wmax=0;for(const d of dr)if(d[1]>wmax)wmax=d[1];
+    c.fillStyle='rgba(8,5,18,.62)';c.fillRect(pad-6,y0-16,wmax+12,(out.length-1)*DYS+22);
+    c.fillStyle='#8f89b3';
+    for(let i=0;i<out.length;i++)c.fillText(dr[i][0],pad,y0+i*DYS);}
   if(G.help>0){c.globalAlpha=Math.min(1,G.help/60);c.textAlign='center';c.textBaseline='bottom';c.font='500 14px '+FD;c.fillStyle='#e6e2ff';
     const hl=inp.touch?['Pouce gauche : bouger','Pouce droit : viser (auto sinon)','⚡ : dash']:['ZQSD ou flèches : bouger','Souris : viser (auto sinon)','Espace : dash'];
     if(narrow)hl.forEach((s,i)=>c.fillText(s,W/2,H-250+i*22));else c.fillText(hl.join('   ·   '),W/2,H-44);c.globalAlpha=1;}
