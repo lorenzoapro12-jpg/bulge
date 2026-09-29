@@ -142,6 +142,10 @@ function* drawPaths(g,c){
     /* bornes lumineuses le long du chemin : repères de voyage */
     for(const q of A){if(q.k%6!==3)continue;const dx=q.bx-q.ax,dy=q.by-q.ay,l=Math.hypot(dx,dy)||1,sd=(q.e%2?1:-1)*(st[2]/2+14),x=q.bx-dy/l*sd,y=q.by+dx/l*sd;
       radial(g,x,y,22,BIO[b].a,.28);g.fillStyle='#10101c';g.beginPath();g.arc(x,y,5,0,TAU);g.fill();g.fillStyle=BIO[b].a;g.beginPath();g.arc(x,y,2.4,0,TAU);g.fill();yield;}}
+  /* chemin principal (WD.mainE) : un fil de braise continu par-dessus, quel que soit le biome */
+  const Mn=L.filter(q=>WD.mainE.has(q.e));
+  if(Mn.length){g.beginPath();let lx=NaN,ly=NaN;for(const q of Mn){if(q.ax!==lx||q.ay!==ly)g.moveTo(q.ax,q.ay);g.lineTo(q.bx,q.by);lx=q.bx;ly=q.by;}
+    g.strokeStyle='rgba(255,138,45,.2)';g.lineWidth=34;g.stroke();g.strokeStyle='rgba(255,176,96,.8)';g.lineWidth=6;g.stroke();yield;}
   g.lineCap='butt';g.lineJoin='miter';
 }
 /* ---------- sol des monuments ---------- */

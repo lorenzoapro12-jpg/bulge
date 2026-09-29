@@ -602,6 +602,9 @@ const sub = (f, args) => { const r = cp.spawnSync(process.execPath, [path.join(_
 { const r = sub('compteur.js', REF ? ['--ref=' + REF] : []);
   check('compteur : lisible sur téléphone et il dit qui cuit le monde, worker ou sur place (test/compteur.js)', r.ok,
     (r.out.match(/ECHEC [^\n]*/g) || []).map(s => s.trim()).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
+{ const r = sub('colonne.js', REF ? ['--ref=' + REF] : []);
+  check('colonne : chemin principal = plus court chemin 0 → Hypernoyau, 3 cœurs jalons dessus, 3 biomes distincts (test/colonne.js)', r.ok,
+    (r.out.match(/ECHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim()).join(' | ') || (r.out.match(/\d+ graines : [^\n]*/) || [''])[0]); }
 
 /* ---------- verdict ---------- */
 console.log('\n---------------- VERDICT ----------------');
