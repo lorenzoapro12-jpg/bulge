@@ -588,6 +588,56 @@ scenario('prologue : un joueur qui ne dashe ni ne lance sa compétence n est pas
   } finally { win.__SIM_INPUT = inputFn; call(tuto === undefined ? 'delete meta.tuto' : 'meta.tuto=' + JSON.stringify(tuto)); }
 });
 
+/* chantier G — la vraie fin : aucun monument dans le biome core (gw.js), donc loreCount() plafonnait à 21/24 :
+   chapitre V, épilogue et deux fins inatteignables. Les 3 échos du Cœur sont révélés par l'Hypernoyau, un par phase.
+   Sauvegarde d'avant (lore sans clé core, 21 échos) -> vrai combat (updBoss, bossPhase, bossDie, endRun) -> 24, c5, S.ending.
+   Puis un 2e combat : lore.core reste à 3 (jamais de doublon). */
+scenario('chantier G : 21 échos + Hypernoyau vaincu ⇒ 24/24, chapitre V, S.ending ; échos du Cœur uniques, lore.core ≤ 3', () => {
+  const keep = call('JSON.stringify({lore:meta.lore,chaps:meta.chaps,pend:meta.pend})');
+  try {
+    start('bal', false);
+    const old = {}; for (const b of ['plains', 'floral', 'sea', 'sky', 'cyber', 'urban', 'ice']) old[b] = 3;
+    call(`meta.lore=JSON.parse(${JSON.stringify(JSON.stringify(old))});delete meta.chaps.c5;meta.pend=meta.pend.filter(x=>x!=='c5');`);
+    const lc0 = call('loreCount()'), nCore = call('(LORE.core||[]).length');
+    call(`var __glN=0,__glMax=0;if(typeof gainLore==='function'){const __o=gainLore;gainLore=function(b,c){if(b==='core')__glN++;return __o(b,c);};}`);
+    const fight = () => {
+      let end = null; win.__SIM_END = w => { end = w; };
+      call('startBossFight()');
+      const subs = call('JSON.stringify(G.gs.subs.filter(q=>q.who.indexOf("Le Cœur")>=0).map(q=>q.calm))');
+      for (let i = 0; i < 20000 && end === null; i++) {
+        call(`{const P=G.p;P.inv=99;P.hp=P.mhp;const B=G.boss;if(B&&!B.dead&&G.state==='play'&&${i % 20 === 0})hurtBoss(B.mhp*.02,true);__glMax=Math.max(__glMax,meta.lore.core||0);}`);
+        STEP(); advance(1000 / 60);
+      }
+      win.__SIM_END = null;
+      return { end, subs, core: call('meta.lore.core||0'), lc: call('loreCount()'), ending: !!call('G.gs.ending'), phase: call('G.boss?G.boss.phase:0') };
+    };
+    const f1 = fight();
+    const c5 = !!call(`!!meta.chaps.c5||meta.pend.includes('c5')`), n1 = call('__glN');
+    start('bal', false);
+    const f2 = fight(), n2 = call('__glN') - n1, mx = call('__glMax');
+    const json = call('JSON.parse(JSON.stringify(meta)).lore.core');
+    const ok = lc0 === 21 && nCore === 3 && f1.end === true && f1.phase === 3 && f1.lc === 24 && f1.core === 3 && c5 && f1.ending && n1 === 3
+      && f2.end === true && f2.core === 3 && f2.lc === 24 && n2 === 3 && mx === 3 && json === 3;
+    return { ok, detail: 'avant=' + lc0 + ' LORE.core=' + nCore + ' | combat 1 : fin=' + f1.end + ' phase=' + f1.phase + ' récit=' + f1.lc + ' core=' + f1.core + ' appels=' + n1 + ' c5=' + c5 + ' S.ending=' + f1.ending
+      + ' | combat 2 : fin=' + f2.end + ' core=' + f2.core + ' récit=' + f2.lc + ' appels=' + n2 + ' | max lore.core observé=' + mx + ' sauvegardé=' + json };
+  } finally { call(`{const k=JSON.parse(${JSON.stringify(keep)});meta.lore=k.lore;meta.chaps=k.chaps;meta.pend=k.pend;}`); }
+});
+scenario('chantier G : un écho de monument passe toujours par le même chemin (1 écho, sous-titre différé au calme) ; celui du Cœur s affiche en combat', () => {
+  const keep = call('JSON.stringify(meta.lore)');
+  try {
+    start('bal', false);
+    call(`meta.lore={};G.gs.subs=[];`);
+    const L = call('JSON.stringify({t:WD.lms[0].t})'), t = JSON.parse(L).t;
+    call('wakeEcho(WD.lms[0],0)');
+    const m = JSON.parse(call(`JSON.stringify({n:meta.lore[${JSON.stringify(t)}]||0,e:G.gs.echo,calm:G.gs.subs.map(q=>q.calm)})`));
+    call('G.gs.subs=[];startBossFight()');
+    const b = JSON.parse(call(`JSON.stringify({n:meta.lore.core||0,e:G.gs.echo,subs:G.gs.subs.map(q=>[q.who,q.calm])})`));
+    const bs = b.subs.find(x => x[0].indexOf('Le Cœur') >= 0);
+    const ok = m.n === 1 && m.e === 1 && m.calm.length === 1 && m.calm[0] === true && b.n === 1 && b.e === 1 && !!bs && bs[1] === false;
+    return { ok, detail: 'monument ' + t + ' : écho=' + m.n + ' S.echo=' + m.e + ' calm=' + m.calm + ' | Hypernoyau : core=' + b.n + ' S.echo=' + b.e + ' sous-titre=' + JSON.stringify(bs || null) };
+  } finally { call(`meta.lore=JSON.parse(${JSON.stringify(keep)})`); }
+});
+
 /* hooks du harnais : ne doivent pas avoir disparu */
 check('hooks : SIMF / __SIM / __SIM_INPUT / __SIM_PICK / __SIM_END utilisés par le jeu',
   call('typeof SIMF') === 'function' && ['__SIM_END', '__SIM_PICK', '__SIM_INPUT'].every(h => code.includes('window.' + h)) && code.includes('window.__SIM'));

@@ -115,10 +115,14 @@ function gsTick(){
   }
 }
 function wakeEcho(L,i){
-  const S=G.gs,P=G.p,b=L.t,n=meta.lore[b]||0,B=BIO[b]||BIO.plains;S.lm[i]=1;S.echo++;
+  const S=G.gs,P=G.p,B=BIO[L.t]||BIO.plains;S.lm[i]=1;S.echo++;
   ringFX(L.x,L.y,20,L.R*1.3,B.a,40,5);sparks(L.x,L.y,B.a,40,6);SFX.evo();G.flash=.25;
-  P.bub+=4;checkLevel();
-  if(n<3){meta.lore[b]=n+1;S.newLore++;gsShard(12);toast('Écho retrouvé · '+B.n+' '+(n+1)+'/3');gsSay(LORE[b][n],'Écho · '+B.n+'  '+(n+1)+'/3',B.a,1,1);
+  P.bub+=4;checkLevel();gainLore(L.t,1);
+}
+/* acquisition d'un écho du biome b (monument, ou Hypernoyau pour 'core') ; calm : sous-titre différé hors combat */
+function gainLore(b,calm){
+  const S=G.gs,n=meta.lore[b]||0,B=BIO[b]||BIO.plains;
+  if(n<3){meta.lore[b]=n+1;S.newLore++;gsShard(12);toast('Écho retrouvé · '+B.n+' '+(n+1)+'/3');gsSay(LORE[b][n],'Écho · '+B.n+'  '+(n+1)+'/3',B.a,1,calm);
     const lc=loreCount();if(lc===LORE_N){queueChap('c5');toast('Les 24 échos sont réunis.');}}
   else{gsShard(5);toast('+5 ◇');}
   misEvt('echo',1);saveMeta();
