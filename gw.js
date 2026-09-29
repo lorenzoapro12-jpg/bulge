@@ -9,7 +9,7 @@ const BIO={
   sky:{n:'Archipel céleste',sub:'Au-dessus des nuages',g:'#223673',a:'#cfe0ff',b:'#ffffff',wea:'wind',far:'clouds',en:{sniper:2.5,orbit:2,spread:1.5,pop:1}},
   cyber:{n:'Grille néon',sub:'Le réseau te voit',g:'#0a0822',a:'#2de2ff',b:'#ff2d95',wea:'data',far:'grid',en:{gatling:2.5,sniper:1.5,spread:2,mite:1.5}},
   urban:{n:'Mégapole',sub:'Pluie acide et néons',g:'#13131f',a:'#ffc93c',b:'#ff2d95',wea:'rain',far:'lights',en:{spread:2.5,spike:2,gatling:1.5,pop:1.5,sniper:1}},
-  ice:{n:'Glacier fractal',sub:'Tout se fige',g:'#0f2d42',a:'#b5f3ff',b:'#ffffff',wea:'snow',far:'mist',en:{ring:2.5,spread:1.5,orbit:1.5,spike:1}},
+  ice:{n:'Glacier fractal',sub:'Tout se fige',g:'#0f2d42',a:'#b5f3ff',b:'#ffffff',wea:'snow',far:'aurora',en:{ring:2.5,spread:1.5,orbit:1.5,spike:1}},
   core:{n:'Le Cœur',sub:'Territoire de l’Hypernoyau',g:'#300a10',a:'#ff3355',b:'#ff8a2d',wea:'embers',far:'pulse',en:{spike:2,ring:2,spawner:1.5,gatling:1.5,sniper:1}},
 };
 const BTYPES=['plains','floral','sea','sky','cyber','urban','ice'];

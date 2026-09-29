@@ -700,6 +700,10 @@ const sub = (f, args) => { const r = cp.spawnSync(process.execPath, [path.join(_
   check('embranchements : chaque arête classée une fois, branches variées par carrefour, annonce lisible depuis le carrefour et vraie au mètre près, contenu présent (test/embranchements.js)', r.ok,
     (r.out.match(/ECHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim()).join(' | ') || (r.out.match(/\d+ graines : [^\n]*/) || [''])[0]); }
 
+{ const r = sub('decor-vivant.js', REF ? ['--ref=' + REF] : []);
+  check('décor vivant : la faune fuit le danger, la colonne n’apparaît que sur un biome non visité, le halo croît vers le Cœur, le pool de marques ne croît pas (test/decor-vivant.js)', r.ok,
+    (r.out.match(/ÉCHEC [^\n]*/g) || []).slice(0, 2).map(s => s.trim().slice(0, 200)).join(' | ') || r.out.split('\n').filter(l => /^OK/.test(l)).length + ' critères OK'); }
+
 /* ---------- verdict ---------- */
 console.log('\n---------------- VERDICT ----------------');
 let all = true;
