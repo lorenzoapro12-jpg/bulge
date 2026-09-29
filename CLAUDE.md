@@ -81,8 +81,8 @@ Outils complémentaires :
 - `node test/cuisson.js` — garde-fou de la cuisson du monde (horloge virtuelle « téléphone »,
   vraie boucle `frame()`) : aucun chunk entier hors budget, travail continu et unité indivisible
   plafonnés. `--ref=` pour l'ancien code, `--k=` pour le coût d'une opération. Appelé par headless.js.
-- `node test/art.js` — séquence BRUTE des opérations canvas de 378 chunks comparée à `93b8cfe`
-  (avant PERF-2) : toute modification de l'art du monde échoue. Appelé par headless.js.
+- `node test/art.js` — séquence BRUTE des opérations canvas de 378 chunks comparée à `e3a2c93` (chemin principal ; avant : `93b8cfe`,
+  avant PERF-2) : toute modification de l'art du monde échoue. Appelé par headless.js.
 - `node test/unused.js` — recensement du code mort (identifiants, `SFX`, `id` HTML,
   classes CSS, médias). À lancer avant d'affirmer qu'un symbole est utilisé.
 - `node test/compteur.js` — garde-fou du compteur de diagnostic (`meta.fps`) : chaque ligne doit

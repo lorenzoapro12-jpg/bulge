@@ -4,7 +4,7 @@
    produisent-ils EXACTEMENT la même séquence d'opérations canvas qu'à la référence — hors des
    biomes qu'on a explicitement le droit de retoucher ?
 
-   node test/art.js                  arbre de travail contre la référence 93b8cfe (avant PERF-2)
+   node test/art.js                  arbre de travail contre la référence e3a2c93 (chemin principal)
    node test/art.js --ref=<commit>   autre référence
    node test/art.js --cible=<commit> compare ce commit au lieu de l'arbre de travail
    node test/art.js --perim=a,b      autre périmètre ; --perim= (vide) : tout doit être identique
@@ -26,13 +26,17 @@
 const fs = require('fs'), path = require('path'), vm = require('vm'), cp = require('child_process'), crypto = require('crypto');
 const ROOT = path.resolve(__dirname, '..');
 const ARG = k => { const a = process.argv.find(x => x === '--' + k || x.startsWith('--' + k + '=')); return a ? (a.split('=')[1] || true) : null; };
-const REF = ARG('ref') || '93b8cfe';
+/* Référence avancée le 29/09/2026 de 93b8cfe (avant PERF-2) à e3a2c93 (chantier A, colonne vertébrale) :
+   ce commit change VOLONTAIREMENT l'art de 66 chunks sur 378 contre 0837805 (30 par les cœurs ancrés sur le
+   chemin principal, qui déplacent obstacles et monuments ; 36 par le fil de braise de drawPaths). 0837805
+   passait contre 93b8cfe hors urban+sky ; e3a2c93 est désormais l'état figé, périmètre vide. */
+const REF = ARG('ref') || 'e3a2c93';
 /* Biomes dont l'art a été VOULU différent de la référence dans cette passe (GRAPHISMES.md).
    Doit lister EXACTEMENT ce qui a été retouché : trop large, la garde ne protège plus rien ;
    trop étroit, elle signale un faux débordement (c'est arrivé : le ciel avait été retouché
    alors que la liste ne contenait que la ville). Vérifié le 27/09/2026 : hors urban+sky,
-   263/263 chunks hors périmètre identiques octet pour octet. */
-const PERIM_DEF = ['urban','sky'];
+   263/263 chunks hors périmètre identiques octet pour octet. Vide depuis e3a2c93 : tout est figé. */
+const PERIM_DEF = [];
 const PERIM = ARG('perim') === null ? PERIM_DEF : (ARG('perim') === true ? [] : String(ARG('perim')).split(',').filter(Boolean));
 const MARGE = 160;
 const ORDER = ['g1.js', 'gw.js', 'gw2.js', 'g2.js', 'gs.js', 'gc.js', 'gi.js', 'gx.js', 'gt.js', 'gv.js', 'g3.js', 'g4.js'];
