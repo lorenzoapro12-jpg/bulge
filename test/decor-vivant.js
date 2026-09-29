@@ -2,7 +2,7 @@
 /* =========================================================
    DÉCOR VIVANT (chantier E2) : les trois lectures du monde qui ont un ÉTAT VÉRIFIABLE.
 
-   node test/decor-vivant.js             vérifie le code courant, puis lance le TÉMOIN (--ref=HEAD)
+   node test/decor-vivant.js             vérifie le code courant, puis lance le TÉMOIN (--ref=fafe111, le commit d'avant le chantier)
    node test/decor-vivant.js --ref=REF   vérifie le code d'un commit (sans témoin)
    node test/decor-vivant.js --sans-temoin
 
@@ -140,15 +140,20 @@ check('N3 : le pool de marques du joueur ne croît pas', () => {
 });
 
 const bad = res.filter(r => r.err);
+/* Le temoin vise le commit D AVANT le chantier, jamais « HEAD ». Dans le worktree de l auteur, HEAD
+   etait encore l ancien code, donc le temoin avait un sens ; APRES LA FUSION, HEAD devient le code
+   neuf, le temoin passe — et le test se declarait invalide en sortant en echec alors que tout allait
+   bien. Constaté le 29/09/2026 sur l arbre fusionne : « ECHEC PARTIEL — 4 critères OK ». */
+const BASE = 'fafe111';
 let temoin = true;
 if (!REF && !ARG('sans-temoin')) {
-  console.log('--- TÉMOIN : le même test sur HEAD doit échouer ---');
-  const r = cp.spawnSync(process.execPath, [__filename, '--ref=HEAD'], { encoding: 'utf8' });
+  console.log('--- TÉMOIN : le même test sur ' + BASE + ' (avant le chantier) doit échouer ---');
+  const r = cp.spawnSync(process.execPath, [__filename, '--ref=' + BASE], { encoding: 'utf8' });
   process.stdout.write(r.stdout.split('\n').map(l => l && '   | ' + l).join('\n') + '\n');
   const need = ['N2', 'N4', 'gradient'];
-  for (const k of need) if (!new RegExp('^ECHEC ' + k, 'm').test(r.stdout)) { temoin = false; console.log(`TÉMOIN INVALIDE : « ${k} » passe déjà sur HEAD`); }
-  if (r.status !== 1) { temoin = false; console.log('TÉMOIN INVALIDE : code de sortie ' + r.status + ' sur HEAD'); }
-  if (temoin) console.log('témoin : HEAD échoue sur N2, N4 et le gradient, avec leur cause');
+  for (const k of need) if (!new RegExp('^ECHEC ' + k, 'm').test(r.stdout)) { temoin = false; console.log(`TÉMOIN INVALIDE : « ${k} » passe déjà sur ${BASE}`); }
+  if (r.status !== 1) { temoin = false; console.log('TÉMOIN INVALIDE : code de sortie ' + r.status + ' sur ' + BASE); }
+  if (temoin) console.log('témoin : ' + BASE + ' échoue sur N2, N4 et le gradient, avec leur cause');
 }
 console.log('-----------------------------------------');
 console.log(bad.length || !temoin ? 'ECHEC' : 'TOUT PASSE');
