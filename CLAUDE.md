@@ -85,6 +85,13 @@ Outils complémentaires :
   (avant PERF-2) : toute modification de l'art du monde échoue. Appelé par headless.js.
 - `node test/unused.js` — recensement du code mort (identifiants, `SFX`, `id` HTML,
   classes CSS, médias). À lancer avant d'affirmer qu'un symbole est utilisé.
+- `node test/compteur.js` — garde-fou du compteur de diagnostic (`meta.fps`) : chaque ligne doit
+  TENIR dans la largeur de dessin (`W`, pas la surface du canvas), y compris en police large et
+  à 320 px de large ; et l'état de la cuisson doit être affiché (`cuisson worker N` / `sur place`),
+  parce que sans worker le jeu retombe silencieusement sur la cuisson sur place — deux mesures
+  « avec / sans `?wk=1` » peuvent alors comparer deux fois le même chemin sans que rien ne le dise.
+  Vérifié côté navigateur par `bulge-verif/compteur-ecran.py <page> [--wk]`, qui intercepte les
+  `fillText` réellement émis et les mesure avec les vraies métriques de la police.
 
 ⚠️ **Ne jamais conclure sur la performance depuis le harnais.** `node test/headless.js`
 exécute le jeu dans un `vm.createContext` : chaque accès à une globale y passe par un

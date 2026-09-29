@@ -599,6 +599,9 @@ const sub = (f, args) => { const r = cp.spawnSync(process.execPath, [path.join(_
 { const r = sub('degradation.js', REF ? ['--ref=' + REF] : []);
   check('dégradation : les postes décoratifs cèdent sous budget, jamais le monde ni le joueur (test/degradation.js)', r.ok,
     (r.out.match(/ECHEC [^\n]*/g) || []).map(s => s.trim()).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
+{ const r = sub('compteur.js', REF ? ['--ref=' + REF] : []);
+  check('compteur : lisible sur téléphone et il dit qui cuit le monde, worker ou sur place (test/compteur.js)', r.ok,
+    (r.out.match(/ECHEC [^\n]*/g) || []).map(s => s.trim()).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
 
 /* ---------- verdict ---------- */
 console.log('\n---------------- VERDICT ----------------');
