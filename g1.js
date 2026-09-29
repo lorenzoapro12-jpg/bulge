@@ -186,10 +186,20 @@ function musInit(ac){
   /* bus « pompé » par la grosse caisse (nappe, basse, arpège) */
   AU.duck=ac.createGain();AU.duck.connect(AU.mLP);
   AU.st={};let sid=0;AU.buses={};for(const k of ['pad','bass','arp','lead','drums','amb']){const g=ac.createGain();g.__id=sid++;g.gain.value=0;g.connect(k==='drums'||k==='lead'||k==='amb'?AU.mLP:AU.duck);AU.st[k]=g;}
-  const src=ac.createBufferSource();src.buffer=AU.nb;src.loop=true;AU.ambF=ac.createBiquadFilter();AU.ambF.type='bandpass';AU.ambF.frequency.value=700;
-  AU.ambG=ac.createGain();AU.ambG.gain.value=.05;src.connect(AU.ambF);AU.ambF.connect(AU.ambG);AU.ambG.connect(AU.st.amb);src.start();
-  AU.bio='plains';AU.pal=PAL.plains;AU.tier=0;AU.tierT=0;AU.mel=null;AU.layer=AU.layer||0;
+  /* une nappe d'ambiance par type (AMB), toutes nourries par le même bruit : leur dosage suit biomeMix, pas AU.pal */
+  const src=ac.createBufferSource();src.buffer=AU.nb;src.loop=true;AU.ambL={};
+  for(const k in AMB){const a=AMB[k],f=ac.createBiquadFilter(),g=ac.createGain();f.type=a[0];f.frequency.value=a[1];f.Q.value=a[2];g.gain.value=k==='wind'?a[3]:0;src.connect(f);f.connect(g);g.connect(AU.st.amb);AU.ambL[k]=g;}
+  src.start();
+  AU.bio='plains';AU.pal=PAL.plains;AU.bm=null;AU.tier=0;AU.tierT=0;AU.mel=null;AU.layer=AU.layer||0;
 }
+/* Fondu sonore des frontières. Le poids audio d'un biome EST son poids dans biomeMix(P.x,P.y) (gw.js) : AU.bm est
+   la valeur renvoyée telle quelle, relevée une fois par temps (musMix, tous les 4 pas = 0,48 s, ~2 Hz) — assez
+   pour un fondu de ~260 px lissé par setTargetAtTime, et un seul parcours des ~30 sites par temps.
+   Continu : nappes d'ambiance (AMB) et coupure du filtre (cut, moyenne géométrique). Franc, au basculement de
+   G.biome (setBiome -> AU.pal à la mesure) : tonalité, gamme, grille, mélodie, arpège, lead, batterie. */
+function musBM(S){AU.bm=(S.tier!==-1&&typeof biomeMix==='function'&&typeof WD!=='undefined'&&WD&&WD.sites)?biomeMix(G.p.x,G.p.y):null;}
+function musW(b){const m=AU.bm;if(!m)return PAL[b]===AU.pal?1:0;let w=0;for(const e of m)if(e.b===b)w+=e.w;return w;}
+function musCut(){const m=AU.bm;if(!m)return AU.pal.cut;let l=0,n=0;for(const e of m)if(PAL[e.b]){l+=e.w*Math.log(PAL[e.b].cut);n+=e.w;}return n?Math.exp(l/n):AU.pal.cut;}
 function setBiome(b){if(PAL[b])AU.bio=b;}
 function setMusic(l){AU.layer=l;}
 /* ---------- instruments ---------- */
@@ -256,7 +266,8 @@ function musMix(S,t,brk){
   K.forEach((k,i)=>AU.st[k].gain.setTargetAtTime(m[i]*(S.dead?.3:1)*(brk&&k==='drums'?.35:1)*(brk&&k==='bass'?.6:1),t,S.tier>AU.tier?.25:1.2));
   let cut=S.dead?350:S.pause?700:S.low?1100:S.tier===-1?6000:S.tier===-2?4200:18000;if(brk)cut=Math.min(cut,2600);if(AU.trans)cut=900;
   AU.mLP.frequency.setTargetAtTime(cut,t,AU.trans?.5:.35);AU.rsend.gain.setTargetAtTime(S.tier===-2?1.7:1,t,1.5);
-  const a=AMB[AU.pal.amb];AU.ambF.type=a[0];AU.ambF.frequency.setTargetAtTime(a[1],t,1);AU.ambF.Q.value=a[2];AU.ambG.gain.setTargetAtTime(a[3],t,1);
+  musBM(S);const aw={};for(const k in AMB)aw[k]=0;for(const b in PAL)aw[PAL[b].amb]+=musW(b);
+  for(const k in AMB)AU.ambL[k].gain.setTargetAtTime(AMB[k][3]*aw[k],t,.35);
 }
 /* souffle (montée ou descente) et cymbale : les ponctuations des transitions */
 function swell(t,dur,vol,up){const ac=AU.ac,s=ac.createBufferSource();s.buffer=AU.nb;s.loop=true;const f=ac.createBiquadFilter();f.type='bandpass';f.Q.value=.8;
@@ -305,7 +316,7 @@ function schedStep(s,t){
   if(st%4===0)musMix(S,t,brk);
   const prog=sec===2?[P.prog[2],P.prog[3],P.prog[0],P.prog[1]]:P.prog,bar=rel%4,k=P.key,ch=prog[bar].map(n=>n+k),root=ch[0],nxt=prog[(bar+1)%4][0]+k,vel=.8+Math.random()*.2;
   const sw=(P.dr==='break'&&st%2===1)?STEP*.14:0,ts=t+sw;
-  if(st===0&&!TR)iPad(t,ch,STEP*16,P.cut*(T>=2?1.4:1)*(brk?.6:1));
+  if(st===0&&!TR)iPad(t,ch,STEP*16,musCut()*(T>=2?1.4:1)*(brk?.6:1));
   if(sec===4&&st===0&&pb===30)swell(t,STEP*32,.12,true);
   if(TR){if(st===0)dKick(t,.4);if(st>=8&&st%2===0)dTom(t,260-(st-8)*18,.22);}
   else if(T>=0){
@@ -330,7 +341,7 @@ function schedStep(s,t){
   /* arpège */
   const aStep=T===-2?8:T<=0?4:2;
   if(!TR&&st%aStep===0){const seq=[0,1,2,3,2,1],n=ch[seq[(st/aStep)%seq.length]%ch.length]+((st>>3)%2?12:0),p=((st%8)-3.5)/5;
-    if(P.arp==='bell'||T===-2)iBell(ts,n,.07*(T>=2?1:.8),AU.st.arp,p);else iPluck(ts,n,.05,AU.st.arp,p,P.cut*.8);}
+    if(P.arp==='bell'||T===-2)iBell(ts,n,.07*(T>=2?1:.8),AU.st.arp,p);else iPluck(ts,n,.05,AU.st.arp,p,musCut()*.8);}
   /* mélodie : thème, variation à l'octave, pont transformé ; silencieuse pendant les respirations */
   if(!brk&&(T>=1||T===-1||(T===0&&pb%8>=2&&pb%8<6))){const M=sec===2?AU.mel2:AU.mel,i=bar*16+st,m=M[i];
     if(m>=0){let len=1;while(len<10&&M[(i+len)%64]===-1)len++;iLead(t,ch[m%3]+(m>=3?12:0)+(T>=3?12:0)+(sec===1&&st>=8?12:0),STEP*len*.95,.06,P.lead);}}

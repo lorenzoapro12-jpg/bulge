@@ -700,6 +700,10 @@ const sub = (f, args) => { const r = cp.spawnSync(process.execPath, [path.join(_
   check('embranchements : chaque arête classée une fois, branches variées par carrefour, annonce lisible depuis le carrefour et vraie au mètre près, contenu présent (test/embranchements.js)', r.ok,
     (r.out.match(/ECHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim()).join(' | ') || (r.out.match(/\d+ graines : [^\n]*/) || [''])[0]); }
 
+{ const r = sub('frontiere-sonore.js', REF ? ['--ref=' + REF] : []);
+  check('frontière sonore : le poids audio est celui de biomeMix, il monte avant la frontière sans repasser par 0 (test/frontiere-sonore.js)', r.ok,
+    (r.out.match(/ÉCHEC [^\n]*/g) || []).slice(0, 2).map(s => s.trim()).join(' | ') || (r.out.match(/\d+ traversées[^\n]*/) || [''])[0]); }
+
 /* ---------- verdict ---------- */
 console.log('\n---------------- VERDICT ----------------');
 let all = true;
