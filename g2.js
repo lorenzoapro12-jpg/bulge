@@ -416,7 +416,7 @@ function spawnBoss(){
   const A=G.arena,B={x:A.x,y:A.y-60,vx:0,vy:0,r:66,hp,mhp:hp,phase:1,t:0,trans:0,spawn:110,flash:0,ang:0,dead:false,gone:false,nodes:[],dir:1};
   for(let k=0;k<6;k++){const nh=14*hpMul();B.nodes.push({x:0,y:0,r:15,hp:nh,mhp:nh,dead:false,cd:rr(60,160),flash:0});}
   G.boss=B;
-  banner("L'Hypernoyau",'Le cœur de la colonie se réveille',COL.rd,150);setMusic(2);SFX.bossIn();shake(.5);G.glitch=30;gsBoss(0);
+  banner("L'Hypernoyau",'Le cœur de la colonie se réveille',COL.rd,150);setMusic(2);SFX.bossIn();shake(.5);G.glitch=30;gsBoss(0);gainLore('core');
 }
 function bossHittable(){const B=G.boss;return !!B&&B.spawn<=0&&B.trans<=0&&!B.dead;}
 function hurtBoss(d,quiet){const B=G.boss;if(!bossHittable())return;if(R()<G.p.crit)d*=G.p.critM||2.5;B.hp-=d;B.flash=3;if(!quiet)SFX.hit();if(B.hp<=0){B.hp=0;bossDie();}}
@@ -424,7 +424,7 @@ function hitNode(n,d){n.hp-=d;n.flash=4;SFX.hit();if(n.hp<=0&&!n.dead){n.dead=tr
 function bossPhase(n){
   const B=G.boss;B.phase=n;B.trans=90;B.t=0;
   for(const b of G.eb)sparks(b.x,b.y,b.col,1,1.5,12);G.eb=[];
-  G.glitch=45;shake(.9);G.freeze=8;SFX.phase();setMusic(n===2?3:4);gsBoss(n-1);
+  G.glitch=45;shake(.9);G.freeze=8;SFX.phase();setMusic(n===2?3:4);gsBoss(n-1);gainLore('core');
   banner('Phase '+n,n===2?'Fureur : ses bulles te traquent':'Confinement : la membrane se referme',n===2?COL.mg:COL.rd,130);
   ringFX(B.x,B.y,B.r,B.r*6,COL.rd,40,6);
   if(n===3){G.arena.rt=440;for(const nd of B.nodes)if(!nd.dead){nd.dead=true;shards(nd.x,nd.y,COL.or,8,4,nd.r);}}
