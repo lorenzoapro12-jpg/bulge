@@ -10,7 +10,13 @@ const SKL={
   trou:{n:'Singularité',ic:'◉',col:'#a45cff',cd:[660,560,460],d:'Lance un trou noir au viseur : il aspire et broie les ennemis.'},
   shield:{n:'Égide',ic:'⬡',col:'#7dff4a',cd:[660,560,460],d:'Bouclier qui absorbe tout et renvoie les tirs ennemis.'},
   salve:{n:'Salve',ic:'✶',col:'#ff8a2d',cd:[480,410,340],d:'Nuée de missiles à tête chercheuse.'},
-  blink:{n:'Clignement',ic:'⟿',col:'#ff2d95',cd:[280,230,180],d:'Téléportation vers le viseur, explosion à l’arrivée.'}};
+  blink:{n:'Clignement',ic:'⟿',col:'#ff2d95',cd:[280,230,180],d:'Téléportation vers le viseur, explosion à l’arrivée.'},
+  tour:{n:'Tourelle',ic:'♜',col:'#c0c8ff',cd:[600,520,440],d:'Pose une tourelle qui tire seule sur l’ennemi le plus proche.',dd:'Aucun effet en duel'},
+  siph:{n:'Siphon',ic:'❦',col:'#3dffa8',cd:[720,620,520],d:'Draine les ennemis proches 3 s et te rend des bulles.',dd:'Aucun effet en duel'},
+  arc:{n:'Arc',ic:'ϟ',col:'#b9f3ff',cd:[360,300,250],d:'Éclair qui bondit d’ennemi en ennemi, jusqu’à 5 cibles.',dd:'Aucun effet en duel'},
+  marq:{n:'Marque',ic:'✕',col:'#ff4d4d',cd:[480,420,360],d:'L’ennemi le plus solide au viseur subit +60 % de dégâts 6 s.',dd:'Aucun effet en duel'}};
+/* autel : jusqu'à ALT_N compétences proposées, ALT_PG par page (tient sans défiler à 411 px, cf. test/choix-ecran.js) */
+const ALT_N=8,ALT_PG=3;
 const SIG={bal:'shock',scout:'blink',tank:'shield',spectre:'lance',oracle:'salve',reine:'trou'};
 const ULT={bal:{n:'Supernova',d:'Explosion géante qui ravage l’écran.'},scout:{n:'Hypervitesse',d:'Vitesse et cadence doublées, tu broies ce que tu touches.'},
   tank:{n:'Forteresse',d:'Invulnérable, aura de destruction, tirs renvoyés.'},spectre:{n:'Faille temporelle',d:'Le temps s’arrête. Tes coups sont tous critiques.'},
@@ -40,9 +46,11 @@ function gcWorld(rnd){
 /* ---------- état de partie ---------- */
 function gcRunStart(){
   const P=G.p,sig=SIG[G.prof]||'shock';
-  P.sk=[{id:sig,l:1,cd:0},null];P.evo['sk_'+sig]=1;P.ultC=0;P.cdMul=1;P.ultA=null;P.shieldT=0;
-  G.gc={beams:[],holes:[],bolts:[],bombs:[],strikes:[],altUsed:{},riftDone:{},altT:0,altI:-1,rift:null,ultFlash:0,firstRift:0};
+  P.sk=[{id:sig,l:1,cd:0},null];P.evo['sk_'+sig]=1;P.ultC=0;P.cdMul=1;P.ultA=null;P.shieldT=0;P.siphT=0;
+  G.gc={beams:[],holes:[],bolts:[],bombs:[],strikes:[],sentries:[],marks:[],altNext:null,altPool:null,altUsed:{},riftDone:{},altT:0,altI:-1,rift:null,ultFlash:0,firstRift:0};
   G.tstop=0;
+  /* le duel (gx.js) lit DSK[id].d : sans entrée, une compétence nouvelle y plantait */
+  if(typeof DSK==='object')for(const k in SKL)if(!DSK[k])DSK[k]={d:SKL[k].dd||'',c:2};
 }
 function aimWorld(maxD){
   const P=G.p;let x,y;
@@ -74,6 +82,17 @@ function gcUse(i){
     for(let k=0;k<6;k++)FX({ty:0,x:lerp(x0,x,k/6),y:lerp(y0,y,k/6),vx:0,vy:0,life:18,max:18,col,s:P.r*.8});
     P.x=x;P.y=y;P.px=x;P.py=y;P.inv=Math.max(P.inv,20);const R=[120,150,190][l-1];dmgAll(x,y,R,dm*[5,7,10][l-1],10,0);clearEB(x,y,R*.8);
     ringFX(x,y,P.r,R,col,18,6);FX({ty:4,x,y,vx:0,vy:0,r:R*1.4,life:16,max:16,col});shake(.3);SFX.dash();}
+  else if(s.id==='tour'){const t=[360,420,480][l-1];G.gc.sentries.push({x:P.x,y:P.y,t,max:t,f:0,a:P.ang,dm:dm*[1.1,1.3,1.6][l-1],col});ringFX(P.x,P.y,10,70,col,14,3);SFX.evo();}
+  else if(s.id==='siph'){P.siphT=180;P.siphR=[200,230,260][l-1];P.siphD=dm*[.8,1,1.3][l-1];P.siphH=l;ringFX(P.x,P.y,P.r,P.siphR,col,16,3);SFX.phase();}
+  else if(s.id==='arc'){const n=[5,7,9][l-1],dd=dm*[5,5.5,6][l-1],hit=new Set();let x=P.x,y=P.y,Rj=420;
+    for(let k=0;k<n;k++){let b=null,bd=Rj*Rj;for(const e of G.en){if(e.dead||e.spawn>0||hit.has(e))continue;const d=dist2(e.x,e.y,x,y);if(d<bd){bd=d;b=e;}}
+      if(!b)break;hit.add(b);G.gc.bolts.push({x0:x,y0:y,x1:b.x,y1:b.y,life:14,max:14,s:R()*99});x=b.x;y=b.y;Rj=300;hurtEnemy(b,dd,0,0,true);}
+    for(const B of BIGS())if(bigHittable(B)&&dist2(B.x,B.y,P.x,P.y)<(420+B.r)**2){hurtBig(B,dd,true);G.gc.bolts.push({x0:P.x,y0:P.y,x1:B.x,y1:B.y,life:14,max:14,s:R()*99});}
+    shake(.15);SFX.hit();}
+  else if(s.id==='marq'){const [ax,ay]=aimWorld(600);let b=null,bh=0;
+    for(const [cx,cy,Rm] of [[ax,ay,260],[P.x,P.y,500]]){for(const e of G.en){if(e.dead||e.spawn>0||dist2(e.x,e.y,cx,cy)>Rm*Rm)continue;if(e.hp>bh){bh=e.hp;b=e;}}
+      for(const B of BIGS())if(bigHittable(B)&&dist2(B.x,B.y,cx,cy)<(Rm+B.r)**2){b=B;break;}if(b)break;}
+    if(b){b.mkT=360;b.mkM=[1.6,1.8,2][l-1];if(!G.gc.marks.includes(b))G.gc.marks.push(b);ringFX(b.x,b.y,b.r,b.r*2.5+20,col,16,3);}SFX.dash();}
   if(G.gs)G.gs.skillUse=(G.gs.skillUse||0)+1;giEcho(i);
 }
 function gcUlt(){
@@ -110,7 +129,17 @@ function gcElite(e,opt){
 /* ---------- boucle ---------- */
 function gcTick(){
   const C=G.gc;if(!C)return;const P=G.p,dm=P.dmg*lvlDmg();
+  if(C.altNext&&G.state==='play'){const q=C.altNext;C.altNext=null;delete P.evo.alt_page;openAltar(q.i,q.pg);return;}
   for(const s of P.sk)if(s&&s.cd>0)s.cd--;
+  for(let i=C.sentries.length-1;i>=0;i--){const T=C.sentries[i];if(--T.t<=0){ringFX(T.x,T.y,20,4,T.col,12,3);C.sentries.splice(i,1);continue;}if(++T.f<18)continue;
+    let b=null,bd=480*480;for(const e of G.en){if(e.dead||e.spawn>0)continue;const d=dist2(e.x,e.y,T.x,T.y);if(d<bd){bd=d;b=e;}}
+    for(const B of BIGS())if(bigHittable(B)&&dist2(B.x,B.y,T.x,T.y)<bd){b=B;break;}
+    if(b){T.f=0;T.a=Math.atan2(b.y-T.y,b.x-T.x);pbul(T.x+Math.cos(T.a)*16,T.y+Math.sin(T.a)*16,T.a,{dmg:T.dm,r:4,col:T.col,home:.1,pierce:0,split:0,rico:0});}}
+  if(P.siphT>0&&--P.siphT%15===0){let h=0;const Rr=P.siphR;
+    for(const e of G.en){if(e.dead||e.spawn>0||dist2(e.x,e.y,P.x,P.y)>(Rr+e.r)**2)continue;hurtEnemy(e,P.siphD,0,0,true);h++;}
+    for(const B of BIGS())if(bigHittable(B)&&dist2(B.x,B.y,P.x,P.y)<(Rr+B.r)**2){hurtBig(B,P.siphD,true);h++;}
+    h=Math.min(h,P.siphH);if(h){P.bub+=h;checkLevel();sparks(P.x,P.y,'#3dffa8',4,2);}}
+  for(let i=C.marks.length-1;i>=0;i--){const m=C.marks[i];if(--m.mkT<=0||m.dead)C.marks.splice(i,1);}
   if(P.shieldT>0){P.shieldT--;const Rr=P.r+30;
     for(let i=G.eb.length-1;i>=0;i--){const b=G.eb[i];if(dist2(b.x,b.y,P.x,P.y)<Rr*Rr){G.eb.splice(i,1);const a=Math.atan2(b.y-P.y,b.x-P.x);pbul(b.x,b.y,a,{dmg:dm*1.5,r:4,col:'#7dff4a',home:.08,pierce:0,split:0,rico:0});}}}
   const A=P.ultA;
@@ -148,17 +177,32 @@ function gcTick(){
     C.rift={x:f.x,y:f.y,r:430,t:0,dur:1200,i};banner('Faille','Tiens 20 secondes dans le cercle',COL.mg,110);G.glitch=24;SFX.bossIn();
     if(!C.firstRift&&G.gs){C.firstRift=1;gsSay('Les failles sont des blessures du rêve. Scelle-la.','',COL.mg,1,1);}break;}}
 }
-function openAltar(i){
-  const P=G.p,ch=[],have=P.sk.filter(Boolean).map(s=>s.id);
-  if(i>=0&&G.gs)gsSay(ALT_Q[WD.alts[i].q],'Autel d’Iris',COL.gd,1,1);
-  if(!P.sk[1]){const pool=shuffle(Object.keys(SKL).filter(k=>!have.includes(k))).slice(0,2);
-    for(const k of pool)ch.push({u:{id:'nsk_'+k,n:SKL[k].n,ic:SKL[k].ic,c:'Nouvelle compétence · '+KEYL[1],d:SKL[k].d,f:P=>{P.sk[1]={id:k,l:1,cd:0};P.evo['sk_'+k]=1;}}});}
-  for(let j=0;j<2&&ch.length<3;j++){const s=P.sk[j];if(!s||s.l>=3)continue;const K=SKL[s.id];
+function openAltar(i,pg){
+  const P=G.p,C=G.gc,ch=[],have=P.sk.filter(Boolean).map(s=>s.id);pg=pg||0;
+  if(i>=0&&!pg&&G.gs)gsSay(ALT_Q[WD.alts[i].q],'Autel d’Iris',COL.gd,1,1);
+  /* Les cartes d'AMELIORATION gardent toujours une place a l'autel. Defaut corrige le 29/09/2026 :
+     en remplissant la page de nouvelles competences, la boucle d'amelioration restait gardee par
+     `ch.length<3` et ne passait donc PLUS JAMAIS — les niveaux 2 et 3 d'une competence devenaient
+     inatteignables. Attrape par test/headless.js n°7, qui exige que la 3e carte choisie soit une
+     amelioration (niveau 1 -> 2). La place reservee se paie sur le nombre de competences nouvelles
+     par page, jamais sur les ameliorations. */
+  const upj=[];for(let j=0;j<2;j++){const s=P.sk[j];if(s&&s.l<3)upj.push(j);}
+  let PGSZ=ALT_PG,page=null;
+  if(!P.sk[1]){PGSZ=Math.max(1,ALT_PG-(upj.length?1:0));
+    if(!pg||!C.altPool)C.altPool=shuffle(Object.keys(SKL).filter(k=>!have.includes(k))).slice(0,ALT_N);
+    const pool=C.altPool,npz=Math.max(1,Math.ceil(pool.length/PGSZ)),p0=pg%npz*PGSZ,nx=(pg+1)%npz*PGSZ;
+    /* la catégorie (identique sur toutes les cartes) passe dans le sous-titre : une ligne de moins par carte */
+    for(const k of pool.slice(p0,p0+PGSZ))ch.push({u:{id:'nsk_'+k,n:SKL[k].n,ic:SKL[k].ic,c:'',d:SKL[k].d,f:P=>{P.sk[1]={id:k,l:1,cd:0};P.evo['sk_'+k]=1;}}});
+    /* page suivante : le choix se referme (pickEvo, g4.js) et gcTick rouvre l'autel à l'image d'après */
+    if(npz>1&&!(SIMF()&&pg>=npz))page={u:{id:'alt_page',n:'Autres compétences',ic:'⇄',c:'',d:'Voir les '+pool.slice(nx,nx+PGSZ).length+' autres, sans rien choisir.',f:P=>{C.altNext={i,pg:pg+1};P.inv=Math.max(P.inv,20);}}};}
+  for(let j=0;j<2&&ch.length<ALT_PG;j++){const s=P.sk[j];if(!s||s.l>=3)continue;const K=SKL[s.id];
     ch.push({u:{id:'sk_'+s.id,n:K.n,ic:K.ic,c:'Amélioration · '+KEYL[j],d:'Niveau '+(s.l+1)+' : plus de dégâts, de portée, recharge plus courte.',f:P=>{s.l++;}}});}
+  if(page)ch.push(page);
   if(ch.length<3)ch.push({u:{id:'alt_cd',n:'Esprit vif',ic:'⧗',c:'Don',d:'Recharge des compétences -15 %.',f:P=>{P.cdMul*=.85;}}});
   if(ch.length<3)ch.push({u:{id:'alt_ult',n:'Braise d’ultime',ic:'✹',c:'Don',d:'+60 % de charge d’ultime immédiatement.',f:P=>{P.ultC=Math.min(100,P.ultC+60);}}});
-  G.choices=ch.slice(0,3);G.evoAlt=i>=0?['Autel d’Iris','Choisis un don pour ce cycle']:['Faille scellée','L’autel intérieur t’offre un don'];
-  if(SIMF()){applyChoice(G.choices[0]);return;}
+  G.choices=P.sk[1]?ch.slice(0,3):ch;G.evoAlt=i>=0?['Autel d’Iris','Choisis un don pour ce cycle']:['Faille scellée','L’autel intérieur t’offre un don'];
+  if(!P.sk[1]){const nq=Math.max(1,Math.ceil(C.altPool.length/PGSZ));G.evoAlt[1]='Nouvelle compétence · '+KEYL[1]+(nq>1?' · page '+(pg%nq+1)+' / '+nq:'');}
+  if(SIMF()){applyChoice(window.__SIM_PICK?window.__SIM_PICK(G.choices):G.choices[0]);if(C.altNext){const q=C.altNext;C.altNext=null;delete P.evo.alt_page;openAltar(q.i,q.pg);}return;}
   G.state='evo';renderEvo();show('ov-evo');SFX.evo();
 }
 
@@ -187,6 +231,12 @@ function gcDrawOver(){
     for(let j=1;j<8;j++){const t=j/8;c.lineTo(lerp(b.x0,b.x1,t)+Math.sin(b.s+j*7.1)*28,lerp(b.y0,b.y1,t)+Math.cos(b.s+j*3.3)*12);}c.lineTo(b.x1,b.y1);c.stroke();c.globalCompositeOperation='source-over';c.globalAlpha=1;}
   if(P.shieldT>0||P.ultA&&P.ultA.k==='tank'){const k=P.shieldT>0?Math.min(1,P.shieldT/30):1;c.globalAlpha=.3*k+.1*Math.sin(RT*.3);c.fillStyle='#7dff4a';c.beginPath();c.arc(P.x,P.y,P.r+28,0,TAU);c.fill();
     c.globalAlpha=.9*k;c.strokeStyle='#caffb0';c.lineWidth=3;c.beginPath();for(let j=0;j<6;j++){const a=j*TAU/6+RT*.02;const x=P.x+Math.cos(a)*(P.r+30),y=P.y+Math.sin(a)*(P.r+30);j?c.lineTo(x,y):c.moveTo(x,y);}c.closePath();c.stroke();c.globalAlpha=1;}
+  for(const T of C.sentries){if(!vis(T.x,T.y,40))continue;c.globalAlpha=Math.min(1,T.t/30);c.fillStyle='rgba(8,4,18,.9)';c.strokeStyle=T.col;c.lineWidth=3;c.beginPath();c.arc(T.x,T.y,13,0,TAU);c.fill();c.stroke();
+    c.lineWidth=6;c.beginPath();c.moveTo(T.x,T.y);c.lineTo(T.x+Math.cos(T.a)*22,T.y+Math.sin(T.a)*22);c.stroke();c.lineWidth=2;c.beginPath();c.arc(T.x,T.y,20,-Math.PI/2,-Math.PI/2+TAU*T.t/T.max);c.stroke();c.globalAlpha=1;}
+  for(const m of C.marks){if(!vis(m.x,m.y,m.r+30))continue;const r=m.r+14,a=RT*.05;c.globalAlpha=Math.min(1,m.mkT/30);c.strokeStyle='#ff4d4d';c.lineWidth=3;c.beginPath();c.arc(m.x,m.y,r,0,TAU);c.stroke();
+    c.beginPath();for(let j=0;j<4;j++){const b=a+j*Math.PI/2;c.moveTo(m.x+Math.cos(b)*(r-8),m.y+Math.sin(b)*(r-8));c.lineTo(m.x+Math.cos(b)*(r+10),m.y+Math.sin(b)*(r+10));}c.stroke();c.globalAlpha=1;}
+  if(P.siphT>0){c.strokeStyle='#3dffa8';c.lineWidth=2;c.globalAlpha=.25+.2*Math.sin(RT*.3);c.beginPath();c.arc(P.x,P.y,P.siphR,0,TAU);c.stroke();c.globalAlpha=.6;c.beginPath();
+    for(const e of G.en)if(!e.dead&&e.spawn<=0&&dist2(e.x,e.y,P.x,P.y)<(P.siphR+e.r)**2){c.moveTo(e.x,e.y);c.lineTo(P.x,P.y);}c.stroke();c.globalAlpha=1;}
   if(P.ultA&&P.ultA.k==='scout'&&G.t%2===0)FX({ty:0,x:P.x,y:P.y,vx:0,vy:0,life:16,max:16,col:P.col,s:P.r});
 }
 function gcDrawWorld(){

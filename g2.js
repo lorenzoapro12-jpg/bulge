@@ -106,7 +106,7 @@ function updWorld(){
 function heartNodes(h){h.nodes=[];for(let k=0;k<4;k++){const nh=16*hpMul();h.nodes.push({x:h.x,y:h.y,r:13,hp:nh,mhp:nh,dead:false,cd:rr(80,160),flash:0});}}
 function BIGS(){const a=[],B=G.boss;if(B&&!B.dead&&B.spawn<=0)a.push(B);const A=G.arena;if(A&&A.kind==='heart'&&A.ref.state==='active')a.push(A.ref);return a;}
 function bigHittable(o){return o===G.boss?bossHittable():o.state==='active';}
-function hurtBig(o,d,q){if(o===G.boss)hurtBoss(d,q);else hurtHeart(o,d,q);}
+function hurtBig(o,d,q){if(o.mkT>0)d*=o.mkM;if(o===G.boss)hurtBoss(d,q);else hurtHeart(o,d,q);}
 function updHearts(){
   const P=G.p;
   for(const h of G.hearts){if(h.state==='dead')continue;
@@ -262,7 +262,7 @@ function explode(b){
 /* ---------- ennemis ---------- */
 function ebul(x,y,a,s,r,dmg,col){s*=1+.035*(G.room-1)+.01*G.heat;const b={x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,r,dmg:dmg*dmgMul(),col,life:420,home:0,gz:false};if(G.eb.length<600)G.eb.push(b);return b;}
 function hurtEnemy(e,dmg,kx,ky,quiet){
-  if(e.dead||e.spawn>0)return;if(e.aff==='armor')dmg*=.45;
+  if(e.dead||e.spawn>0)return;if(e.aff==='armor')dmg*=.45;if(e.mkT>0)dmg*=e.mkM;
   e.aggro=true;
   const crit=R()<G.p.crit;if(crit)dmg*=G.p.critM||2.5;
   dmg=giHit(e,dmg,crit);e.hp-=dmg;e.flash=4;giAfter(e,dmg,crit);

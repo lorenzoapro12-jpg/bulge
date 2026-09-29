@@ -409,12 +409,18 @@ scenario('n°6 évolution : Espace neutralisé (keydown ET keyup) — assertion,
 scenario('n°7 autel : la touche 3 choisit le 3e don', () => {
   start('bal', false);
   noSim('openAltar(-1)');
-  const n = call('G.choices.length'), third = call('G.choices[2]&&G.choices[2].u.id'), l0 = call('G.p.sk[0].l');
+  const n = call('G.choices.length'), third = call('G.choices[2]&&G.choices[2].u.id'), pgc = call('G.choices[3]&&G.choices[3].u.id'), l0 = call('G.p.sk[0].l');
   key('Digit3');
   const st = call('G.state'), l1 = call('G.p.sk[0].l');
   if (st !== 'play') call('pickEvo(0)');
-  return { ok: n === 3 && st === 'play' && third === 'sk_' + call('G.p.sk[0].id') && l1 === l0 + 1,
-    detail: n + ' dons, 3e=' + third + ', état après touche 3=' + st + ', niveau compétence ' + l0 + '→' + l1 };
+  /* Depuis le 29/09/2026 l'autel affiche 4 cartes : les 3 CHOIX, plus la carte « Autres
+     compétences » — les 6 a 8 competences nouvelles sont PAGINEES, sinon elles ne tiennent pas sur
+     un ecran de 411 px (mesure : test/choix-ecran.js, chromium, 4 cartes = 700 px pour 700 px
+     visibles). Ce que ce test defend n'a pas bouge : la touche 3 prend la 3e carte, et cette 3e
+     carte est l'AMELIORATION de la competence du joueur (niveau 1 -> 2). Une regression qui
+     remplacerait la 3e carte par une competence nouvelle echoue donc toujours ici. */
+  return { ok: n === 4 && pgc === 'alt_page' && st === 'play' && third === 'sk_' + call('G.p.sk[0].id') && l1 === l0 + 1,
+    detail: n + ' cartes dont la 4e=' + pgc + ', 3e=' + third + ', état après touche 3=' + st + ', niveau compétence ' + l0 + '→' + l1 };
 });
 
 /* n°8 — gx.js:157 : l'ultime Spectre (crit=1) ne rend pas tous les coups du duel critiques */
@@ -601,6 +607,9 @@ const sub = (f, args) => { const r = cp.spawnSync(process.execPath, [path.join(_
     (r.out.match(/ECHEC [^\n]*/g) || []).map(s => s.trim()).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
 { const r = sub('compteur.js', REF ? ['--ref=' + REF] : []);
   check('compteur : lisible sur téléphone et il dit qui cuit le monde, worker ou sur place (test/compteur.js)', r.ok,
+    (r.out.match(/ECHEC [^\n]*/g) || []).map(s => s.trim()).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
+{ const r = sub('competences.js', REF ? ['--ref=' + REF] : []);
+  check('compétences : 6 à 8 proposées à l’autel, chacune s’active, recharge débitée, effet mesuré, sauvegarde d’avant jouable (test/competences.js)', r.ok,
     (r.out.match(/ECHEC [^\n]*/g) || []).map(s => s.trim()).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
 
 /* ---------- verdict ---------- */
