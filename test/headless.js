@@ -704,6 +704,10 @@ const sub = (f, args) => { const r = cp.spawnSync(process.execPath, [path.join(_
   check('frontière sonore : le poids audio est celui de biomeMix, il monte avant la frontière sans repasser par 0 (test/frontiere-sonore.js)', r.ok,
     (r.out.match(/ÉCHEC [^\n]*/g) || []).slice(0, 2).map(s => s.trim()).join(' | ') || (r.out.match(/\d+ traversées[^\n]*/) || [''])[0]); }
 
+{ const r = sub('decor.js', REF ? ['--ref=' + REF] : []);
+  check('décor : la gueule mord l’ennemi, la voiture le percute, le gouffre l’avale ; jamais le joueur (test/decor.js)', r.ok,
+    (r.out.match(/ECHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim().slice(0, 220)).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
+
 /* ---------- verdict ---------- */
 console.log('\n---------------- VERDICT ----------------');
 let all = true;
