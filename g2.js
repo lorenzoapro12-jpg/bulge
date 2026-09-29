@@ -14,7 +14,7 @@ function mkGame(){return{state:'play',t:0,time:0,room:1,p:null,en:[],eb:[],pb:[]
   banner:null,toasts:[],pendingEvo:[],evoDelay:14,heat:0,daily:false,dayKey:0,newAch:[],vacuum:false,vacuumT:0,
   win:false,trails:[],tgt:null,tgtT:0,dieT:0,vicT:0,prof:'bal',manual:false,
   hearts:[],heartsDone:0,lair:{open:false},arena:null,arenaOpen:null,biome:'plains',biomeCand:null,biomeN:0,visited:{},zoneT:null,spawnT:40,fightHit:false,
-  inX:0,inY:0,aimMan:false,aimA:0,choices:[],artChoices:[],freeArts:[],help:0};}
+  inX:0,inY:0,aimMan:false,aimA:0,choices:[],artChoices:[],freeArts:[],help:0,dec:{bite:[],car:[],fall:[]}};}
 
 function mkPlayer(prof){
   const pr=PROF[prof];
@@ -332,6 +332,7 @@ function updEnemy(e){
   else{e.vx=lerp(e.vx,tx/tl*sp,.08);e.vy=lerp(e.vy,ty/tl*sp,.08);}
   e.x+=e.vx;e.y+=e.vy;
   const oh=collideCircle(e,e.r);
+  if(oh&&skyFalls(e,sp,oh))return;
   if(oh){const vn=e.vx*oh[0]+e.vy*oh[1];if(vn<0){e.vx-=vn*oh[0];e.vy-=vn*oh[1];}e.sl=20;e.sn=oh;if(e.t==='spike'&&e.st===2){e.st=0;e.cd=60;}}
   if(confine(e,e.r)&&e.t==='spike'&&e.st===2){e.st=0;e.cd=60;}
 }
@@ -341,11 +342,47 @@ function updEnemies(){
   for(let i=0;i<n;i++){const a=G.en[i];if(a.dead)continue;for(let j=i+1;j<n;j++){const b=G.en[j];if(b.dead)continue;const dx=b.x-a.x,dy=b.y-a.y,rs=a.r+b.r,d2=dx*dx+dy*dy;
     if(d2<rs*rs&&d2>.01){const d=Math.sqrt(d2),o=(rs-d)*.5/d;a.x-=dx*o;a.y-=dy*o;b.x+=dx*o;b.y+=dy*o;}}}
   const P=G.p;
-  if(G.state==='play'&&!P.dead)for(const e of G.en){if(e.dead||e.spawn>0)continue;const rs=e.r+P.r*.85;if(dist2(e.x,e.y,P.x,P.y)>=rs*rs)continue;
+  if(G.state==='play'&&!P.dead)for(const e of G.en){if(e.dead||e.spawn>0||e.fall>0)continue;const rs=e.r+P.r*.85;if(dist2(e.x,e.y,P.x,P.y)>=rs*rs)continue;
     if(e.t==='mite'){hurtPlayer(e.d.dmg*dmgMul(),e.x,e.y);killEnemy(e);}
     else if(e.t==='spike')hurtPlayer(e.d.dmg*dmgMul()*(e.st===2?1:.5),e.x,e.y);
     else{const dx=P.x-e.x,dy=P.y-e.y,d=Math.hypot(dx,dy)||1,o=rs-d;P.x+=dx/d*o*.5;P.y+=dy/d*o*.5;e.x-=dx/d*o*.5;e.y-=dy/d*o*.5;}}
-  G.en=G.en.filter(e=>!e.dead);
+  decorTick();
+  G.en=G.en.filter(e=>!e.dead&&!(e.fall>0));
+}
+
+/* ---------- le décor mord : gueules (floral), circulation (urban), vide (sky) ----------
+   Règles de TERRAIN : actives quand G.biome (hystérésis, updWorld) vaut le biome, jamais par biomeAt.
+   Elles ne visent que G.en : le boss (G.boss) et les cœurs (BIGS) n'y sont jamais. Le joueur n'est jamais touché.
+   Dégâts = fraction des PV max, appliqués hors hurtEnemy : ni critique, ni armure, ni équipement ne les dépassent. */
+const BLOOM_T=240,BLOOM_O=60,BLOOM_R=72,BLOOM_D=.3,CAR_D=.4,CAR_K=8,SKY_KB=4.5,FALL_T=20;
+/* gueule : 0 au repos, monte de 0 à 1 pendant l'ouverture (1 s) ; la morsure a lieu au tick où elle retombe à 0 */
+function bloomOpen(it,t){const k=(t+Math.floor(it.ph/TAU*BLOOM_T))%BLOOM_T;return k<BLOOM_O?k/BLOOM_O:0;}
+function bloomBites(it,t){return (t+Math.floor(it.ph/TAU*BLOOM_T))%BLOOM_T===BLOOM_O;}
+function inBite(it,x,y,r){return dist2(it.x,it.y,x,y)<(BLOOM_R+r)**2;}
+/* voiture : position au tick t (même formule que le dessin), et contact avec un cercle */
+function carAt(it,t){const p=((it.ph+t*it.spd)%CH+CH)%CH;return it.vert?[it.x,it.y+p]:[it.x+p,it.y];}
+function carHits(it,t,x,y,r){const q=carAt(it,t);return Math.abs(x-q[0])<(it.vert?5:10)+r&&Math.abs(y-q[1])<(it.vert?10:5)+r;}
+function decorHurt(e,f){e.aggro=true;e.hp-=e.mhp*f;e.flash=4;if(e.hp<=0)killEnemy(e);}
+function decorTick(){
+  const D=G.dec,t=G.t,P=G.p,b=G.biome;
+  D.bite=D.bite.filter(q=>t-q.t<30);D.car=D.car.filter(q=>t-q.t<30);
+  for(let i=D.fall.length-1;i>=0;i--){const e=D.fall[i];if(--e.fall<=0){D.fall.splice(i,1);killEnemy(e);}}
+  if(b!=='floral'&&b!=='urban')return;
+  const cx=Math.floor(P.x/CH),cy=Math.floor(P.y/CH);
+  for(let dx=-2;dx<=2;dx++)for(let dy=-2;dy<=2;dy++){const c=getChunk(cx+dx,cy+dy);if(!c)continue;
+    for(const it of c.live){
+      if(b==='floral'&&it.t==='bloom'&&bloomBites(it,t)){D.bite.push({it,x:it.x,y:it.y,r:BLOOM_R,t});
+        for(const e of G.en)if(!e.dead&&!(e.spawn>0)&&!(e.fall>0)&&inBite(it,e.x,e.y,e.r))decorHurt(e,BLOOM_D);}
+      else if(b==='urban'&&it.t==='car')for(const e of G.en){if(e.dead||e.spawn>0||e.fall>0||(e.carT||0)>t||!carHits(it,t,e.x,e.y,e.r))continue;
+        const q=carAt(it,t),dx=it.vert?0:Math.sign(it.spd),dy=it.vert?Math.sign(it.spd):0,s=(it.vert?e.x-q[0]:e.y-q[1])>=0?1:-1,m=e.r>20?.5:1;
+        e.carT=t+40;e.vx+=(dx*CAR_K+(it.vert?s*CAR_K*.5:0))*m;e.vy+=(dy*CAR_K+(it.vert?0:s*CAR_K*.5))*m;
+        D.car.push({it,x:q[0],y:q[1],e,t});decorHurt(e,CAR_D);}}}
+}
+/* vide : un ennemi PROJETÉ contre un gouffre tombe. Recul = vitesse au-delà de sa propre allure `sp`
+   (ses déplacements seuls n'y parviennent jamais : la vitesse lissée ne dépasse pas sp). Élites et caches exclus. */
+function skyFalls(e,sp,oh){
+  if(G.biome!=='sky'||e.aff||e.t==='cache'||Math.hypot(e.vx,e.vy)-sp<=SKY_KB||!wallNear(e.x,e.y,e.r+2))return false;
+  e.fall=FALL_T;e.fdx=-oh[0];e.fdy=-oh[1];e.vx=e.vy=0;G.dec.fall.push(e);return true;
 }
 
 /* ---------- projectiles ---------- */
