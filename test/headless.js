@@ -598,7 +598,7 @@ const sub = (f, args) => { const r = cp.spawnSync(process.execPath, [path.join(_
 { const r = sub('cuisson.js', REF ? ['--ref=' + REF] : []);
   check('cuisson : aucun chunk entier hors budget, travail continu et unité indivisible plafonnés (test/cuisson.js)', r.ok, r.out.split('\n').filter(l => /^\s+(OK|ECHEC)\s/.test(l)).map(l => l.trim()).join(' | ') || r.out.slice(-300)); }
 { const r = sub('art.js', REF ? ['--cible=' + REF] : []);
-  check('cuisson : séquence brute des opérations de chaque chunk identique à 93b8cfe (test/art.js)', r.ok, (r.out.match(/chunks identiques : .*/) || [r.out.slice(-300)])[0]); }
+  check('cuisson : séquence brute des opérations de chaque chunk identique à e3a2c93 (test/art.js)', r.ok, (r.out.match(/chunks identiques : .*/) || [r.out.slice(-300)])[0]); }
 { const r = sub('qualite.js', REF ? ['--ref=' + REF] : []);
   check('qualité : le contrôleur peut remonter, la référence est celle du jeu, applyRes suit chaque cran (test/qualite.js)', r.ok,
     (r.out.match(/ECHEC [^\n]*/g) || []).map(s => s.trim()).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
@@ -611,6 +611,9 @@ const sub = (f, args) => { const r = cp.spawnSync(process.execPath, [path.join(_
 { const r = sub('competences.js', REF ? ['--ref=' + REF] : []);
   check('compétences : 6 à 8 proposées à l’autel, chacune s’active, recharge débitée, effet mesuré, sauvegarde d’avant jouable (test/competences.js)', r.ok,
     (r.out.match(/ECHEC [^\n]*/g) || []).map(s => s.trim()).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
+{ const r = sub('colonne.js', REF ? ['--ref=' + REF] : []);
+  check('colonne : chemin principal = plus court chemin 0 → Hypernoyau, 3 cœurs jalons dessus, 3 biomes distincts (test/colonne.js)', r.ok,
+    (r.out.match(/ECHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim()).join(' | ') || (r.out.match(/\d+ graines : [^\n]*/) || [''])[0]); }
 
 /* ---------- verdict ---------- */
 console.log('\n---------------- VERDICT ----------------');
