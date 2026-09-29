@@ -111,7 +111,8 @@ function gxDrawWorld(){
     if(b.p>=1){c.globalCompositeOperation='lighter';c.globalAlpha=.35;c.fillStyle=COL.gd;c.fillRect(b.x-4,b.y-400,8,350);c.globalAlpha=1;c.globalCompositeOperation='source-over';}}
   if(sc&&sc.t==='course')sc.g.forEach((g,k)=>{if(k<sc.gi)return;const nx=k===sc.gi;c.globalAlpha=nx?1:.35;c.strokeStyle=nx?COL.cy:'#7a74a6';c.lineWidth=nx?6:3;c.beginPath();c.arc(g.x,g.y,70,0,TAU);c.stroke();
     if(nx){c.globalCompositeOperation='lighter';glow(g.x,g.y,90,COL.cy,.3);c.globalCompositeOperation='source-over';}c.globalAlpha=1;});
-  for(let i=0;i<WD.hunt.length;i++){const h=WD.hunt[i];if(X.beat[i]||!vis(h.x,h.y,120))continue;
+  /* chasseur endormi (première partie, gt.js) : ni invite, ni minicarte, immobile, donc pas dessiné non plus */
+  for(let i=0;i<WD.hunt.length;i++){const h=WD.hunt[i];if(X.beat[i]||X.dorm||!vis(h.x,h.y,120))continue;
     c.save();c.translate(h.x,h.y);c.rotate(G.t*.004*1.3+i);c.fillStyle='#1a0a12';c.strokeStyle=COL.rd;c.lineWidth=3;c.beginPath();c.moveTo(34,0);c.lineTo(-22,-24);c.lineTo(-12,0);c.lineTo(-22,24);c.closePath();c.fill();c.stroke();c.restore();
     c.globalCompositeOperation='lighter';glow(h.x,h.y,60,COL.rd,.3+.15*Math.sin(RT*.1));c.globalCompositeOperation='source-over';
     if(dist2(h.x,h.y,G.p.x,G.p.y)<450*450){c.font='700 12px '+FD;c.textAlign='center';c.fillStyle=COL.rd;c.fillText(h.n.toUpperCase(),h.x,h.y-50);}}
@@ -148,14 +149,23 @@ function duelStart(i){
 }
 function duelLog(s){DU.log.unshift(s);DU.log.length=Math.min(DU.log.length,4);}
 const DK=[{n:'Canon standard',a:'Tir',d:'100 % sur la cible',c:1},{n:'Dispersion',a:'Salve dispersée',d:'60 % sur tous les ennemis',c:1},{n:'Obusier',a:'Obus',d:'170 %, ignore le bouclier',c:2},{n:'Mitrailleur',a:'Rafale',d:'3 × 40 % (3 chances d’altération)',c:1},{n:'Canon-rail',a:'Tir perçant',d:'110 % sur la cible, 80 % sur la suivante',c:1}];
-const DSK={shock:{d:'70 % sur tous, annule les charges',c:2},lance:{d:'260 % sur la cible, ignore le bouclier',c:2},trou:{d:'50 % sur tous, les ennemis sont groupés (+50 % au prochain coup de zone)',c:2},
-  shield:{d:'Bouclier = 45 % de ta coque',c:2},salve:{d:'5 × 45 % sur des cibles au hasard',c:2},blink:{d:'Esquive la prochaine attaque et riposte à 100 %',c:2}};
+/* compétences en duel : v=k×dSkM(s) (niveau compris) ; t(v) = ce que le bouton annonce, f(v,tgt) = ce qui se passe.
+   Une entrée sans f (ajoutée par gcRunStart, gc.js) n'agit pas en duel : bouton désactivé, rien n'est débité. */
+const dPc=x=>Math.round(x*100)+' %',GRP={b:1.5,lt:1};
+function dSkM(s){return (G.p.skM||1)*(1+.25*(s.l-1));}
+const DSK={shock:{k:.7,t:v=>dPc(v)+' sur tous, annule les charges',f:v=>{for(const f of alive()){dHit(f,v);if(f.p[f.pi%f.p.length][0]==='big'||f.p[f.pi%f.p.length][0]==='charge'){f.pi=0;duelLog(f.n+' est interrompu.');}}}},
+  lance:{k:2.6,t:v=>dPc(v)+' sur la cible, ignore le bouclier',f:(v,tgt)=>{const d=dHit(tgt,v,true);duelLog('Lance : '+d+'.');}},
+  trou:{k:.5,t:v=>dPc(v)+' sur tous ; groupés jusqu’à leur destruction, ils subissent +'+dPc(GRP.b-1)+' de tes coups à moins de '+dPc(GRP.lt),f:v=>{for(const f of alive()){dHit(f,v);f.grouped=1;}duelLog('Singularité : l’escouade est groupée.');}},
+  shield:{k:.45,t:v=>'Bouclier = '+dPc(v)+' de ta coque',f:v=>{const me=DU.me;me.sh+=Math.round(me.mhp*v);duelLog('Égide : bouclier '+me.sh+'.');}},
+  salve:{k:.45,t:v=>'5 × '+dPc(v)+' sur des cibles au hasard',f:v=>{for(let q=0;q<5;q++){const L=alive();if(!L.length)break;dHit(L[Math.floor(R()*L.length)],v);}duelLog('Salve de missiles.');}},
+  blink:{k:1,t:v=>'Esquive la prochaine attaque et riposte à '+dPc(v),f:v=>{DU.me.evade=1;DU.me.riposte=v;duelLog('Clignement : tu esquiveras la prochaine attaque.');}}};
+const dSkE=s=>s&&DSK[s.id]&&DSK[s.id].f?DSK[s.id]:null;
 function dBase(){const P=G.p;return 16*P.dmg*lvlDmg();}
 function alive(){return DU.foes.filter(f=>f.hp>0);}
 function dHit(f,mult,ignoreSh,noSt){
   if(!f||f.hp<=0)return 0;const P=G.p;let d=dBase()*mult;
   if(DU.me.crit||R()<(P.ultA&&P.ultA.k==='spectre'?P.bCrit+P.crit-1:P.crit)){d*=P.critM||2.5;DU.me.crit=0;duelFloat(f,'Critique');}
-  if(f.st.acid)d*=1+.08*f.st.acid;if(f.grouped&&mult<1)d*=1.5;
+  if(f.st.acid)d*=1+.08*f.st.acid;if(f.grouped&&mult<GRP.lt)d*=GRP.b;
   d=Math.round(d);if(!ignoreSh&&f.sh>0){const a=Math.min(f.sh,d);f.sh-=a;d-=a;}
   f.hp=Math.max(0,f.hp-d);DU.me.ult=Math.min(100,DU.me.ult+8);f.flash=1;
   if(!noSt&&f.hp>0)for(const e in EL){let ch=(P.st&&P.st[e]||0)*1.6;if(f.weak===e)ch*=2;if(f.res===e)ch*=.3;if(R()<ch){f.st[e]=Math.min(e==='acid'?5:e==='burn'?5:3,(f.st[e]||0)+1);
@@ -168,7 +178,7 @@ function duelFloat(f,s){f.fl=s;}
 function duelAct(a){
   if(!DU||DU.busy)return;const me=DU.me,P=G.p;let tgt=alive()[0];const sel=DU.foes[DU.sel];if(sel&&sel.hp>0)tgt=sel;
   const cost=a==='tir'?DK[DU.kind].c:a==='sk0'||a==='sk1'?2:a==='ult'?0:1;if(me.en<cost)return;
-  if(a==='ult'&&me.ult<100)return;if((a==='sk0'||a==='sk1')&&(!P.sk[a==='sk0'?0:1]||me.cd[a==='sk0'?0:1]>0))return;if(a==='scan'&&tgt.rev&&me.crit)return;
+  if(a==='ult'&&me.ult<100)return;if((a==='sk0'||a==='sk1')&&(!dSkE(P.sk[a==='sk0'?0:1])||me.cd[a==='sk0'?0:1]>0))return;if(a==='scan'&&tgt.rev&&me.crit)return;
   me.en-=cost;SFX.hit();
   if(a==='tir'){const k=DU.kind;
     if(k===1){for(const f of alive())dHit(f,.6);duelLog('Salve dispersée sur toute l’escouade.');}
@@ -176,13 +186,7 @@ function duelAct(a){
     else if(k===3){let s=0;for(let j=0;j<3;j++)s+=dHit(tgt.hp>0?tgt:alive()[0],.4);duelLog('Rafale : '+s+' au total.');}
     else if(k===4){const d=dHit(tgt,1.1);const nx=alive().find(f=>f!==tgt);if(nx)dHit(nx,.8);duelLog('Tir perçant : '+d+(nx?' puis '+nx.n:'')+'.');}
     else{const d=dHit(tgt,1);duelLog('Tir sur '+tgt.n+' : '+d+'.');}}
-  else if(a==='sk0'||a==='sk1'){const j=a==='sk0'?0:1,s=P.sk[j];if(!s)return;const m=(P.skM||1)*(1+.25*(s.l-1));me.cd[j]=2;
-    if(s.id==='shock'){for(const f of alive()){dHit(f,.7*m);if(f.p[f.pi%f.p.length][0]==='big'||f.p[f.pi%f.p.length][0]==='charge'){f.pi=0;duelLog(f.n+' est interrompu.');}}}
-    else if(s.id==='lance'){const d=dHit(tgt,2.6*m,true);duelLog('Lance : '+d+'.');}
-    else if(s.id==='trou'){for(const f of alive()){dHit(f,.5*m);f.grouped=1;}duelLog('Singularité : l’escouade est groupée.');}
-    else if(s.id==='shield'){me.sh+=Math.round(me.mhp*.45*m);duelLog('Égide : bouclier '+me.sh+'.');}
-    else if(s.id==='salve'){for(let q=0;q<5;q++){const L=alive();if(!L.length)break;dHit(L[Math.floor(R()*L.length)],.45*m);}duelLog('Salve de missiles.');}
-    else if(s.id==='blink'){me.evade=1;me.riposte=m;duelLog('Clignement : tu esquiveras la prochaine attaque.');}}
+  else if(a==='sk0'||a==='sk1'){const j=a==='sk0'?0:1,s=P.sk[j],E=dSkE(s);me.cd[j]=2;E.f(E.k*dSkM(s),tgt);}
   else if(a==='garde'){me.sh+=Math.round(me.mhp*.2);me.bonus=1;duelLog('Tu te retranches : bouclier '+me.sh+', +1 énergie au prochain tour.');}
   else if(a==='scan'){tgt.rev=1;me.crit=1;duelLog('Analyse de '+tgt.n+' : '+(tgt.weak&&EL[tgt.weak]?'faiblesse '+EL[tgt.weak].n+', résistance '+(EL[tgt.res]?EL[tgt.res].n:'aucune'):'aucune faiblesse élémentaire')+'. Prochain coup critique.');}
   else if(a==='ult'){me.ult=0;const k=G.prof;
@@ -205,11 +209,15 @@ function duelEndTurn(){
     if(me.hp<=0){setTimeout(duelLose,500);return;}setTimeout(step,480);};
   setTimeout(step,300);
 }
+/* dégâts d'un coup ennemi, marque comprise : même expression pour l'annonce (renderDuel) et le coup (foeAct) */
+function dFoeDm(v,mk){return Math.round(v*.8*(1+.3*(G.room-1))*(G.p.armor||1)*(mk?2:1));}
+/* qui consommera la marque : on rejoue l'ordre du tour (duelEndTurn) — le premier qui frappe la prend, une marque posée en cours de tour vaut pour le suivant */
+function dMarkSeq(){let mk=DU.me.mark;return DU.foes.map(f=>{if(f.hp<=0||f.frozen)return 0;const t=f.p[f.pi%f.p.length][0];if(t==='atk'||t==='big'||t==='burn'){const x=mk;mk=0;return x;}if(t==='mark')mk=1;return 0;});}
 function foeAct(f){
   const me=DU.me,P=G.p,sc=1+.3*(G.room-1);
   if(f.frozen){f.frozen=0;duelLog(f.n+' est gelé et ne fait rien.');return;}
   const [t,v]=f.p[f.pi%f.p.length];f.pi++;
-  const hitMe=(dm)=>{let d=Math.round(dm*.8*sc*(P.armor||1)*(me.mark?2:1));me.mark=0;
+  const hitMe=(dm)=>{let d=dFoeDm(dm,me.mark);me.mark=0;
     if(me.evade){me.evade=0;duelLog('Tu esquives '+f.n+' et ripostes.');dHit(f,me.riposte||1);return;}
     if(R()<(P.dodge||0)){duelLog('Esquive !');return;}
     if(me.refl){dHit(f,d/dBase(),true,true);}
@@ -219,7 +227,7 @@ function foeAct(f){
   else if(t==='charge')duelLog(f.n+' se charge. Frappe lourde au prochain tour !');
   else if(t==='shield'){const o=alive().sort((a,b)=>a.hp/a.mhp-b.hp/b.mhp)[0];o.sh+=Math.round(v*sc);duelLog(f.n+' protège '+o.n+' (+'+Math.round(v*sc)+').');}
   else if(t==='heal'){const o=alive().sort((a,b)=>a.hp/a.mhp-b.hp/b.mhp)[0];o.hp=Math.min(o.mhp,o.hp+Math.round(v*sc));duelLog(f.n+' répare '+o.n+'.');}
-  else if(t==='mark'){me.mark=1;duelLog(f.n+' te marque : sa prochaine attaque fera double dégâts.');}
+  else if(t==='mark'){me.mark=1;duelLog(f.n+' te marque : la prochaine attaque ennemie fera double dégâts.');}
 }
 function duelNewTurn(){
   const me=DU.me,P=G.p;
@@ -250,18 +258,18 @@ function duelFlee(){if(!DU||DU.busy)return;$('topbtns').style.visibility='';cons
 function renderDuel(){
   if(!DU)return;const me=DU.me,P=G.p;
   $('dvT').textContent='Duel · '+DU.h.n;$('dvTurn').textContent='Tour '+DU.turn;
-  $('dvFoes').innerHTML=DU.foes.map((f,i)=>{const it=f.p[f.pi%f.p.length],I=INT[it[0]],sc=1+.3*(G.room-1),v=Math.round(it[1]*sc*(it[0]==='atk'||it[0]==='big'||it[0]==='burn'?.8*(P.armor||1)*(me.mark?2:1):1));
+  const mq=dMarkSeq();$('dvFoes').innerHTML=DU.foes.map((f,i)=>{const it=f.p[f.pi%f.p.length],I=INT[it[0]],sc=1+.3*(G.room-1),v=it[0]==='atk'||it[0]==='big'||it[0]==='burn'?dFoeDm(it[1],mq[i]):Math.round(it[1]*sc);
     const sts=Object.keys(f.st).filter(e=>f.st[e]).map(e=>'<i style="color:'+EL[e].col+'">'+EL[e].n+' '+f.st[e]+'</i>').join('')+(f.frozen?'<i style="color:#cfefff">Gelé</i>':'')+(f.grouped?'<i>Groupé</i>':'');
     return '<button class="foe'+(f.hp<=0?' dead':'')+(DU.sel===i?' sel':'')+(f.cmd?' cmd':'')+'" data-f="'+i+'"><div class="fn">'+f.n+' <small>'+f.sub+'</small></div>'+
       '<div class="bar"><i style="width:'+(f.hp/f.mhp*100)+'%"></i></div><div class="fh">'+f.hp+' / '+f.mhp+(f.sh?' · ⬡ '+f.sh:'')+'</div>'+
-      (f.hp>0?'<div class="fi">'+(f.frozen?'❄ Gelé : passe son tour':I.ic+' '+I.t(v))+'</div>':'')+
+      (f.hp>0?'<div class="fi">'+(f.frozen?'❄ Gelé : passe son tour':I.ic+' '+I.t(v)+(mq[i]?' (marque ×2)':''))+'</div>':'')+
       (f.cmd?'<div class="fw">'+(f.rev?'Faible : <b style="color:'+EL[f.weak].col+'">'+EL[f.weak].n+'</b> · résiste : '+EL[f.res].n:'Faiblesse inconnue (Analyser)')+'</div>':'')+'<div class="fs">'+sts+'</div></button>';}).join('');
   $('dvLog').innerHTML=DU.log.map((l,i)=>'<p style="opacity:'+(1-i*.22)+'">'+l+'</p>').join('');
   $('dvMe').innerHTML='<div class="fn">'+meta.tank.name.replace(/</g,'')+' <small>'+PROF[G.prof].n+'</small></div><div class="bar me"><i style="width:'+(me.hp/me.mhp*100)+'%"></i></div>'+
     '<div class="fh">Coque '+me.hp+' / '+me.mhp+(me.sh?' · ⬡ '+me.sh:'')+(me.mark?' · <b style="color:#ff5570">marqué</b>':'')+(me.burn?' · en feu':'')+(me.evade?' · esquive prête':'')+'</div>'+
     '<div class="en">'+'<i class="on"></i>'.repeat(me.en)+'<i></i>'.repeat(Math.max(0,3-me.en))+'<span>énergie</span><span class="ul">Ultime '+Math.floor(me.ult)+' %</span></div>';
   const K=DK[DU.kind],acts=[['tir',K.a,K.d,K.c,1]],sf=DU.foes[DU.sel],tg=sf&&sf.hp>0?sf:alive()[0];
-  P.sk.forEach((s,j)=>{if(s)acts.push(['sk'+j,SKL[s.id].n+' '+ROMAN[s.l],DSK[s.id].d+(me.cd[j]?' · recharge '+me.cd[j]:''),2,!me.cd[j]]);});
+  P.sk.forEach((s,j)=>{if(!s)return;const E=dSkE(s);acts.push(['sk'+j,SKL[s.id].n+' '+ROMAN[s.l],E?E.t(E.k*dSkM(s))+(me.cd[j]?' · recharge '+me.cd[j]:''):(DSK[s.id]&&DSK[s.id].d||'Aucun effet en duel'),2,E&&!me.cd[j]]);});
   acts.push(['garde','Se retrancher','Bouclier 20 % et +1 énergie au prochain tour',1,1],['scan','Analyser','Révèle la faiblesse, prochain coup critique',1,!(tg&&tg.rev&&me.crit)],['ult',(ULT[G.prof]||ULT.bal).n,'Ultime',0,me.ult>=100]);
   /* touches affichées au clavier seulement : la touche N déclenche DU.keys[N-1] (g4.js onKey) */
   const kb=s=>inp.touch?'':'<kbd>'+s+'</kbd>';
