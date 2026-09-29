@@ -93,18 +93,18 @@ function render(A,dt){
     CAM.x=G.pcx==null?G.cx:G.pcx+(G.cx-G.pcx)*A;CAM.y=G.pcy==null?G.cy:G.pcy+(G.cy-G.pcy)*A;CAM.z=(G.pzoom==null?G.zoom:G.pzoom+(G.zoom-G.pzoom)*A)*(1+G.kick);
     RSX=RSY=0;if(G.trauma>0){const s=G.trauma*G.trauma*16;RSX=fr(-s,s);RSY=fr(-s,s);}}
   else{RT=performance.now()/16.67;CAM.x=Math.cos(RT*.0007)*WR*.42;CAM.y=Math.sin(RT*.00091)*WR*.38;CAM.z=Math.min(W,H)/640;RSX=RSY=0;}
-  RZ=CAM.z;if(inGame)lerpIn(A);
+  RZ=CAM.z;if(inGame){lerpIn(A);markStep();}
   VL=CAM.x-(W/2+60)/RZ;VR=CAM.x+(W/2+60)/RZ;VT=CAM.y-(H/2+60)/RZ;VB=CAM.y+(H/2+60)/RZ;
   const mix=biomeMix(CAM.x,CAM.y);
   streamWorld(bakeBudget());
   /* le sol de secours n'est dessiné que si un chunk visible n'est pas encore prêt */
   if(!chunksCover()){c.fillStyle='#05030c';c.fillRect(0,0,cv.width,cv.height);screenTf();drawGround();}
-  worldTf();drawChunks();
+  worldTf();drawChunks();if(inGame)drawWhaleShadow(mix);
   for(const m of mix)if(m.b==='sea'&&m.w>.3&&QL>=2)drawCaustics(m.w);
   /* couche basse résolution : ambiance lointaine + halos */
-  lowBegin();if(QL>=2){lowScreen();drawFar(mix);drawVista(mix);LOWN++;}lowWorld();if(sk<2)drawLowGlows();lowEnd();
-  worldTf();drawEdges();drawObstacles();if(inGame){gcDrawWorld();gsDrawWorld();giDrawWorld();gxDrawWorld();gvDrawWorld();}
-  if(inGame){drawObjectives();drawPickups();drawShadows(mix);drawTrails();gcDrawUnder();giDrawUnder();drawEnemies();drawBoss();drawPlayer();drawBullets();drawFX();gcDrawOver();}
+  lowBegin();if(QL>=2){lowScreen();drawFar(mix);drawVista(mix);drawWhale(mix);LOWN++;}lowWorld();if(sk<2)drawLowGlows();lowEnd();
+  worldTf();drawEdges();drawObstacles();if(inGame){drawSeuils();drawAmers();}if(inGame){gcDrawWorld();gsDrawWorld();giDrawWorld();gxDrawWorld();gvDrawWorld();}
+  if(inGame){drawObjectives();drawPickups();drawShadows(mix);drawMarks();drawTrails();gcDrawUnder();giDrawUnder();drawEnemies();drawBoss();drawPlayer();drawBullets();drawFX();gcDrawOver();}
   screenTf();if(sk<1)drawWeather(mix);
   if(inGame&&!gvHideHUD()){if(sk<2)drawLabels();if(sk<1)drawIndicators();drawTexts();}
   postFX();
@@ -125,6 +125,9 @@ function drawGround(){
 /* couche lointaine en parallaxe (sous le sol) */
 const FAR={
   clouds(x,y,s,sc,w){ctx.globalCompositeOperation='source-over';const r=(110+s*150)*sc;soft(x,y,r,'#e8f0ff',.2*w);soft(x+r*.5,y+r*.2,r*.7,'#ffffff',.16*w);soft(x-r*.45,y+r*.25,r*.6,'#dfe8ff',.14*w);},
+  /* aurores du Glacier : rubans étirés qui ondulent, vert d'eau et mauve */
+  aurora(x,y,s,sc,w){ctx.globalCompositeOperation='lighter';const r=(90+s*80)*sc,sw=Math.sin(RT*.012+s*9);ctx.save();ctx.translate(x+sw*24*sc,y);ctx.rotate(-.3+s*.6+sw*.1);ctx.scale(3,.3);
+    soft(0,0,r,s<.5?'#7dffc4':'#a98cff',.2*w);soft(r*.3,-r*1.2,r*.8,s<.5?'#b5f3ff':'#7dffc4',.12*w);ctx.restore();},
   mist(x,y,s,sc,w){ctx.globalCompositeOperation='lighter';soft(x,y,(120+s*140)*sc,'#cffff0',.035*w);},
   rays(x,y,s,sc,w){ctx.globalCompositeOperation='lighter';ctx.save();ctx.translate(x,y);ctx.rotate(-.5);ctx.scale(.35,2.6);soft(0,0,(90+s*80)*sc,'#8fe9ff',.08*w);ctx.restore();},
   blooms(x,y,s,sc,w){ctx.globalCompositeOperation='lighter';soft(x,y,(80+s*110)*sc,s<.5?'#ff5ad8':'#b44dff',.1*w);},
@@ -148,7 +151,8 @@ function drawChunks(){
   const c0=Math.floor(VL/CH),c1=Math.floor(VR/CH),r0=Math.floor(VT/CH),r1=Math.floor(VB/CH);
   /* un chunk en cours de cuisson (c.bk) s'affiche tel quel : opaque, il part du même sol que drawGround */
   for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy),b=c&&(c.bake||c.bk&&c.bk.cv);if(b)ctx.drawImage(b,c.x0,c.y0,CH,CH);}
-  for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(c)for(const it of c.live)drawLive(it);}
+  fleeBuild();STB=10;DCB=1;
+  for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(c){for(const it of c.live)drawLive(it);if(c.bake||c.bk)drawDeco(c);}}
   ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
 }
 function drawLive(it){
@@ -165,7 +169,21 @@ function drawLive(it){
       const dx=it.vert?0:Math.sign(it.spd),dy=it.vert?Math.sign(it.spd):0;c.globalCompositeOperation='lighter';soft(x+dx*18,y+dy*18,16,'#fff3c4',.55);soft(x-dx*13,y-dy*13,9,'#ff3355',.7);
       c.globalCompositeOperation='source-over';c.globalAlpha=1;c.fillStyle='#2c2b3e';c.fillRect(x-(it.vert?5:10),y-(it.vert?10:5),it.vert?10:20,it.vert?20:10);break;}
     case 'shimmer':{if(!vis(it.x,it.y,20))return;const p=Math.pow(Math.max(0,Math.sin(RT*.04+it.ph)),8);if(p<.05)return;c.globalAlpha=p;c.strokeStyle='#fff';c.lineWidth=1.5;c.beginPath();c.moveTo(it.x-8,it.y);c.lineTo(it.x+8,it.y);c.moveTo(it.x,it.y-8);c.lineTo(it.x,it.y+8);c.stroke();c.globalAlpha=1;break;}
-    case 'node':{if(!vis(it.x,it.y,40))return;const p=.5+.5*Math.sin(RT*.06+it.ph);c.globalCompositeOperation='lighter';soft(it.x,it.y,20+p*12,'#ff3355',.3+.3*p);c.globalCompositeOperation='source-over';c.globalAlpha=1;break;}
+    case 'node':{ /* Veines du Coeur : le halo bat sur la noire de la musique (STEP, g1.js) et tout le
+       reseau s'intensifie a l'approche de WD.core (coreK, monotone). */
+      if(!vis(it.x,it.y,150))return;const k=coreK(it.x,it.y),p=beatP(it.ph),V=veinsOf(it);
+      c.lineCap='round';c.globalCompositeOperation='lighter';c.strokeStyle='#ff3355';
+      for(let w=0;w<2;w++){c.globalAlpha=(w?.55:.16)*k*(.6+.4*p);c.lineWidth=w?2:6;c.beginPath();for(const v of V){c.moveTo(it.x,it.y);for(let j=0;j<v.length;j+=2)c.lineTo(v[j],v[j+1]);}c.stroke();}
+      soft(it.x,it.y,(22+p*20)*(.8+.4*k),'#ff3355',(.18+.5*p)*k);soft(it.x,it.y,7,'#ffd0c0',.5*k);
+      c.globalCompositeOperation='source-over';c.globalAlpha=1;c.lineCap='butt';break;}
+    case 'jelly':{ /* Meduses du recif (E2) : montent lentement, cloche qui pulse ; fuient les ennemis en aggro.
+       Teinte blanc-bleu pale : hors de la palette des ennemis (COL.pk est plus sature). */
+      const cy=RT*.12*it.s+it.ph*90,x0=it.x+Math.sin(RT*.013+it.ph)*18,y0=it.y+60-((cy%240)+240)%240,fq=fleeOff(x0,y0),x=x0+fq[0],y=y0+fq[1];
+      if(!vis(x,y,40))return;const p=.5+.5*Math.sin(RT*(fq[2]>.15?.3:.09)+it.ph),r=(9+3*p)*it.s,h=r*(.75-.2*p);
+      c.globalCompositeOperation='lighter';soft(x,y,r*2.4,'#bfe8ff',.22);c.globalCompositeOperation='source-over';c.globalAlpha=1;
+      c.strokeStyle='rgba(214,244,255,.55)';c.lineWidth=1.2;c.beginPath();for(let k=-1;k<=1;k++){c.moveTo(x+k*r*.5,y);c.quadraticCurveTo(x+k*r*.5+Math.sin(RT*.08+k+it.ph)*5,y+r*1.2,x+k*r*.4,y+r*2.2);}c.stroke();
+      c.fillStyle='rgba(226,248,255,.7)';c.beginPath();c.ellipse(x,y,r,h,0,Math.PI,TAU);c.fill();
+      c.fillStyle='#ffffff';c.beginPath();c.arc(x,y-h*.35,1.8*it.s,0,TAU);c.fill();break;}
     case 'moth':{ /* Phalenes des plaines. Elles s'ecartent du joueur puis reviennent SANS AUCUN
        ETAT : le decalage est une fonction pure de la distance, donc la position reste
        reproductible et le retour est automatique des qu'on s'eloigne.
@@ -175,8 +193,9 @@ function drawLive(it){
       let x=it.x,y=it.y;
       if(G&&G.p){const dx=x-G.p.x,dy=y-G.p.y,d=Math.hypot(dx,dy)||1,R=175;
         if(d<R){const k=(1-d/R)*(1-d/R)*52;x+=dx/d*k;y+=dy/d*k;}}
+      const fq=fleeOff(it.x,it.y);x+=fq[0];y+=fq[1];
       if(!vis(x,y,34))return;
-      const bf=.5+.5*Math.sin(RT*.22+it.ph*3);
+      const bf=.5+.5*Math.sin(RT*(fq[2]>.15?.6:.22)+it.ph*3);
       c.globalCompositeOperation='lighter';
       soft(x,y,14*it.s*(.8+.3*bf),'#fff4c2',.3+.18*bf);      /* halo serre : un insecte, pas une tache */
       soft(x,y,5*it.s,'#ffffff',.6);
@@ -188,15 +207,156 @@ function drawLive(it){
       c.beginPath();c.arc(x,y,1.5*it.s,0,TAU);c.fill();break;}
     case 'bird':{ /* Vols de l'archipel : une bande traverse le ciel, ombre portee sur la mer de
        nuages. Trajectoire pure fonction du temps et de la phase : aucune memoire. */
-      const sp=RT*.05+it.ph,bx=it.x+((sp*170)%760)-380,by=it.y+Math.sin(sp*.8+it.ph)*34;
+      const sp=RT*.05+it.ph,bx0=it.x+((sp*170)%760)-380,by0=it.y+Math.sin(sp*.8+it.ph)*34,fq=fleeOff(bx0,by0),bx=bx0+fq[0]*1.6,by=by0+fq[1]*1.6;
       if(!vis(bx,by,70))return;
-      const f=.5+.5*Math.sin(RT*.22+it.ph*5);
+      const f=.5+.5*Math.sin(RT*(fq[2]>.15?.7:.22)+it.ph*5);
       c.strokeStyle='rgba(16,20,46,.30)';c.lineWidth=2;c.lineCap='round';   /* ombre */
       c.beginPath();c.moveTo(bx-6*it.s+30,by+34);c.lineTo(bx+30,by+34-3*it.s);c.lineTo(bx+6*it.s+30,by+34);c.stroke();
       c.strokeStyle='rgba(242,248,255,.92)';c.lineWidth=1.7;
       c.beginPath();c.moveTo(bx-8*it.s,by);c.quadraticCurveTo(bx,by-7*it.s*(.55+f),bx+8*it.s,by);c.stroke();break;}
   }
 }
+/* =========================================================
+   DÉCOR VIVANT ET LECTURES DU MONDE (chantier E2)
+   Tout ce qui suit est dessiné À CHAQUE IMAGE et jamais cuit : la cuisson (test/cuisson.js) et l'art
+   des chunks (test/art.js) ne bougent pas. Les placements utilisent des générateurs PROPRES
+   (mkRng(hash2(cx,cy,WD.seed^K))), jamais `rnd` ni R() : la génération et la simulation restent
+   identiques (test/trace.js). Les caches sont tenus ICI (WeakMap) et non dans l'objet chunk, pour
+   ne pas changer l'empreinte du monde.
+   Pourquoi par le MONDE et pas par l'ambiance : le lointain exige QL>=2 et la météo saute dès
+   que skLev()>=1 (render). Sur un téléphone qui a dégradé sa qualité, seul ce qui est dessiné
+   dans la passe du monde (drawChunks, drawObstacles, marques) reste visible.
+   ========================================================= */
+/* intensité du Cœur : 1 sur l'Hypernoyau, décroît STRICTEMENT avec la distance (test/decor-vivant.js) */
+function coreK(x,y){if(!WD||!WD.core)return .5;const d=Math.hypot(x-WD.core.x,y-WD.core.y)/1800;return .3+.7/(1+d*d);}
+let EMK=.5;
+/* battement : une noire = 4 pas de séquenceur (STEP, g1.js) ; RT est en images à 60 i/s */
+const BEATF=STEP*240;
+function beatP(off){const f=(((RT-off)/BEATF)%1+1)%1;return (1-f)*(1-f)*(1-f);}
+const VEIN=new WeakMap();
+function veinsOf(it){let V=VEIN.get(it);if(V)return V;V=[];const r=mkRng(hash2(it.x|0,it.y|0,WD.seed^0x7e1));
+  for(let k=0;k<3;k++){let a=it.ph+k*2.1+r()*.6,x=it.x,y=it.y;const v=[];for(let j=0;j<5;j++){a+=(r()-.5)*.9;x+=Math.cos(a)*(14+r()*8);y+=Math.sin(a)*(14+r()*8);v.push(x,y);}V.push(v);}
+  VEIN.set(it,V);return V;}
+/* N2 — la faune fuit le danger. Liste des ennemis en aggro, refaite une fois par image et bornée ;
+   le décalage est une fonction pure des positions : aucune mémoire, retour automatique. L'ennemi
+   peut être hors de l'écran : seule la bête doit être visible. */
+const FLEE=[],FLR=320,FO=[0,0,0];
+function fleeBuild(){FLEE.length=0;if(!G||!G.en)return;for(const e of G.en)if(e.aggro&&!e.dead&&e.spawn<=0){FLEE.push(e);if(FLEE.length>=40)break;}}
+function fleeOff(x,y){let dx=0,dy=0,m=0;
+  for(const e of FLEE){const ex=x-e.x,ey=y-e.y;if(ex>FLR||ex<-FLR||ey>FLR||ey<-FLR)continue;const d=Math.hypot(ex,ey)||1;if(d>=FLR)continue;const k=(1-d/FLR)*(1-d/FLR);dx+=ex/d*k;dy+=ey/d*k;if(k>m)m=k;}
+  const L=Math.hypot(dx,dy);if(L>1){dx/=L;dy/=L;}FO[0]=dx*120;FO[1]=dy*120;FO[2]=m;return FO;}
+/* décor par chunk, calculé une fois au premier affichage */
+const DECV=new WeakMap();
+function decoOf(c){let d=DECV.get(c);if(d)return d;d={v:[],pk:[],je:[],st:[]};DECV.set(c,d);
+  const r=mkRng(hash2(c.cx,c.cy,WD.seed^0x5e2a1)),x0=c.x0,y0=c.y0,Q=[biomeAt(x0+128,y0+128),biomeAt(x0+384,y0+128),biomeAt(x0+128,y0+384),biomeAt(x0+384,y0+384)];
+  /* 1. lianes du Jardin : entre deux obstacles floraux du chunk séparés de moins de 220 px (bord à bord) */
+  const F=c.obs.filter(o=>o.b==='floral'&&o.k===0);
+  for(let i=0;i<F.length;i++)for(let j=i+1;j<F.length;j++){const a=F[i],b=F[j],L=Math.hypot(b.x-a.x,b.y-a.y);if(L-a.r-b.r>=220||d.v.length>=8)continue;
+    for(let k=0;k<2;k++)d.v.push({a,b,L,sg:(k?-1:1)*(.08+r()*.14),ph:r()*TAU,w:2.2+r()*1.4});}
+  /* 2. paquets de la Grille : sur une ligne de 64 px, le long de la plus longue suite de cases cyber
+     (drawGrid, gw2.js, trace le bord haut et le bord gauche de chaque case cyber) */
+  if(Q.includes('cyber'))for(let i=0;i<8;i++){const h=r()<.5,li=1+(r()*7|0);let a=-1,best=[0,0];
+    for(let s=0;s<=8;s++){const ok=s<8&&biomeAt(h?x0+s*64+32:x0+li*64+32,h?y0+li*64+32:y0+s*64+32)==='cyber';if(ok&&a<0)a=s;if(!ok&&a>=0){if(s-a>best[1]-best[0])best=[a,s];a=-1;}}
+    const sp=(r()<.5?-1:1)*(1.4+r()*1.6),ph=r()*1e3;if(best[1]-best[0]>=2)d.pk.push({h,u:li*64,a:best[0]*64,b:best[1]*64,sp,ph});}
+  /* méduses du Récif */
+  if(Q.includes('sea'))for(let i=0;i<4&&d.je.length<3;i++){const x=x0+40+r()*(CH-80),y=y0+40+r()*(CH-80),s=.8+r()*.5,ph=r()*TAU;if(biomeAt(x,y)==='sea'&&!hitList(c.obs,x,y,30))d.je.push({t:'jelly',x,y,s,ph});}
+  /* 3. bouches de vapeur : sur la grille des lampadaires de drawCity (gw2.js : hash2(L>>8,t>>7,seed^0xc17e)),
+     sur la chaussée d'en face, décalées de 70 px le long de la rue */
+  if(Q.includes('urban')){const S=WD.seed^0xc17e;
+    for(let v=0;v<2;v++)for(let L=(v?y0:x0);L<(v?y0:x0)+CH;L+=256)for(let t=(v?x0:y0)+128;t<(v?x0:y0)+CH;t+=256){
+      const hh=hash2(L>>8,t>>7,S+v),sd=hh&1?1:-1,vx=v?t+70*sd:L-sd*20,vy=v?L-sd*20:t+70*sd,keep=r()<.6;
+      if(!keep||vx<x0||vx>=x0+CH||vy<y0||vy>=y0+CH||biomeAt(vx,vy)!=='urban'||hitList(c.obs,vx,vy,10))continue;d.st.push({x:vx,y:vy,v,ph:r()});}}
+  return d;}
+/* STB : bouches de vapeur par image ; DCB : décors de chunk CALCULÉS par image (le premier calcul d'un
+   chunk appelle biomeAt des dizaines de fois : mesuré 26 ms au pire à x4 sans borne) */
+let STB=0,DCB=0;
+function drawDeco(c){let d=DECV.get(c);if(!d){if(DCB<=0)return;DCB--;d=decoOf(c);}const g=ctx;
+  if(d.v.length){g.lineCap='round';
+    for(const q of d.v){const a=q.a,b=q.b,ux=(b.x-a.x)/q.L,uy=(b.y-a.y)/q.L,ax=a.x+ux*a.r*.7,ay=a.y+uy*a.r*.7,bx=b.x-ux*b.r*.7,by=b.y-uy*b.r*.7;
+      if(Math.max(ax,bx)+40<VL||Math.min(ax,bx)-40>VR||Math.max(ay,by)+40<VT||Math.min(ay,by)-40>VB)continue;
+      const sw=Math.sin(RT*.02+q.ph)*.03,k=(q.sg+sw)*q.L,mx=(ax+bx)/2-uy*k,my=(ay+by)/2+ux*k;
+      g.strokeStyle='#0d1f0c';g.lineWidth=q.w+2.5;g.beginPath();g.moveTo(ax,ay);g.quadraticCurveTo(mx,my,bx,by);g.stroke();
+      g.strokeStyle='#3f8f36';g.lineWidth=q.w;g.stroke();
+      g.fillStyle='#57b544';for(let t=.18;t<.9;t+=.16){const u=1-t,px=u*u*ax+2*u*t*mx+t*t*bx,py=u*u*ay+2*u*t*my+t*t*by,s=((t*7|0)&1)?1:-1;
+        g.beginPath();g.ellipse(px-uy*s*4,py+ux*s*4,4.5,2.2,Math.atan2(uy,ux)+s*.8,0,TAU);g.fill();}}
+    g.lineCap='butt';}
+  if(d.pk.length){g.globalCompositeOperation='lighter';
+    for(const q of d.pk){const L=q.b-q.a,p=q.a+(((q.ph+RT*q.sp)%L)+L)%L,x=q.h?c.x0+p:c.x0+q.u,y=q.h?c.y0+q.u:c.y0+p;if(!vis(x,y,30))continue;
+      const tx=q.h?-Math.sign(q.sp):0,ty=q.h?0:-Math.sign(q.sp),tl=Math.min(26,p-q.a,q.b-p);
+      g.globalAlpha=.7;g.strokeStyle='#2de2ff';g.lineWidth=2.5;g.beginPath();g.moveTo(x,y);g.lineTo(x+tx*Math.max(0,tl),y+ty*Math.max(0,tl));g.stroke();
+      soft(x,y,13,'#2de2ff',.45);g.globalAlpha=1;g.fillStyle='#eaffff';g.fillRect(x-2.5,y-2.5,5,5);}
+    g.globalCompositeOperation='source-over';g.globalAlpha=1;}
+  for(const q of d.je)drawLive(q);
+  for(const q of d.st){if(STB<=0||!vis(q.x,q.y,70))continue;STB--;
+    g.fillStyle='#0b0a12';g.fillRect(q.x-7,q.y-4,14,8);g.strokeStyle='rgba(150,150,175,.5)';g.lineWidth=1;g.beginPath();for(let k=-4;k<=4;k+=4){g.moveTo(q.x+k,q.y-3);g.lineTo(q.x+k,q.y+3);}g.stroke();
+    for(let k=0;k<5;k++){const f=((RT*.011+q.ph+k/5)%1),r=5+f*17;soft(q.x+Math.sin(RT*.02+k*1.7+q.ph*9)*4*f+f*10,q.y-f*56,r,'#eef0fa',Math.min(1,f*9)*(1-f)*.75);}
+    g.globalAlpha=1;}
+}
+/* 5. baleine céleste : une silhouette qui traverse le lointain toutes les 45 s (couche basse, QL>=2),
+   et son ombre sur la mer de nuages, dans la passe du monde (visible à toute qualité) */
+const WHP=2700;
+function whaleAt(mix){let w=0;for(const m of mix)if(m.b==='sky')w=m.w;if(w<.3)return null;
+  const n=Math.floor(RT/WHP),f=(RT-n*WHP)/WHP,h=hash2(n,0,WD.seed^0x3a1e),dir=h&1?1:-1,sc=RZ*.72,span=W+1300*sc,
+    x=dir>0?-650*sc+f*span:W+650*sc-f*span,y=H*(.2+.6*((h>>>4)&1023)/1023)+Math.sin(f*6)*20*sc;return{x,y,dir,sc,w,f};}
+function drawWhale(mix){const q=whaleAt(mix);if(!q)return;const c=ctx;
+  c.save();c.globalCompositeOperation='source-over';c.translate(q.x,q.y);c.scale(q.dir*q.sc,q.sc);const sw=Math.sin(RT*.03)*.12;
+  c.globalAlpha=.62*q.w;c.fillStyle='#16224f';c.beginPath();c.ellipse(0,0,270,74,0,0,TAU);c.fill();
+  c.beginPath();c.moveTo(-230,-18);c.quadraticCurveTo(-330,0,-360,0);c.lineTo(-420,-60+sw*200);c.quadraticCurveTo(-400,0,-420,60-sw*200);c.lineTo(-360,0);c.quadraticCurveTo(-330,0,-230,18);c.fill();
+  c.beginPath();c.moveTo(60,40);c.quadraticCurveTo(20,130+sw*80,-40,150+sw*80);c.quadraticCurveTo(0,90,-10,50);c.fill();
+  c.globalAlpha=.28*q.w;c.strokeStyle='#cfe0ff';c.lineWidth=5;c.beginPath();for(let k=0;k<5;k++){c.moveTo(210-k*6,20+k*9);c.quadraticCurveTo(40,34+k*9,-120,18+k*8);}c.stroke();
+  c.fillStyle='#cfe0ff';c.beginPath();c.arc(185,-8,7,0,TAU);c.fill();c.restore();c.globalAlpha=1;}
+function drawWhaleShadow(mix){const q=whaleAt(mix);if(!q)return;const x=CAM.x+(q.x-W/2)/RZ+160,y=CAM.y+(q.y-H/2)/RZ+220,L=560*q.sc/RZ;
+  ctx.globalAlpha=.3*q.w;ctx.drawImage(shadowSpr(),x-L,y-L*.32,L*2,L*.64);ctx.globalAlpha=1;}
+/* 9. N5 — seuils : là où un segment du chemin principal change de biome, une arche aux deux couleurs,
+   posée par dichotomie sur le segment (aucun tirage), calculée une fois par monde */
+let THR=[],THRW=null;
+function seuils(){if(THRW===WD)return THR;THRW=WD;THR=[];if(!WD.segs||!WD.mainE)return THR;
+  for(const sg of WD.segs){if(!WD.mainE.has(sg.e))continue;const A=biomeAt(sg.ax,sg.ay),B=biomeAt(sg.bx,sg.by);if(A===B)continue;
+    let lo=0,hi=1;for(let i=0;i<16;i++){const m=(lo+hi)/2;if(biomeAt(sg.ax+(sg.bx-sg.ax)*m,sg.ay+(sg.by-sg.ay)*m)===A)lo=m;else hi=m;}
+    const t=(lo+hi)/2,L=Math.hypot(sg.bx-sg.ax,sg.by-sg.ay)||1;THR.push({x:sg.ax+(sg.bx-sg.ax)*t,y:sg.ay+(sg.by-sg.ay)*t,ux:(sg.bx-sg.ax)/L,uy:(sg.by-sg.ay)/L,a:A,b:B});}
+  return THR;}
+function drawSeuils(){const c=ctx;
+  for(const T of seuils()){if(!vis(T.x,T.y,260))continue;const nx=-T.uy,ny=T.ux,R=66,[dx,dy]=twOff(T.x,T.y,1.5,TWM),ca=BIO[T.a].a,cb=BIO[T.b].a;
+    const p1x=T.x+nx*R,p1y=T.y+ny*R,p2x=T.x-nx*R,p2y=T.y-ny*R;
+    c.lineCap='round';c.globalAlpha=.8;c.strokeStyle='#0c0a16';c.lineWidth=12;c.beginPath();c.moveTo(p1x,p1y);c.lineTo(p1x+dx,p1y+dy);c.moveTo(p2x,p2y);c.lineTo(p2x+dx,p2y+dy);
+    c.moveTo(p1x+dx,p1y+dy);c.quadraticCurveTo(T.x+dx*1.45,T.y+dy*1.45,p2x+dx,p2y+dy);c.stroke();c.globalAlpha=1;
+    for(const [s,col] of [[-1,ca],[1,cb]]){const ox=T.ux*s*3.5,oy=T.uy*s*3.5;c.strokeStyle=col;c.lineWidth=3.5;c.beginPath();
+      c.moveTo(p1x+ox,p1y+oy);c.lineTo(p1x+dx+ox,p1y+dy+oy);c.quadraticCurveTo(T.x+dx*1.45+ox,T.y+dy*1.45+oy,p2x+dx+ox,p2y+dy+oy);c.lineTo(p2x+ox,p2y+oy);c.stroke();
+      c.globalAlpha=.35;c.lineWidth=5;c.beginPath();c.moveTo(p1x+ox*3,p1y+oy*3);c.lineTo(p2x+ox*3,p2y+oy*3);c.stroke();c.globalAlpha=1;}
+    c.globalCompositeOperation='lighter';soft(T.x+dx*1.2,T.y+dy*1.2,34,ca,.45);soft(T.x+dx*1.2,T.y+dy*1.2,22,cb,.45);c.globalCompositeOperation='source-over';c.globalAlpha=1;c.lineCap='butt';}}
+/* 10. N4 — amers : un monument d'un biome absent de G.visited projette une colonne de sa couleur.
+   Renvoie les monuments allumés dans le champ (test/decor-vivant.js). */
+function beamSpr(col){let s=SPR['bm'+col];if(s)return s;s=mkCanvas(32,256);const g=s.getContext('2d');
+  let gr=g.createLinearGradient(0,0,32,0);gr.addColorStop(0,rgba(col,0));gr.addColorStop(.35,rgba(col,.55));gr.addColorStop(.5,'rgba(255,255,255,.9)');gr.addColorStop(.65,rgba(col,.55));gr.addColorStop(1,rgba(col,0));g.fillStyle=gr;g.fillRect(0,0,32,256);
+  g.globalCompositeOperation='destination-in';gr=g.createLinearGradient(0,0,0,256);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(.6,'rgba(0,0,0,.6)');gr.addColorStop(1,'rgba(0,0,0,1)');g.fillStyle=gr;g.fillRect(0,0,32,256);
+  return SPR['bm'+col]=s;}
+const BEAMH=2400;
+function drawAmers(){const out=[];if(!G||!G.visited||!WD||!WD.lms)return out;const c=ctx;c.globalCompositeOperation='lighter';
+  for(const L of WD.lms){if(G.visited[L.t])continue;if(L.x+60<VL||L.x-60>VR||L.y-BEAMH>VB||L.y+160<VT)continue;out.push(L);
+    const col=BIO[L.t].a,p=.85+.15*Math.sin(RT*.04+(L.s&255));c.globalAlpha=.7*p;c.drawImage(beamSpr(col),L.x-40,L.y-BEAMH,80,BEAMH);soft(L.x,L.y,160,col,.4*p);}
+  c.globalCompositeOperation='source-over';c.globalAlpha=1;return out;}
+/* 8. N3 — trace du joueur, propre au biome. G.trails (g2.js) n'est rempli qu'en fantôme et g2.js est
+   hors périmètre : pool FIXE de MKN marques, anneau réécrit sur place (sa taille ne croît jamais). */
+const MKN=48,MKL=150,MK=[];for(let i=0;i<MKN;i++)MK.push({x:0,y:0,px:0,py:0,a:0,t:-1e9,b:'',s:0,r:10});
+let MKI=0,MKX=null,MKY=0,MKS=0;
+function markStep(){const P=G.p;if(!P||P.dead||G.state!=='play')return;if(MKX===null){MKX=P.x;MKY=P.y;return;}
+  const dx=P.x-MKX,dy=P.y-MKY,d=Math.hypot(dx,dy);if(d>400){MKX=P.x;MKY=P.y;return;}
+  const b=G.biome,st=b==='ice'?20:b==='sea'?28:16;if(d<st)return;
+  const m=MK[MKI];MKI=(MKI+1)%MKN;m.px=MKX;m.py=MKY;m.x=P.x;m.y=P.y;m.a=Math.atan2(dy,dx);m.t=RT;m.b=b;m.s=MKS^=1;m.r=P.r;MKX=P.x;MKY=P.y;}
+function drawMarks(){const c=ctx,P=G.p;
+  for(const m of MK){const f=(RT-m.t)/MKL;if(f<0||f>=1||!vis(m.x,m.y,50))continue;const a=1-f,ca=Math.cos(m.a),sa=Math.sin(m.a),nx=-sa,ny=ca;
+    switch(m.b){
+      case 'plains':case 'floral':{c.globalAlpha=.3*a;c.strokeStyle='rgba(0,0,0,.6)';c.lineWidth=m.r*1.7;c.beginPath();c.moveTo(m.px,m.py);c.lineTo(m.x,m.y);c.stroke();
+        c.globalAlpha=.6*a;c.strokeStyle=BIO[m.b].a;c.lineWidth=1.3;c.beginPath();
+        for(const s of [-1,1])for(let k=0;k<2;k++){const o=m.r*(.35+k*.45)*s,qx=m.x+nx*o,qy=m.y+ny*o;c.moveTo(qx,qy);c.lineTo(qx-ca*12+nx*s*3,qy-sa*12+ny*s*3);}c.stroke();break;}
+      case 'sea':{c.strokeStyle='#dffbff';c.lineWidth=1.2;for(let k=0;k<3;k++){const z=f*(34+k*10),x=m.x+nx*(k-1)*m.r*.6+Math.sin(RT*.1+k+m.t)*3,y=m.y-z;c.globalAlpha=.75*a;c.beginPath();c.arc(x,y,1.8+k*1.1+f*2,0,TAU);c.stroke();}break;}
+      case 'ice':{const o=(m.s?1:-1)*m.r*.45,x=m.x+nx*o,y=m.y+ny*o;c.globalAlpha=.8*a;c.fillStyle='#ffffff';c.beginPath();c.ellipse(x+ca*1.2,y+sa*1.2,8.5,5.2,m.a,0,TAU);c.fill();
+        c.fillStyle='#0b2436';c.globalAlpha=.75*a;c.beginPath();c.ellipse(x,y,7,4.2,m.a,0,TAU);c.fill();break;}
+      case 'cyber':case 'urban':{c.globalCompositeOperation='lighter';c.strokeStyle=P.col;c.lineCap='round';c.globalAlpha=.16*a;c.lineWidth=10;c.beginPath();c.moveTo(m.px,m.py);c.lineTo(m.x,m.y);c.stroke();
+        c.globalAlpha=.8*a;c.lineWidth=2.5;c.stroke();c.lineCap='butt';c.globalCompositeOperation='source-over';break;}
+      case 'sky':{soft(m.x-ca*6,m.y-sa*6,14+f*12,'#ffffff',.22*a);break;}
+      case 'core':{c.globalAlpha=.45*a;c.drawImage(shadowSpr(),m.x-12,m.y-12,24,24);c.globalCompositeOperation='lighter';soft(m.x,m.y,5,'#ff3355',.5*a*a);c.globalCompositeOperation='source-over';break;}}}
+  c.globalAlpha=1;}
 function drawCaustics(w){
   const c=ctx,d=RT*.35;c.save();c.globalCompositeOperation='lighter';c.fillStyle=CAUSP;
   c.globalAlpha=.1*w;c.translate(d,d*.6);c.fillRect(VL-d,VT-d*.6,VR-VL,VB-VT);
@@ -221,7 +381,7 @@ function drawObstacles(){
     for(const o of ch.obs){if(o.wall)continue;const m=o.R+140;if(o.cx+m<VL||o.cx-m>VR||o.cy+m<VT||o.cy-m>VB)continue;
       if(!o.spr){if(SPRB<=0)continue;SPRB--;OSPR.push(o);}
       o.su=FRAME;if(o.b==='urban'||o.lt==='urban'&&o.role==='center'){obsSprite(o);TWL.push(o);continue;}ctx.drawImage(obsSprite(o),o.sx,o.sy,o.sw,o.sh);
-      if(o.b==='core'){ctx.globalCompositeOperation='lighter';soft(o.x,o.y,o.r*1.3,'#ff3355',.1+.08*Math.sin(RT*.05+o.s));ctx.globalCompositeOperation='source-over';ctx.globalAlpha=1;}}}
+      if(o.b==='core'){ctx.globalCompositeOperation='lighter';soft(o.x,o.y,o.r*1.3,'#ff3355',(.1+.08*Math.sin(RT*.05+o.s))*(.5+coreK(o.x,o.y)));ctx.globalCompositeOperation='source-over';ctx.globalAlpha=1;}}}
   drawTowers();
 }
 /* Mégapole : tours extrudées en perspective. Le toit glisse loin du centre de l'écran à proportion de sa
@@ -366,7 +526,7 @@ function drawFX(){
 const WEA=[];let WCX=null,WCY=null;
 function weaType(mix){let r=Math.random(),acc=0;for(const m of mix){acc+=m.w;if(r<=acc)return BIO[m.b].wea;}return BIO[mix[0].b].wea;}
 function drawWeather(mix){
-  const c=ctx,n=QL>=3?64:QL===2?40:22,k=Math.min(3,RDT/16.67);
+  const c=ctx,n=QL>=3?64:QL===2?40:22,k=Math.min(3,RDT/16.67);EMK=coreK(CAM.x,CAM.y);
   while(WEA.length<n)WEA.push({t:null});
   let dcx=0,dcy=0;if(WCX!==null){dcx=(CAM.x-WCX)*RZ*1.3;dcy=(CAM.y-WCY)*RZ*1.3;if(Math.abs(dcx)>200||Math.abs(dcy)>200)dcx=dcy=0;}WCX=CAM.x;WCY=CAM.y;
   for(let i=0;i<n;i++){const p=WEA[i];
@@ -394,7 +554,7 @@ function drawWeather(mix){
       case 'data':c.globalCompositeOperation='lighter';c.globalAlpha=.45;c.strokeStyle=p.s<.8?'#2de2ff':'#ff2d95';c.lineWidth=1.5;c.beginPath();c.moveTo(p.x,p.y);c.lineTo(p.x,p.y-8-p.s*14);c.stroke();break;
       case 'rain':c.globalCompositeOperation='source-over';c.globalAlpha=.28;c.strokeStyle='#bcd8ff';c.lineWidth=1;c.beginPath();c.moveTo(p.x,p.y);c.lineTo(p.x+3,p.y-17);c.stroke();break;
       case 'snow':c.globalCompositeOperation='source-over';c.globalAlpha=.75;c.fillStyle='#fff';c.beginPath();c.arc(p.x,p.y,1+p.s*2,0,TAU);c.fill();break;
-      case 'embers':c.globalCompositeOperation='lighter';glow(p.x,p.y,2+p.s*2.5,'#ff8a2d',.4+.3*Math.sin(RT*.3+p.a));break;
+      case 'embers':c.globalCompositeOperation='lighter';glow(p.x,p.y,(2+p.s*2.5)*(.7+.5*EMK),'#ff8a2d',(.4+.3*Math.sin(RT*.3+p.a))*(.45+.75*EMK));break;
     }
   }
   c.globalAlpha=1;c.globalCompositeOperation='source-over';
