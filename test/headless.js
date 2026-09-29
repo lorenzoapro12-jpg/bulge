@@ -588,6 +588,34 @@ scenario('prologue : un joueur qui ne dashe ni ne lance sa compétence n est pas
   } finally { win.__SIM_INPUT = inputFn; call(tuto === undefined ? 'delete meta.tuto' : 'meta.tuto=' + JSON.stringify(tuto)); }
 });
 
+/* chantier B — embranchements : le contenu annoncé existe ET se joue. Un trésor se ramasse en passant ; un nid se
+   réveille à l'approche (garde avec 2 élites), ne paie rien tant qu'elle vit, et paie quand elle est détruite.
+   Proximité seule, aucune interface : rien à brancher sur SIMF(). Le classement et la vérité des annonces sont
+   vérifiés par test/embranchements.js (plus bas). */
+{ start('bal');
+  /* rendu réel d'une image au carrefour : panneaux/pastilles « icône Type · N m » effectivement écrits */
+  let rD = '', rOK = false;
+  try { rD = call(`(()=>{const b=WD.br[0],o=WD.sites[b.o],k=Math.min(1,(WR-240)/Math.hypot(o.x,o.y));for(const e of G.en)e.dead=true;G.p.x=G.p.px=o.x*k;G.p.y=G.p.py=o.y*k;
+      CAM.x=G.p.x;CAM.y=G.p.y;const T=[],f0=ctx.fillText;ctx.fillText=function(t){T.push(String(t));};try{render(1,16);}finally{ctx.fillText=f0;}
+      const want=WD.br.map((q,i)=>i).filter(i=>WD.br[i].o===b.o&&!gcBrDone(i)).map(i=>BRT[WD.br[i].t].n+' '),got=T.filter(t=>/ m$/.test(t)&&Object.values(BRT).some(v=>t.includes(v.n)));
+      return JSON.stringify({ok:want.every(w=>got.some(t=>t.includes(w.trim()))),got:[...new Set(got)].slice(0,6),want});})()`);
+    rOK = JSON.parse(rD).ok; } catch (e) { rD = 'exception : ' + e.message; }
+  check('branches : au carrefour, une image rendue écrit l’annonce de chaque branche non épuisée (type + mètres)', rOK, rD);
+  const r0 = JSON.parse(call(`(()=>{const ti=WD.br?WD.br.findIndex(b=>b.t==='tresor'):-1,ni=WD.br?WD.br.findIndex(b=>b.t==='nid'):-1;
+    if(ti>=0){const b=WD.br[ti];G.p.x=G.p.px=b.x;G.p.y=G.p.py=b.y;}return JSON.stringify({ti,ni,sh:G.gs.shards});})()`));
+  let tOK = false, tD = 'aucune branche trésor (WD.br absent ?)';
+  if (r0.ti >= 0) { steps(25); const t = JSON.parse(call(`JSON.stringify({d:!!G.gc.brDone[${r0.ti}],sh:G.gs.shards})`)); tOK = t.d && t.sh > r0.sh; tD = 'ramassé=' + t.d + ' éclats ' + r0.sh + '→' + t.sh; }
+  check('branches : un trésor annoncé se ramasse au bout de la branche (éclats en plus)', tOK, tD);
+  let nOK = false, nD = 'aucune branche nid';
+  if (r0.ni >= 0) {
+    call(`(()=>{const b=WD.br[${r0.ni}];G.p.x=G.p.px=b.x;G.p.y=G.p.py=b.y+220;G.p.inv=9999;})()`); steps(25);
+    const a = JSON.parse(call(`JSON.stringify({n:(G.gc.nest[${r0.ni}]||[]).length,el:(G.gc.nest[${r0.ni}]||[]).filter(e=>e.aff).length,d:!!G.gc.brDone[${r0.ni}],sh:G.gs.shards})`));
+    call(`for(const e of G.gc.nest[${r0.ni}]||[])if(!e.dead)killEnemy(e);`); steps(25);
+    const z = JSON.parse(call(`JSON.stringify({d:!!G.gc.brDone[${r0.ni}],sh:G.gs.shards})`));
+    nOK = a.n >= 4 && a.el >= 1 && !a.d && z.d && z.sh > a.sh; nD = 'garde=' + a.n + ' dont élites=' + a.el + ', payé avant=' + a.d + ', payé après=' + z.d + ', éclats ' + a.sh + '→' + z.sh; }
+  check('branches : un nid se réveille à l’approche, ne paie qu’une fois sa garde détruite', nOK, nD);
+}
+
 /* hooks du harnais : ne doivent pas avoir disparu */
 check('hooks : SIMF / __SIM / __SIM_INPUT / __SIM_PICK / __SIM_END utilisés par le jeu',
   call('typeof SIMF') === 'function' && ['__SIM_END', '__SIM_PICK', '__SIM_INPUT'].every(h => code.includes('window.' + h)) && code.includes('window.__SIM'));
@@ -613,6 +641,10 @@ const sub = (f, args) => { const r = cp.spawnSync(process.execPath, [path.join(_
     (r.out.match(/ECHEC [^\n]*/g) || []).map(s => s.trim()).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
 { const r = sub('colonne.js', REF ? ['--ref=' + REF] : []);
   check('colonne : chemin principal = plus court chemin 0 → Hypernoyau, 3 cœurs jalons dessus, 3 biomes distincts (test/colonne.js)', r.ok,
+    (r.out.match(/ECHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim()).join(' | ') || (r.out.match(/\d+ graines : [^\n]*/) || [''])[0]); }
+
+{ const r = sub('embranchements.js', REF ? ['--ref=' + REF] : []);
+  check('embranchements : chaque arête classée une fois, branches variées par carrefour, annonce lisible depuis le carrefour et vraie au mètre près, contenu présent (test/embranchements.js)', r.ok,
     (r.out.match(/ECHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim()).join(' | ') || (r.out.match(/\d+ graines : [^\n]*/) || [''])[0]); }
 
 /* ---------- verdict ---------- */

@@ -40,7 +40,7 @@ function genWorld(seed){
   WD={seed,sites,core:{x:core.x,y:core.y},hearts,chunks:new Array(NC*NC),bakes:[],warp:[rnd()*100,rnd()*100],map:null,mini:null,fog:null,fogG:null,fogA:new Uint8Array(64*64),used:false};
   for(const h of hearts)if(!h.t)h.t=biomeAt(h.x,h.y);
   WD.hs=(seed%9973)+17;
-  buildTrails(rnd);buildLandmarks(rnd);buildWalls();gcWorld(rnd);gxWorld(rnd);gvWorld();
+  buildTrails(rnd);buildLandmarks(rnd);buildWalls();gcWorld(rnd);gxWorld(rnd);gvWorld();gcBranches();
   buildMaps();
 }
 function warpXY(x,y){const w=WD.warp;return[x+Math.sin(y*.0013+w[0])*190+Math.sin(y*.0041+w[1])*60,y+Math.sin(x*.0012+w[1])*190+Math.sin(x*.0037+w[0])*60];}
