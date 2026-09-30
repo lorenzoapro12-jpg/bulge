@@ -1,0 +1,218 @@
+'use strict';
+/* =========================================================
+   Garde-fou du REGULATEUR EN MODE MANUEL (perf(), g4.js) — chantier P2, 30/09/2026.
+
+   Ce que ce test defend : un mode de qualite MANUEL (« Haute », « Équilibrée », « Performance »)
+   est un PLAFOND, pas un interrupteur qui eteint le regulateur.
+     - quand ca saccade, QL puis RES doivent DESCENDRE sous le cran choisi ;
+     - quand ca va mieux, la remontee doit revenir AU cran choisi et S'Y ARRETER, jamais au-dessus ;
+     - le mode « Auto » ne doit pas avoir bouge d'un cran (trajectoire comparee a celle de TEMOIN).
+
+   Fait mesure a l'origine (S22 du proprietaire) : 46 ips / pire 59 ms et 58 ips / pire 25 ms avec
+   exactement le meme « effets 2/3 · PS 1.25 · ref 0.0 ms » — perf() sortait des que meta.q!=='auto'.
+
+   On execute la VRAIE `perf()` (modules charges dans un DOM stube, comme test/qualite.js) et on lui
+   donne des intervalles d'image FABRIQUES ICI : aucune lecture du temps reel, aucun tirage. Deux
+   executions sur le meme arbre rendent donc la meme sortie, octet pour octet.
+
+   node test/regule.js              arbre de travail
+   node test/regule.js --ref=HEAD   code d'un commit (sur l'ancien code : doit ECHOUER en nommant la cause)
+   node test/regule.js --temoin=X   commit de reference du mode Auto (defaut cd10e7c, avant le chantier)
+   Code de sortie : 0 si tout passe, 1 sinon.
+   ========================================================= */
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+const cp = require('child_process');
+
+const ROOT = path.resolve(__dirname, '..');
+const ARG = k => { const a = process.argv.find(x => x === '--' + k || x.startsWith('--' + k + '=')); return a ? (a.split('=')[1] || true) : null; };
+const REF = ARG('ref'), TEMOIN = ARG('temoin') || 'cd10e7c';
+const ORDER = ['g1.js', 'gw.js', 'gw2.js', 'g2.js', 'gs.js', 'gc.js', 'gi.js', 'gx.js', 'gt.js', 'gv.js', 'g3.js', 'g4.js'];
+const readModule = (ref, f) => ref ? cp.execFileSync('git', ['show', ref + ':' + f], { cwd: ROOT, encoding: 'utf8' }) : fs.readFileSync(path.join(ROOT, f), 'utf8');
+
+/* ---------- une instance du jeu (stubs repris de test/qualite.js), horloge virtuelle propre ---------- */
+function mkGame(ref) {
+  let CLOCK = 0, TID = 0;
+  const TIMERS = [];
+  function mkCtx() {
+    const grad = { addColorStop() {} };
+    const base = {
+      createImageData: (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
+      getImageData: (x, y, w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
+      createRadialGradient: () => grad, createLinearGradient: () => grad,
+      createPattern: () => ({}), measureText: (s) => ({ width: (s || '').length * 7 }),
+    };
+    return new Proxy(base, { get: (t, p) => (p in t ? t[p] : () => {}), set: (t, p, v) => (t[p] = v, true) });
+  }
+  function mkStyle() { const s = {}; Object.defineProperties(s, { setProperty: { value: (k, v) => { s[k] = String(v); } }, removeProperty: { value: (k) => { const v = s[k]; delete s[k]; return v || ''; } }, getPropertyValue: { value: (k) => (s[k] || '') } }); return s; }
+  function mkClassList() { const set = new Set(); return { add: (...c) => c.forEach(x => set.add(x)), remove: (...c) => c.forEach(x => set.delete(x)), toggle: (c, f) => { const on = f === undefined ? !set.has(c) : !!f; if (on) set.add(c); else set.delete(c); return on; }, contains: (c) => set.has(c) }; }
+  function mkListeners() { const L = {}; return { add: (t, fn) => (L[t] = L[t] || []).push(fn), fire: (t, e) => (L[t] || []).forEach(fn => fn(e)), has: (t) => !!(L[t] && L[t].length) }; }
+  const doc = { activeElement: null };
+  function mkEl(id, tag) {
+    const L = mkListeners(), attrs = {};
+    return {
+      id: id || '', tagName: (tag || 'div').toUpperCase(), style: mkStyle(), classList: mkClassList(), dataset: {},
+      hidden: false, disabled: false, innerHTML: '', textContent: '', value: '', className: '', offsetWidth: 0, offsetHeight: 0, parentElement: null,
+      getBoundingClientRect: () => ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600, x: 0, y: 0 }),
+      setAttribute: (k, v) => { attrs[k] = String(v); }, getAttribute: (k) => (k in attrs ? attrs[k] : null),
+      closest: () => null, focus: () => {}, blur() {}, querySelector: () => null, querySelectorAll: () => [],
+      addEventListener: (t, fn) => L.add(t, fn), removeEventListener() {}, _fire: L.fire, _has: L.has,
+      after() {}, appendChild: (c) => c, setPointerCapture() {}, releasePointerCapture() {},
+    };
+  }
+  function mkCanvasEl(w, h, id) { const el = mkEl(id, 'canvas'); el.width = w || 300; el.height = h || 150; el.getContext = () => mkCtx(); return el; }
+  const stash = new Map();
+  Object.assign(doc, {
+    hidden: false,
+    getElementById(id) { if (!stash.has(id)) { const el = (id === 'cv' || id === 'low' || id === 'hgPrev') ? mkCanvasEl(800, 600, id) : mkEl(id); if (id === 'cv') el.parentElement = mkEl('stage'); stash.set(id, el); } return stash.get(id); },
+    createElement: (t) => (t === 'canvas' ? mkCanvasEl() : mkEl('', t)),
+    querySelectorAll: () => [], querySelector: () => null, body: mkEl('body', 'body'),
+  });
+  const DOCL = mkListeners(); doc.addEventListener = DOCL.add;
+  const WINL = mkListeners();
+  const win = { __SIM: true, devicePixelRatio: 1, requestAnimationFrame: () => 0, addEventListener: WINL.add, removeEventListener() {} };
+  const sandbox = {
+    window: win, document: doc, console, matchMedia: () => ({ matches: false }),
+    localStorage: { getItem: () => null, setItem() {} },
+    performance: { now: () => CLOCK }, requestAnimationFrame: win.requestAnimationFrame,
+    setTimeout: (fn, ms) => { TIMERS.push({ fn, at: CLOCK + (ms || 0), id: ++TID }); return TID; },
+    clearTimeout: (id) => { const k = TIMERS.findIndex(t => t.id === id); if (k >= 0) TIMERS.splice(k, 1); },
+    setInterval: () => 0, clearInterval() {},
+    getComputedStyle: () => ({ paddingTop: '0px', paddingBottom: '0px', paddingLeft: '0px', paddingRight: '0px' }),
+    addEventListener: WINL.add, removeEventListener() {},
+    Date: Object.assign(function () { return new Date(0); }, { now: () => CLOCK }),   /* pas de temps reel dans le bac */
+  };
+  sandbox.globalThis = sandbox;
+  const ctx = vm.createContext(sandbox);
+  const call = (e) => vm.runInContext(e, ctx);
+  call(`(function(){let s=1;Math.__seed=v=>{s=(v>>>0)||1;};Math.random=function(){s=(s+0x6D2B79F5)>>>0;let t=s;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};})()`);
+  vm.runInContext(ORDER.map(f => readModule(ref, f)).join('\n'), ctx, { filename: 'game.js' });
+  const PERF = call('(function(dt){perf(dt);})');
+  const STATE = call('(function(){return JSON.stringify({QL:QL,RES:RES,ref:REFDT,q:meta.q||"auto",qa:meta.qAuto||null,w:cv.width,h:cv.height,ps:PS});})');
+  const st = () => JSON.parse(STATE());
+  /* DPR=2 (telephone) : sans cela PS vaut 1 a tous les crans et la coherence cran <-> pixels est invisible */
+  call('DPR=2');
+  call(`newRun('bal',false);gsRunStart();gcRunStart();giRunStart();gxRunStart();gtRunStart();gvRunStart();`);
+  /* pose une qualite comme le fait le bouton « Qualité » puis startGame : meta.q, applyQuality(), refReset() */
+  const pose = (q, qAuto) => call(`G.state='play';meta.q=${JSON.stringify(q)};meta.qAuto=${qAuto ? JSON.stringify(qAuto) : 'null'};applyQuality();refReset();`);
+  /* joue n images ; dtOf(i) fabrique l'intervalle ; vu(S) est appele apres CHAQUE image */
+  const play = (n, dtOf, vu) => { for (let i = 0; i < n; i++) { const dt = dtOf(i); CLOCK += dt; PERF(dt); if (vu) vu(st()); } };
+  return { call, st, pose, play };
+}
+
+/* ---------- regimes fabriques (aucune horloge reelle) ---------- */
+const SAIN = () => 16.7;                               /* 60 ips constants */
+const SACCADE = (i) => (i % 5 === 2 ? 33.3 : 16.7);    /* une image sur cinq manque son vsync : ~50 ips, p90 = 33,3 ms */
+const IMG = s => Math.round(s * 60);
+
+/* l'invariant de test/qualite.js : l'etat de qualite et la taille reelle du canevas concordent */
+function coherent(S) {
+  const ps = Math.min(2, S.QL >= 3 ? 2 : S.QL === 2 ? 1.25 : 1) * S.RES;
+  return Math.abs(S.w - Math.round(800 * ps)) <= 1 && Math.abs(S.ps - ps) < 1e-9;
+}
+
+const checks = [];
+const check = (name, ok, detail) => checks.push({ name, ok, detail });
+const J = S => `${S.QL}/${S.RES}`;
+
+const GAME = mkGame(REF);
+const CRAN = { high: [3, 1], mid: [2, 1], low: [1, .8] }, NOM = { high: 'Haute', mid: 'Équilibrée', low: 'Performance' };
+
+/* ================= M — pour chaque mode manuel : descente sous saccade, remontee bornee au cran ================= */
+for (const q of ['mid', 'high', 'low']) {
+  const [cQL, cRES] = CRAN[q], T = `${q} (« ${NOM[q]} », cran ${cQL}/${cRES})`;
+  GAME.pose(q, null);
+  const D = GAME.st();
+  check(`${T} : depart au cran choisi`, D.QL === cQL && D.RES === cRES && D.q === q, `QL/RES=${J(D)}, meta.q=${D.q}`);
+
+  /* pendant TOUTE la sequence : jamais au-dessus du cran, pixels coherents, meta.q et meta.qAuto intacts */
+  let haut = '', incoh = '', touche = '';
+  const vu = (S) => {
+    if (!haut && (S.QL > cQL || S.RES > cRES)) haut = `QL/RES=${J(S)} au-dessus du cran ${cQL}/${cRES}`;
+    if (!incoh && !coherent(S)) incoh = `QL/RES=${J(S)} mais canvas ${S.w}x${S.h}, PS=${S.ps}`;
+    if (!touche && (S.q !== q || S.qa !== null)) touche = `meta.q=${S.q}, meta.qAuto=${JSON.stringify(S.qa)}`;
+  };
+
+  GAME.play(IMG(5), SAIN, vu);                 /* etablissement de la reference */
+  const R = GAME.st();
+  GAME.play(IMG(30), SACCADE, vu);             /* 30 s qui saccadent */
+  const B = GAME.st();
+  const cause = B.ref === 0
+    ? `CAUSE : REFDT=0 apres 35 s de jeu — perf() sort avant toute decision des que meta.q!=='auto' (le mode manuel ETEINT le regulateur)`
+    : `reference=${B.ref.toFixed(1)} ms`;
+  if (q === 'low') {
+    /* deja au plancher : rien a retirer, mais le regulateur doit TOURNER (reference mesuree) */
+    check(`${T} : deja au plancher, reste au plancher sous saccade`, B.QL === 1 && B.RES === .8, `apres 30 s de saccade QL/RES=${J(B)}`);
+  } else {
+    check(`${T} : sous saccade, les effets (QL) DESCENDENT`, B.QL < cQL,
+      `depart ${J(D)} -> apres 30 s de saccade ${J(B)} (attendu QL < ${cQL}) ; ${cause}`);
+    check(`${T} : sous saccade prolongee, la resolution (RES) DESCEND aussi (dernier recours)`, B.QL === 1 && B.RES < cRES,
+      `depart ${J(D)} -> apres 30 s de saccade ${J(B)} (attendu 1/0.8) ; ${cause}`);
+  }
+  check(`${T} : la reference de periode d'ecran est mesuree (« ref » du compteur ≠ 0)`, R.ref > 15 && R.ref < 19 && B.ref > 15 && B.ref < 19,
+    `REFDT=${R.ref.toFixed(1)} ms apres 5 s saines, ${B.ref.toFixed(1)} ms apres la saccade (attendu ~16,7)` + (B.ref === 0 ? ` ; ${cause}` : ''));
+
+  GAME.play(IMG(90), SAIN, vu);                /* 90 s saines : bien plus qu'il n'en faut pour remonter de deux crans */
+  const F = GAME.st();
+  check(`${T} : regime sain, la remontee REVIENT au cran choisi`, F.QL === cQL && F.RES === cRES && (q === 'low' || B.QL < cQL),
+    `apres saccade ${J(B)} -> apres 90 s saines ${J(F)} (attendu ${cQL}/${cRES})` + (q !== 'low' && B.QL >= cQL ? ` ; rien n'etait descendu : ${cause}` : ''));
+  check(`${T} : la remontee S'ARRETE au cran choisi — jamais au-dessus, a aucune image`, !haut,
+    haut || `${IMG(125)} images controlees une a une, aucune au-dessus de ${cQL}/${cRES} ; final ${J(F)}`);
+  check(`${T} : pixels coherents avec le cran a chaque image (applyRes suit)`, !incoh, incoh || `final canvas ${F.w}x${F.h}, PS=${F.ps}`);
+  check(`${T} : le choix du joueur (meta.q) et la qualite apprise du mode Auto (meta.qAuto) ne sont pas touches`, !touche,
+    touche || `meta.q=${F.q}, meta.qAuto=${JSON.stringify(F.qa)}`);
+}
+
+/* ================= H — hysteresis conservee en manuel : une embellie de 2 s ne fait pas remonter ================= */
+{
+  GAME.pose('mid', null);
+  GAME.play(IMG(5), SAIN); GAME.play(IMG(30), SACCADE);
+  const A = GAME.st();
+  GAME.play(IMG(2), SAIN);
+  const B = GAME.st();
+  check('mid : une embellie de 2 s ne declenche pas de remontee (asymetrie conservee)', A.QL < 2 && B.QL === A.QL && B.RES === A.RES,
+    `apres saccade ${J(A)} -> apres 2 s saines ${J(B)} (doit etre identique, et sous 2/1)`);
+}
+
+/* ================= P — le cran choisi est un POINT DE DEPART : une nouvelle partie y repart ================= */
+{
+  GAME.pose('mid', null);
+  GAME.play(IMG(5), SAIN); GAME.play(IMG(30), SACCADE);
+  const A = GAME.st();
+  GAME.call('applyQuality();refReset();');      /* ce que fait startGame (g4.js) */
+  const B = GAME.st();
+  check('mid : apres une descente, la partie suivante repart du cran choisi', A.QL < 2 && B.QL === 2 && B.RES === 1,
+    `fin de partie ${J(A)} -> applyQuality() ${J(B)} (attendu 2/1)`);
+}
+
+/* ================= A — le mode Auto n'a pas bouge : meme trajectoire que TEMOIN, image par image ================= */
+{
+  const traj = (g) => {
+    const out = [];
+    const vu = (S) => out.push(S.QL + '/' + S.RES + '/' + S.ref.toFixed(3) + '/' + JSON.stringify(S.qa) + '/' + S.w);
+    for (const qa of [null, [1, .8]]) {
+      g.pose('auto', qa);
+      g.play(IMG(5), SAIN, vu); g.play(IMG(30), SACCADE, vu); g.play(IMG(90), SAIN, vu);
+      g.play(IMG(20), () => 33.3, vu); g.play(IMG(2), SAIN, vu); g.play(IMG(10), (i) => (i % 7 === 3 ? 33.3 : 16.7), vu);
+    }
+    return out;
+  };
+  let ok = false, detail;
+  try {
+    const a = traj(GAME), b = traj(mkGame(TEMOIN));
+    let k = -1; for (let i = 0; i < Math.max(a.length, b.length); i++) if (a[i] !== b[i]) { k = i; break; }
+    const crans = new Set(a.map(s => s.split('/').slice(0, 2).join('/')));
+    ok = k < 0 && crans.has('3/1') && crans.has('1/0.8');
+    detail = k < 0 ? `${a.length} images identiques a ${TEMOIN} (QL/RES/REFDT/qAuto/canvas) ; crans parcourus : ${[...crans].join(' ')}`
+      : `diverge a l'image ${k} : ici ${a[k]} , ${TEMOIN} ${b[k]}`;
+  } catch (e) { detail = `temoin ${TEMOIN} illisible : ${String(e.message || e).split('\n')[0]}`; }
+  check(`Auto : trajectoire identique a ${TEMOIN}, image par image (descente, remontee, qAuto persiste)`, ok, detail);
+}
+
+/* ---------- verdict ---------- */
+console.log(`test/regule.js — ${REF ? 'code ' + REF : 'arbre de travail'}`);
+for (const c of checks) console.log((c.ok ? '  OK   ' : '  ECHEC') + ' ' + c.name + '\n         ' + c.detail);
+const all = checks.every(c => c.ok);
+console.log(all ? 'TOUT PASSE' : 'ECHEC PARTIEL');
+process.exit(all ? 0 : 1);

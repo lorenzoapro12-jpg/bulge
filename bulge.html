@@ -4516,7 +4516,15 @@ function perf(dt){
   DTH.push(dt);if(DTH.length>120)DTH.shift();
   if(DTH.length<120||(++qn%15))return;
   const so=DTH.slice().sort((a,b)=>a-b),med=so[60],p90=so[108];
-  if((meta.q||'auto')!=='auto')return;
+  /* Un mode MANUEL est un PLAFOND, pas une sortie de fonction (chantier P2, 30/09/2026). Avant, perf()
+     sortait ici des que la qualite n'etait pas « auto » : choisir « Équilibrée » supprimait toute
+     adaptation — ni descente quand ca saccade, ni remontee ensuite — et REFDT restait a 0 (« ref 0.0 ms »
+     au compteur). Mesure sur le S22 du proprietaire : 46 ips / pire 59 ms et 58 ips / pire 25 ms avec
+     le MEME QL 2, PS 1.25. Desormais la descente reste possible sous le cran choisi et la remontee
+     s'arrete a ce cran (cap), jamais au-dessus. En auto cap=[3,1] : comportement inchange. Le cran
+     appris en manuel n'est PAS persiste (meta.qAuto appartient au mode auto) : applyQuality() repart
+     du cran choisi a chaque partie. */
+  const man=(meta.q||'auto')!=='auto',cap=man?QPRE[meta.q]:[3,1];
   /* La reference est la PERIODE D'ECRAN, et le minimum des medianes observees en jeu l'estime par le
      haut : l'intervalle entre deux images ne peut pas etre plus court que la periode. Un MINIMUM et
      non une moyenne des premieres fenetres — sinon le demarrage (chunks a cuire, chargement) fixe la
@@ -4541,15 +4549,15 @@ function perf(dt){
       if(QL>1){QL--;applyRes();if(G)toast('Effets allégés pour garder la fluidité');}
       else if(RES>.8){RES=.8;applyRes();if(G)toast('Résolution réduite pour garder la fluidité');}
       else return;
-      meta.qAuto=[QL,RES];saveMeta();}
+      if(!man){meta.qAuto=[QL,RES];saveMeta();}}
   }else{
     slowT=Math.max(0,slowT-30);
     /* on rétablit d'abord la résolution (la dégradation la plus visible à l'œil), puis les effets */
     if(med<REFDT*1.10){if((upT+=15)>150){upT=0;DTH.length=0;
-      if(RES<1){RES=1;applyRes();if(G)toast('Résolution rétablie');}
-      else if(QL<3){QL++;applyRes();if(G)toast('Effets rétablis');}
+      if(RES<cap[1]){RES=cap[1];applyRes();if(G)toast('Résolution rétablie');}
+      else if(QL<cap[0]){QL++;applyRes();if(G)toast('Effets rétablis');}
       else return;
-      meta.qAuto=[QL,RES];saveMeta();}}
+      if(!man){meta.qAuto=[QL,RES];saveMeta();}}}
     else upT=Math.max(0,upT-30);
   }
 }
