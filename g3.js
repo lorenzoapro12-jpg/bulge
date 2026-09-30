@@ -709,11 +709,17 @@ function drawHUD(){
     const ZB=[];if(inp.touch){const d=dashBtn();ZB.push([d.x-d.r-10,d.y-d.r-10,d.x+d.r+10,d.y+d.r+10]);}
     for(const s of gcSlots())ZB.push([s.x-s.r-10,s.y-s.r-10,s.x+s.r+10,s.y+s.r+18]);
     const cuis=(typeof WK==='undefined'||WK===null)?'?':(WK?'worker '+WKN:'sur place');
-    /* Etat REEL de la regulation, en tete de la ligne materielle : le reglage choisi (meta.q) et
-       ce qu'il vaut a cet instant (QL, RES). « auto » = perf() adapte ; « FIGÉE » = un prereglage
-       manuel, perf() n'adapte plus JAMAIS (g4.js : retour immediat si meta.q n'est pas auto) —
-       sans ce mot, une qualite bloquee et une qualite qui s'adapte s'affichent pareil. */
-    const rq=meta.q||'auto',seg3=['régul '+(rq==='auto'?'auto':'FIGÉE '+rq)+' '+QL+'/3 ×'+RES.toFixed(2),'PS '+PS.toFixed(2),'canvas '+cv.width+'×'+cv.height,'DPR '+DPR,'ref '+REFDT.toFixed(1)+' ms','cuisson '+cuis];
+    /* Etat REEL de la regulation, en tete de la ligne materielle : le reglage choisi (meta.q) et ce
+       qu'il vaut a cet instant (QL, RES). « auto » = la qualite s'adapte ; « plafond <cran> » = un
+       prereglage manuel, ou la descente reste possible mais ou la remontee s'arrete au cran choisi.
+       « ↓ » signale que la qualite est DESCENDUE sous son plafond a cet instant.
+       ⚠️ Ce mot a d'abord ete ecrit « FIGÉE » (chantier P3), en se fondant sur le `return` de g4.js
+       qui sortait de perf() des que meta.q n'etait pas auto. Le chantier P2 a supprime ce return le
+       meme jour : en manuel, perf() descend desormais. « FIGÉE » serait donc devenu un mensonge —
+       exactement le defaut que ce compteur existe pour empecher (un reglage qui n'adapte plus sans
+       que rien ne le dise). Ne pas y revenir. Le cran est lu dans QPRE (g4.js, globale du bundle). */
+    const rq=meta.q||'auto',capq=rq==='auto'?[3,1]:QPRE[rq],dsc=QL<capq[0]||RES<capq[1];
+    const seg3=['régul '+(rq==='auto'?'auto':'plafond '+rq+(dsc?' ↓':''))+' '+QL+'/3 ×'+RES.toFixed(2),'PS '+PS.toFixed(2),'canvas '+cv.width+'×'+cv.height,'DPR '+DPR,'ref '+REFDT.toFixed(1)+' ms','cuisson '+cuis];
     if(DIAG_MARGIN>=0)seg3.push('marge audio '+DIAG_MARGIN.toFixed(2)+' s');
     /* jointure : « · » entre morceaux, mais un simple espace apres un morceau qui finit par « : »
        — sinon la ligne s'ecrit « ou : · render 6.06/12 » au lieu de « ou : render 6.06/12 ». */

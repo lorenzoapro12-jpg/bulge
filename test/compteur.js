@@ -17,8 +17,9 @@
         independant du code teste : rectangle de chaque ligne (et du bandeau) contre le DISQUE de
         toucher de chaque bouton (rayon + 10, touchBtnAt de g4.js), positions lues dans les VRAIES
         dashBtn() et gcSlots(). Et rien ne doit avoir disparu pour y arriver.
-     5. **L'etat de la regulation est affiche** (S8) : « régul auto » ou « régul FIGÉE <reglage> »,
-        avec QL et RES reels — un reglage manuel n'adapte plus jamais, et cela doit se LIRE.
+     5. **L'etat de la regulation est affiche** (S8) : « régul auto » ou « régul plafond <reglage> »,
+        avec QL et RES reels, et « ↓ » quand la qualite est descendue SOUS son plafond. Un reglage qui
+        n'adapte plus doit se LIRE — c'est le defaut que ce mot corrige (voir la note du S8).
      3. **La lisibilite ne coute pas la mesure** : la ligne « ou : » garde TOUJOURS ses postes
         les plus couteux (le tri est decroissant, on retire par la fin).
 
@@ -299,9 +300,19 @@ const TOP = [['render', 6.06, 12], ['glow', 1.28, 4], ['drawHUD', 1.09, 5], ['dr
   call(`meta.q='auto';QL=1;RES=.8;`);
   L = drawBlock(o);
   check('regulation : apres une baisse automatique, la ligne 3 suit QL et RES', /^régul auto 1\/3 ×0\.80/.test(l3(L)), l3(L));
+  /* ⚠️ Ce critere disait « régul FIGÉE high » et invoquait « perf() n'adapte plus ». C'etait vrai le
+     30/09/2026 au matin (g4.js sortait de perf() des que meta.q n'etait pas 'auto'), et c'est devenu
+     FAUX le meme jour : le chantier P2 a fait d'un mode manuel un PLAFOND — la descente reste possible,
+     la remontee s'arrete au cran choisi. Garder « FIGÉE » aurait fait du compteur un menteur, soit
+     exactement le defaut que ce bloc existe pour empecher. Ce qui n'a PAS bouge : un reglage manuel
+     doit se lire, et la ligne doit suivre les QL/RES reels. On le verifie donc en deux temps, et plus
+     precisement qu'avant : au cran plein, puis DESCENDUE sous son plafond (le marqueur « ↓ »). */
   call(`meta.q='high';applyQuality();`);
   L = drawBlock(o);
-  check('regulation : un prereglage manuel (perf() n\'adapte plus) se LIT — « FIGÉE high »', /^régul FIGÉE high 3\/3 ×1\.00/.test(l3(L)) && L.every(l => fits(l, o)), l3(L));
+  check('regulation : un prereglage manuel se LIT, au cran plein — « plafond high », sans marqueur', /^régul plafond high 3\/3 ×1\.00/.test(l3(L)) && L.every(l => fits(l, o)), l3(L));
+  call(`meta.q='high';QL=1;RES=.8;`);
+  L = drawBlock(o);
+  check('regulation : descendue SOUS son plafond, la ligne le dit — « plafond high ↓ »', /^régul plafond high ↓ 1\/3 ×0\.80/.test(l3(L)), l3(L));
   call(`meta.q='auto';QL=3;RES=1;`);
 }
 
