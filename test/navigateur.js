@@ -19,11 +19,14 @@
      0. bulge.html est bien celui des modules (empreinte de build.sh) — sinon on jugerait un artefact perime ;
      1. test/worker.js : worker = sur place a l'octet, voie branchee, discrimination ;
      2. le DEFAUT dans un vrai navigateur : bulge.html sans parametre => « cuisson worker », ?wk=0 => « sur place »,
-        ?wk=1 => worker (la decision sous `vm`, avec tous les cas de repli : test/defaut.js, appele par headless.js).
+        ?wk=1 => worker (la decision sous `vm`, avec tous les cas de repli : test/defaut.js, appele par headless.js) ;
+     3. test/pire-navigateur.js (chantier A3) : la ligne « pire N ms : JS · gen · spr · reçus · collés » est REELLEMENT
+        ecrite (fillText interceptes) avec les six champs de DIAG_WORST, tient dans W - pad, et le compteur n'ecrit
+        AUCUNE ligne diagnostic eteint ; trois formats d'ecran, sentinelles de discrimination.
    ========================================================= */
 const fs = require('fs'), path = require('path'), cp = require('child_process'), crypto = require('crypto');
 const ROOT = path.resolve(__dirname, '..'), sleep = ms => new Promise(r => setTimeout(r, ms));
-const TESTS = [['worker.js', []]];
+const TESTS = [['worker.js', []], ['pire-navigateur.js', []]];
 let ok = true;
 const check = (label, cond, info) => { if (!cond) ok = false; console.log((cond ? '  OK    ' : '  ECHEC ') + label + (info ? '  — ' + info : '')); };
 (async () => {
