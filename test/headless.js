@@ -708,6 +708,10 @@ const sub = (f, args) => { const r = cp.spawnSync(process.execPath, [path.join(_
   check('décor : la gueule mord l’ennemi, la voiture le percute, le gouffre l’avale ; jamais le joueur (test/decor.js)', r.ok,
     (r.out.match(/ECHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim().slice(0, 220)).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
 
+{ const r = sub('decor-vue.js', REF ? ['--ref=' + REF] : []);
+  check('décor, ce qui se voit : la gueule s’ouvre sur sa zone et claque, le choc de voiture laisse un sillage, l’ennemi qui tombe reste visible ; rien hors biome, plafonné (test/decor-vue.js)', r.ok,
+    (r.out.match(/ECHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim().slice(0, 220)).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
+
 { const r = sub('decor-vivant.js', REF ? ['--ref=' + REF] : []);
   check('décor vivant : la faune fuit le danger, la colonne n’apparaît que sur un biome non visité, le halo croît vers le Cœur, le pool de marques ne croît pas (test/decor-vivant.js)', r.ok,
     (r.out.match(/ÉCHEC [^\n]*/g) || []).slice(0, 2).map(s => s.trim().slice(0, 200)).join(' | ') || r.out.split('\n').filter(l => /^OK/.test(l)).length + ' critères OK'); }

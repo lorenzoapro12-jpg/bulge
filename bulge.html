@@ -3604,7 +3604,7 @@ function render(A,dt){
   /* couche basse résolution : ambiance lointaine + halos */
   lowBegin();if(QL>=2){lowScreen();drawFar(mix);drawVista(mix);drawWhale(mix);LOWN++;}lowWorld();if(sk<2)drawLowGlows();lowEnd();
   worldTf();drawEdges();drawObstacles();if(inGame){drawSeuils();drawAmers();}if(inGame){gcDrawWorld();gsDrawWorld();giDrawWorld();gxDrawWorld();gvDrawWorld();}
-  if(inGame){drawObjectives();drawPickups();drawShadows(mix);drawMarks();drawTrails();gcDrawUnder();giDrawUnder();drawEnemies();drawBoss();drawPlayer();drawBullets();drawFX();gcDrawOver();}
+  if(inGame){drawObjectives();drawPickups();drawShadows(mix);drawMarks();drawTrails();gcDrawUnder();giDrawUnder();if(DEC==='sky')drawFalls();drawEnemies();if(DEC==='floral'||DEC==='urban')drawDecFX();drawBoss();drawPlayer();drawBullets();drawFX();gcDrawOver();}
   screenTf();if(sk<1)drawWeather(mix);
   if(inGame&&!gvHideHUD()){if(sk<2)drawLabels();if(sk<1)drawIndicators();drawTexts();}
   postFX();
@@ -3651,7 +3651,7 @@ function drawChunks(){
   const c0=Math.floor(VL/CH),c1=Math.floor(VR/CH),r0=Math.floor(VT/CH),r1=Math.floor(VB/CH);
   /* un chunk en cours de cuisson (c.bk) s'affiche tel quel : opaque, il part du même sol que drawGround */
   for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy),b=c&&(c.bake||c.bk&&c.bk.cv);if(b)ctx.drawImage(b,c.x0,c.y0,CH,CH);}
-  fleeBuild();STB=10;DCB=1;
+  fleeBuild();STB=10;DCB=1;DEC=G&&G.p&&G.dec?G.biome:'';
   for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(c){for(const it of c.live)drawLive(it);if(c.bake||c.bk)drawDeco(c);}}
   ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
 }
@@ -3662,11 +3662,14 @@ function drawLive(it){
       for(let k=0;k<3;k++){const a0=it.ph+k*2.1;let x=it.x,y=it.y;c.beginPath();c.moveTo(x,y);for(let j=1;j<=6;j++){const a=a0+Math.sin(RT*.03+j*.7+it.ph+k)*.5;x+=Math.cos(a)*12*it.s;y+=Math.sin(a)*12*it.s;c.lineTo(x,y);}c.stroke();c.fillStyle='rgba(109,255,217,.85)';c.beginPath();c.arc(x,y,2.6,0,TAU);c.fill();}
       c.lineCap='butt';break;}
     case 'bloom':{if(!vis(it.x,it.y,60))return;const p=.5+.5*Math.sin(RT*.05+it.ph);c.globalCompositeOperation='lighter';soft(it.x,it.y,42*it.s*(1+p*.3),'#ff5ad8',.3+.25*p);c.globalCompositeOperation='source-over';c.globalAlpha=1;
+      if(DEC==='floral'&&bloomLive(it)){drawBloomJaw(it);break;}
       c.fillStyle='#ff8fe0';for(let k=0;k<6;k++){const a=k/6*TAU+RT*.004;c.beginPath();c.ellipse(it.x+Math.cos(a)*11*it.s,it.y+Math.sin(a)*11*it.s,9*it.s,4*it.s,a,0,TAU);c.fill();}
       c.fillStyle='#ffe9a8';c.beginPath();c.arc(it.x,it.y,4*it.s,0,TAU);c.fill();break;}
     case 'beacon':{if(!vis(it.x,it.y,40))return;const on=Math.sin(RT*.08+it.ph)>.3,col=on?'#2de2ff':'#ff2d95';c.globalCompositeOperation='lighter';soft(it.x,it.y,26,col,.5);c.globalCompositeOperation='source-over';c.globalAlpha=1;c.fillStyle=col;c.fillRect(it.x-4,it.y-4,8,8);break;}
-    case 'car':{const p=((it.ph+RT*it.spd)%CH+CH)%CH;const x=it.vert?it.x:it.x+p,y=it.vert?it.y+p:it.y;if(!vis(x,y,30))return;
+    case 'car':{const q=carAt(it,RT),x=q[0],y=q[1];if(!vis(x,y,30))return;
       const dx=it.vert?0:Math.sign(it.spd),dy=it.vert?Math.sign(it.spd):0;c.globalCompositeOperation='lighter';soft(x+dx*18,y+dy*18,16,'#fff3c4',.55);soft(x-dx*13,y-dy*13,9,'#ff3355',.7);
+      /* Mégapole (règle active) : faisceau des phares devant la voiture, là où elle percute */
+      if(DEC==='urban'){const nx=-dy,ny=dx;c.globalAlpha=.22;c.fillStyle='#fff3c4';c.beginPath();c.moveTo(x+dx*10+nx*5,y+dy*10+ny*5);c.lineTo(x+dx*70+nx*20,y+dy*70+ny*20);c.lineTo(x+dx*70-nx*20,y+dy*70-ny*20);c.lineTo(x+dx*10-nx*5,y+dy*10-ny*5);c.fill();}
       c.globalCompositeOperation='source-over';c.globalAlpha=1;c.fillStyle='#2c2b3e';c.fillRect(x-(it.vert?5:10),y-(it.vert?10:5),it.vert?10:20,it.vert?20:10);break;}
     case 'shimmer':{if(!vis(it.x,it.y,20))return;const p=Math.pow(Math.max(0,Math.sin(RT*.04+it.ph)),8);if(p<.05)return;c.globalAlpha=p;c.strokeStyle='#fff';c.lineWidth=1.5;c.beginPath();c.moveTo(it.x-8,it.y);c.lineTo(it.x+8,it.y);c.moveTo(it.x,it.y-8);c.lineTo(it.x,it.y+8);c.stroke();c.globalAlpha=1;break;}
     case 'node':{ /* Veines du Coeur : le halo bat sur la noire de la musique (STEP, g1.js) et tout le
@@ -3941,6 +3944,52 @@ function drawShadows(mix){
   if(false){c.globalCompositeOperation='lighter';soft(P.x,P.y,250,P.col,.08+P.glow*.06);c.globalCompositeOperation='source-over';c.globalAlpha=1;}
 }
 function drawTrails(){const c=ctx,P=G.p;for(const tr of G.trails){c.globalAlpha=tr.life/70*.35;c.fillStyle=rgba(P.col,.4);c.beginPath();c.arc(tr.x,tr.y,tr.r,0,TAU);c.fill();}c.globalAlpha=1;}
+/* ---------- le décor mord : AFFICHAGE des règles de g2.js (decorTick, skyFalls) ----------
+   Rien n'est recalculé ici : l'ouverture vient de bloomOpen, la voiture de carAt, les instants de G.dec (tick de
+   l'événement) ; RT=G.t+A, donc le dessin tombe sur le tick de la règle, interpolé. Actif seulement si G.biome
+   (DEC, fixé par drawChunks) est celui de la règle ; hors floral/urban/sky, rien n'est parcouru. Plafonné par image. */
+/* DEC_N traces par image au plus ; le halo (soft, grand et coûteux à DPR 2,6 : mesuré +28 ms/image à ×4 pour 8) seulement pour les DEC_H plus récentes */
+let DEC='';const DEC_N=8,DEC_H=2;
+/* la gueule ne mord que dans les 5×5 chunks autour du joueur (decorTick) : hors de là, elle reste au repos */
+function bloomLive(it){const P=G.p;return Math.abs(Math.floor(it.x/CH)-Math.floor(P.x/CH))<=2&&Math.abs(Math.floor(it.y/CH)-Math.floor(P.y/CH))<=2;}
+function drawBloomJaw(it){
+  const c=ctx,s=it.s,o=bloomOpen(it,RT);let sn=0;
+  for(const q of G.dec.bite)if(q.it===it){const f=(RT-q.t)/12;if(f>=0&&f<1)sn=1-f;}
+  /* ouverture = avertissement : la zone de morsure (BLOOM_R) se remplit du centre au bord, le contour se durcit */
+  if(o>0){c.globalAlpha=.1+.12*o;c.fillStyle='#ff8fe0';c.beginPath();c.arc(it.x,it.y,BLOOM_R*o,0,TAU);c.fill();
+    c.globalAlpha=.25+.6*o*o;c.strokeStyle='#ffd6f3';c.lineWidth=1.5+2*o;c.setLineDash([9,7]);c.lineDashOffset=-RT*.6;c.beginPath();c.arc(it.x,it.y,BLOOM_R,0,TAU);c.stroke();c.setLineDash([]);c.lineDashOffset=0;c.globalAlpha=1;}
+  /* pétales : s'écartent et s'allongent à l'ouverture, claquent (serrés) juste après la morsure */
+  const d=(11+16*o-6*sn)*s,L=(9+7*o-3*sn)*s,sp=RT*(.004+.02*o);
+  c.fillStyle=o>.75?'#ff5ad8':'#ff8fe0';for(let k=0;k<6;k++){const a=k/6*TAU+sp;c.beginPath();c.ellipse(it.x+Math.cos(a)*d,it.y+Math.sin(a)*d,L,(4+2*o)*s,a,0,TAU);c.fill();}
+  const h=(4+5*o)*s*(1+(o>0?.25*Math.sin(RT*(.2+.8*o)):0));c.fillStyle=sn>0?'#ffffff':'#ffe9a8';c.beginPath();c.arc(it.x,it.y,h,0,TAU);c.fill();
+}
+/* traces des événements (G.dec.bite, G.dec.car : purgés à 30 ticks par la règle), au-dessus des ennemis */
+function drawDecFX(){
+  const c=ctx,D=G.dec;let n=0;c.globalCompositeOperation='lighter';
+  if(DEC==='floral')for(let i=D.bite.length-1;i>=0&&n<DEC_N;i--){const q=D.bite[i],f=(RT-q.t)/30;if(f<0||f>=1||!vis(q.x,q.y,q.r))continue;n++;
+    /* claquement : éclair sur toute la zone, puis anneau qui se referme sur le cœur */
+    if(n<=DEC_H)soft(q.x,q.y,q.r*(1-.3*f),'#ff8fe0',.55*(1-f)*(1-f));c.globalAlpha=1-f;c.strokeStyle='#ffe9a8';c.lineWidth=4*(1-f)+1;
+    c.beginPath();c.arc(q.x,q.y,q.r*(1-.8*f),0,TAU);c.stroke();
+    c.beginPath();for(let k=0;k<6;k++){const a=k/6*TAU,r0=q.r*(1-f*.9),r1=r0*.55;c.moveTo(q.x+Math.cos(a)*r0,q.y+Math.sin(a)*r0);c.lineTo(q.x+Math.cos(a)*r1,q.y+Math.sin(a)*r1);}c.stroke();}
+  if(DEC==='urban')for(let i=D.car.length-1;i>=0&&n<DEC_N;i--){const q=D.car[i],f=(RT-q.t)/30,e=q.e;if(f<0||f>=1||!vis(q.x,q.y,120))continue;n++;
+    const it=q.it,dx=it.vert?0:Math.sign(it.spd),dy=it.vert?Math.sign(it.spd):0,g=1-f;
+    /* choc : flash de phares au point d'impact, gerbe d'étincelles vers l'avant, sillage jusqu'à l'ennemi projeté */
+    if(n<=DEC_H)soft(q.x+dx*14,q.y+dy*14,30*g+8,'#fff3c4',.8*g);c.globalAlpha=g;c.strokeStyle='#fff3c4';c.lineWidth=2;c.beginPath();
+    for(let k=0;k<7;k++){const a=Math.atan2(dy,dx)+(k-3)*.38,r0=10+f*40,r1=r0+8+10*g;c.moveTo(q.x+Math.cos(a)*r0,q.y+Math.sin(a)*r0);c.lineTo(q.x+Math.cos(a)*r1,q.y+Math.sin(a)*r1);}c.stroke();
+    c.globalAlpha=.6*g;c.lineWidth=e.r*.9*g+1;c.lineCap='round';c.beginPath();c.moveTo(q.x,q.y);c.lineTo(e.x,e.y);c.stroke();c.lineCap='butt';
+    if(!e.dead){c.globalAlpha=g;c.lineWidth=2.5;c.beginPath();c.arc(e.x,e.y,e.r+4+f*14,0,TAU);c.stroke();}}
+  c.globalCompositeOperation='source-over';c.globalAlpha=1;
+}
+/* chute (skyFalls) : l'ennemi, retiré de G.en, vit dans G.dec.fall FALL_T ticks ; il glisse vers le vide (fdx,fdy),
+   rétrécit et se noie dans le bleu du ciel. Dessiné sous les ennemis vivants. */
+function drawFalls(){
+  const c=ctx,F=G.dec.fall;
+  for(let i=0,n=0;i<F.length&&n<DEC_N;i++){const e=F[i],f=Math.min(1,Math.max(0,(FALL_T-e.fall+RT-G.t)/FALL_T)),x=e.x+e.fdx*e.r*1.6*f,y=e.y+e.fdy*e.r*1.6*f;if(!vis(x,y,e.r*3))continue;n++;
+    c.globalCompositeOperation='lighter';soft(x,y,e.r*(2.6-f),'#cfe0ff',.45*(1-f*.5));c.globalCompositeOperation='source-over';
+    c.globalAlpha=.7*(1-f);c.strokeStyle='#ffffff';c.lineWidth=2;c.beginPath();c.arc(x,y,e.r*(1.2+f*1.4),0,TAU);c.stroke();c.globalAlpha=1;
+    const k=1-.85*f;c.save();c.translate(x,y);c.scale(k,k);c.rotate(f*2.5);c.translate(-e.x,-e.y);drawEnemy(e);c.restore();
+    c.globalAlpha=.85*f;c.fillStyle='#223673';c.beginPath();c.arc(x,y,e.r*k*1.05,0,TAU);c.fill();c.globalAlpha=1;}
+}
 function drawEnemies(){for(const e of G.en)if(vis(e.x,e.y,e.r*3))drawEnemy(e);}
 function drawEnemy(e){
   const c=ctx,d=e.d,col=d.col,P=G.p,aP=Math.atan2(P.y-e.y,P.x-e.x);let r=e.r;
