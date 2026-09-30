@@ -3688,10 +3688,16 @@ function drawFar(mix){
       const x=((i+u)*cell-fx)*sc+W/2+RSX*.5,y=((j+v)*cell-fy)*sc+H/2+RSY*.5;fn(x,y,s,sc,m.w,cell);}}
   ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
 }
+/* Chantier J0 — « collé pour la première fois » : le premier drawImage d'une cuisson TERMINÉE (c.bake ;
+   une cuisson en cours, c.bk.cv, n'en est pas une). Clé = la surface cuite, tenue FAIBLEMENT : rien
+   n'est retenu après l'éviction (un ImageBitmap fermé, une toile rendue au pool restent libres). La
+   valeur est le chunk, pour qu'une toile du pool recuite pour un AUTRE chunk recompte. frame() (g4.js)
+   lit CHNEW puis le remet à zéro à chaque image. N'émet aucune opération de dessin. */
+const CHV=new WeakMap();let CHNEW=0;
 function drawChunks(){
   const c0=Math.floor(VL/CH),c1=Math.floor(VR/CH),r0=Math.floor(VT/CH),r1=Math.floor(VB/CH);
   /* un chunk en cours de cuisson (c.bk) s'affiche tel quel : opaque, il part du même sol que drawGround */
-  for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy),b=c&&(c.bake||c.bk&&c.bk.cv);if(b)ctx.drawImage(b,c.x0,c.y0,CH,CH);}
+  for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy),b=c&&(c.bake||c.bk&&c.bk.cv);if(b){if(c.bake&&CHV.get(b)!==c){CHV.set(b,c);CHNEW++;}ctx.drawImage(b,c.x0,c.y0,CH,CH);}}
   fleeBuild();STB=10;DCB=1;DEC=G&&G.p&&G.dec?G.biome:'';
   for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(c){for(const it of c.live)drawLive(it);if(c.bake||c.bk)drawDeco(c);}}
   ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
@@ -4266,14 +4272,24 @@ function drawHUD(){
        — sinon la ligne s'ecrit « ou : · render 6.06/12 » au lieu de « ou : render 6.06/12 ». */
     const jn=a=>{let s='';for(let i=0;i<a.length;i++)s+=(i?(a[i-1].slice(-1)===':'?' ':' · '):'')+a[i];return s;};
     const MWj=a=>c.measureText(jn(a)).width;
+    /* PIRE IMAGE (chantier J0) : ce qui s'est passe dans l'image dont l'intervalle est le plus long
+       de la seconde — UNE image, pas des maxima independants (voir DIAG_W, g4.js). « JS » = le JS de
+       CETTE image ; gen = genChunk ; spr = sprites d'obstacles crees ; reçus = chunks arrives du
+       worker pendant l'intervalle ; collés = cuissons dessinees pour la premiere fois. « JS ? » =
+       premiere image apres une reprise : ce qui la precede n'a pas ete mesure. Pas de detail tant que
+       rien n'est publie. Si tout tient sur la ligne des ips (poste fixe), le detail la COMPLETE et
+       aucune ligne n'est ajoutee ; sinon il a sa ligne, pavee comme les autres, sous la ligne materielle. */
+    const pw=typeof DIAG_WORST!=='undefined'&&DIAG_WORST||null,pk='pire '+(pw?pw[0]:DIAG_PEAK).toFixed(0)+' ms';
+    const segW=pw?[pk+' :','JS '+(pw[1]<0?'?':pw[1].toFixed(1)+' ms'),'gen '+pw[2],'spr '+pw[3],'reçus '+pw[4],'collés '+pw[5]]:null;
     /* mise en page pour une largeur MW donnee, puis pose : le bloc part du bas et monte au-dessus
        de chaque zone qu'il coupe (il ne fait que monter : au plus une passe par zone). */
     const pose=MW=>{
       /* les trois lignes de mesure sont PAVEES (un morceau qui ne tient plus ouvre la ligne suivante) :
          rien n'est tronque, meme a 320 px en police large. Seule « ou : » se raccourcit par la fin. */
       const out=[];c.font='500 '+PX0+'px '+FD;
-      for(const g of [[FPSV+' ips','image '+DIAG_DT.toFixed(1)+' ms','pire '+DIAG_PEAK.toFixed(0)+' ms'],
-                      ['JS '+DIAG_JS.toFixed(1)+' ms','hors-JS '+Math.max(0,DIAG_DT-DIAG_JS).toFixed(1)+' ms','effets '+QL+'/3','resol '+Math.round(RES*100)+' %'],seg3]){
+      const g0=[FPSV+' ips','image '+DIAG_DT.toFixed(1)+' ms'],g1=segW?g0.concat(segW):null,un=!!g1&&MWj(g1)<=MW;
+      for(const g of [un?g1:g0.concat([pk]),
+                      ['JS '+DIAG_JS.toFixed(1)+' ms','hors-JS '+Math.max(0,DIAG_DT-DIAG_JS).toFixed(1)+' ms','effets '+QL+'/3','resol '+Math.round(RES*100)+' %'],seg3].concat(segW&&!un?[segW]:[])){
         let cu=[];for(const s of g){if(cu.length&&MWj(cu.concat([s]))>MW){out.push(cu);cu=[];}cu.push(s);}
         if(cu.length)out.push(cu);}
       if(typeof JSPROFTOP!=='undefined'&&JSPROFTOP.length)out.push(['où :'].concat(JSPROFTOP.map(q=>q[0]+' '+q[1].toFixed(2)+'/'+q[2].toFixed(0))));
@@ -4489,6 +4505,19 @@ let DIAG_JS=0,DIAG_DT=0,DIAG_PEAK=0,DIAG_MARGIN=-1;
    tete, pas un accumulateur). Le banc de mesure de l'atelier est un autre processeur que celui
    de Lorenzo : seul ce profil dit ou passent SES millisecondes. */
 const JSPROF={};let JSPROF_ON=false,JSPROFTOP=[];
+/* ---------- PIRE IMAGE (chantier J0) ----------
+   Le profil dit des CUMULS et des pires APPELS sur une seconde : il ne dit pas QUELLE image a derape,
+   ni ce qui s'y est passe. Ici on garde, pour l'image dont l'intervalle est le plus long de la fenetre,
+   SON JS et SES evenements — une seule et meme image, pas des maxima independants.
+   ⚠️ Appariement : `dt` lu par le rappel N vaut ts(N)-ts(N-1) ; le JS qui s'est execute PENDANT cet
+   intervalle est celui du rappel N-1 (c'est lui qui, trop long, fait rater le rendez-vous et retarde
+   ts(N)). On apparie donc dt(N) avec le rappel N-1, pas avec le rappel N qui ne fait que le constater.
+   DIAG_EV : evenements du rappel en cours [genChunk, sprites d'obstacles crees] ; CHNEW (g3.js) : cuissons
+   collees pour la premiere fois. DIAG_PV : le rappel precedent [JS, gen, spr, colles, WKN] ; JS<0 = pas
+   de precedent mesure (reprise). DIAG_W : pire de la fenetre [dt, JS, gen, spr, recus, colles], publie dans
+   DIAG_WORST avec le reste. « recus » = WKN gagne entre les deux rappels : les messages du worker sont des
+   taches a part, ils n'arrivent jamais AU MILIEU d'un rappel. Aucun de ces nombres n'entre dans le jeu. */
+const DIAG_EV=[0,0],DIAG_PV=[-1,0,0,0,0],DIAG_W=[0,-1,0,0,0,0];let DIAG_WORST=null;
 const JSPROF_N=['render','step','streamWorld','bakeStep','genChunk','getChunk','perf',
   'drawChunks','drawLive','drawHUD','gcHUD','gxHUD','gtHUD','drawMinimap',
   'drawEdges','drawObstacles','drawEnemies','drawBoss','drawPlayer','drawBullets',
@@ -4501,11 +4530,16 @@ function jsProfStart(){
   if(JSPROF_ON)return;JSPROF_ON=true;
   for(const n of JSPROF_N){
     const f=globalThis[n];if(typeof f!=='function')continue;
-    JSPROF[n]=[0,0];
+    JSPROF[n]=[0,0];const gen=n==='genChunk';
     globalThis[n]=function(){if(!meta.fps)return f.apply(this,arguments);
+      if(gen)DIAG_EV[0]++;
       const a=performance.now();try{return f.apply(this,arguments);}
       finally{const d=performance.now()-a;const s=JSPROF[n];s[0]+=d;if(d>s[1])s[1]=d;}};
   }
+  /* obsSprite est appele a CHAQUE image pour chaque obstacle visible (g3.js) et rend alors son cache :
+     on ne compte que les CREATIONS (o.spr encore vide), et sans le chronometrer — deux performance.now()
+     par obstacle visible fausseraient la mesure qu'on cherche a faire. */
+  const os=globalThis.obsSprite;if(typeof os==='function')globalThis.obsSprite=function(o){if(!o.spr)DIAG_EV[1]++;return os(o);};
 }
 /* Qualité. Ancienne méthode : baisse de résolution dès que le temps moyen dépassait 1,22× le meilleur
    temps récent -> se déclenchait sur une simple gigue de vsync, même sur une machine capable.
@@ -4637,13 +4671,18 @@ function frame(ts){
      decrivait un melange de deux choses, et les ips gonflaient d'autant. */
   if(G&&(G.state==='play'||G.state==='dying'||G.state==='victory')){
     DIAG_T+=dt;DIAG_N++;DIAG_CJS+=FWK+BKMS;DIAG_CDT+=dt;if(dt>DIAG_MX)DIAG_MX=dt;
-    if(AU.ac&&AU.next!=null){const m=AU.next-AU.ac.currentTime;if(m<DIAG_AUM)DIAG_AUM=m;}}
+    if(AU.ac&&AU.next!=null){const m=AU.next-AU.ac.currentTime;if(m<DIAG_AUM)DIAG_AUM=m;}
+    /* pire image : meme test que DIAG_MX (donc le meme nombre que « pire »), apparie au rappel PRECEDENT */
+    if(dt>DIAG_W[0]){const p=DIAG_PV,w=DIAG_W;w[0]=dt;w[1]=p[0];w[2]=p[1];w[3]=p[2];w[4]=p[0]<0?0:Math.max(0,WKN-p[4]);w[5]=p[3];}
+    DIAG_PV[0]=FWK+BKMS;DIAG_PV[1]=DIAG_EV[0];DIAG_PV[2]=DIAG_EV[1];DIAG_PV[3]=CHNEW;DIAG_PV[4]=WKN;}
+  else DIAG_PV[0]=-1;
+  DIAG_EV[0]=DIAG_EV[1]=0;CHNEW=0;
   if(DIAG_T>=1000){
     /* profil : on publie le top des postes (ms par image) puis on remet les compteurs a zero */
     JSPROFTOP=[];
     for(const k in JSPROF){const s=JSPROF[k];if(s[0]>=1)JSPROFTOP.push([k,s[0]/DIAG_N,s[1]]);s[0]=0;s[1]=0;}
     JSPROFTOP.sort((a,b)=>b[1]-a[1]);if(JSPROFTOP.length>6)JSPROFTOP.length=6;
-    DIAG_JS=DIAG_CJS/DIAG_N;DIAG_DT=DIAG_CDT/DIAG_N;DIAG_PEAK=DIAG_MX;
+    DIAG_JS=DIAG_CJS/DIAG_N;DIAG_DT=DIAG_CDT/DIAG_N;DIAG_PEAK=DIAG_MX;DIAG_WORST=DIAG_W.slice();DIAG_W[0]=0;
     /* Les ips derivent du MEME cumul que « image : N ms » : deux compteurs separes finissaient par
        afficher, sur la meme ligne, deux nombres qui ne se correspondaient pas. 1000/ips = ms, par
        construction, et non par coincidence. */
