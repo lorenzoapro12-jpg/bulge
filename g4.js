@@ -189,8 +189,25 @@ const JSPROF={};let JSPROF_ON=false,JSPROFTOP=[];
    collees pour la premiere fois. DIAG_PV : le rappel precedent [JS, gen, spr, colles, WKN] ; JS<0 = pas
    de precedent mesure (reprise). DIAG_W : pire de la fenetre [dt, JS, gen, spr, recus, colles], publie dans
    DIAG_WORST avec le reste. « recus » = WKN gagne entre les deux rappels : les messages du worker sont des
-   taches a part, ils n'arrivent jamais AU MILIEU d'un rappel. Aucun de ces nombres n'entre dans le jeu. */
-const DIAG_EV=[0,0],DIAG_PV=[-1,0,0,0,0],DIAG_W=[0,-1,0,0,0,0];let DIAG_WORST=null;
+   taches a part, ils n'arrivent jamais AU MILIEU d'un rappel. Aucun de ces nombres n'entre dans le jeu.
+   ---- chantier A4 : attribuer le « hors JS ». Le pic du S22 (pire 75 ms : JS 3.0 ms, reçus 2) se loge HORS de
+   frame() ; trois temoins de plus, pour la meme image :
+   [6] retard du rappel N-1 = performance.now() a l'entree de frame() moins le ts recu : le temps que le rappel a
+       ATTENDU (GC, minuteurs, taches du navigateur passent la). -1 = non mesure ou INVALIDE : il doit tenir dans
+       [0, intervalle BRUT] (le rappel N-1 commence avant ts(N)) ; hors de la, les deux horloges ne concordent pas
+       et on n'affiche PAS un nombre plausible a la place ;
+   [7,8] wkRecv (gw2.js) entre les deux rappels : cumul et pire appel (DIAG_WK, par l'enveloppe de JSPROF_N) ;
+       -1 = non mesure (reprise, ou wkRecv pas enveloppee) ;
+   [9] intervalle BRUT : [0] est plafonne a 100 ms comme dt, [9] dit ce qu'il valait vraiment.
+   DIAG_PV[5] : retard du rappel precedent. Les tâches longues (PerformanceObserver 'longtask') sont a part : le
+   navigateur les livre en differe, on garde la pire de la seconde (DIAG_LT -> DIAG_LTP) avec son attribution.
+   LT_ST : 0 pas lance, 1 observe, -1 API ABSENTE (supportedEntryTypes sans 'longtask'), -2 observe() a echoue.
+   Une API absente s'affiche « absent », jamais « 0 » : un champ muet qui a l'air d'un zero est un mensonge. */
+const DIAG_EV=[0,0],DIAG_PV=[-1,0,0,0,0,-1],DIAG_W=[0,-1,0,0,0,0,-1,-1,0,0],DIAG_WK=[0,0],DIAG_LT=[0,'',''];let DIAG_WORST=null,DIAG_LTP=null,LT_ST=0;
+function ltStart(){if(LT_ST)return;const P=globalThis.PerformanceObserver,T=P&&P.supportedEntryTypes;
+  if(!T||T.indexOf('longtask')<0){LT_ST=-1;return;}
+  try{new P(l=>{for(const e of l.getEntries())if(e.duration>DIAG_LT[0]){const a=e.attribution&&e.attribution[0];DIAG_LT[0]=e.duration;DIAG_LT[1]=e.name||'?';DIAG_LT[2]=a&&a.name||'?';}}).observe({entryTypes:['longtask']});LT_ST=1;}
+  catch(e){LT_ST=-2;}}
 const JSPROF_N=['render','step','streamWorld','bakeStep','genChunk','getChunk','perf',
   'drawChunks','drawLive','drawHUD','gcHUD','gxHUD','gtHUD','drawMinimap',
   'drawEdges','drawObstacles','drawEnemies','drawBoss','drawPlayer','drawBullets',
@@ -198,16 +215,18 @@ const JSPROF_N=['render','step','streamWorld','bakeStep','genChunk','getChunk','
   'drawTrails','drawPickups','drawObjectives','postFX','lowBegin','lowWorld','lowEnd',
   'lowScreen','drawLowGlows','drawFar','drawVista','drawGround',
   'gcDrawWorld','gsDrawWorld','giDrawWorld','gxDrawWorld','gvDrawWorld',
-  'gcDrawUnder','gcDrawOver','gvDrawScreen','soft','softSpr','glow','worldTf','screenTf'];
+  'gcDrawUnder','gcDrawOver','gvDrawScreen','soft','softSpr','glow','worldTf','screenTf','wkRecv'];
 function jsProfStart(){
-  if(JSPROF_ON)return;JSPROF_ON=true;
+  if(JSPROF_ON)return;JSPROF_ON=true;ltStart();
+  /* wkRecv : w.onmessage=wkRecv (gw2.js, wkOn) lit la globale a la creation du worker, APRES boot() : c'est donc
+     cette enveloppe qui recoit les messages. Elle alimente en plus DIAG_WK (l'intervalle en cours). */
   for(const n of JSPROF_N){
     const f=globalThis[n];if(typeof f!=='function')continue;
-    JSPROF[n]=[0,0];const gen=n==='genChunk';
+    JSPROF[n]=[0,0];const gen=n==='genChunk',wk=n==='wkRecv';
     globalThis[n]=function(){if(!meta.fps)return f.apply(this,arguments);
       if(gen)DIAG_EV[0]++;
       const a=performance.now();try{return f.apply(this,arguments);}
-      finally{const d=performance.now()-a;const s=JSPROF[n];s[0]+=d;if(d>s[1])s[1]=d;}};
+      finally{const d=performance.now()-a;const s=JSPROF[n];s[0]+=d;if(d>s[1])s[1]=d;if(wk){DIAG_WK[0]+=d;if(d>DIAG_WK[1])DIAG_WK[1]=d;}}};
   }
   /* obsSprite est appele a CHAQUE image pour chaque obstacle visible (g3.js) et rend alors son cache :
      on ne compte que les CREATIONS (o.spr encore vide), et sans le chronometrer — deux performance.now()
@@ -338,7 +357,7 @@ let FRN=0;
 function frame(ts){
   requestAnimationFrame(frame);
   const t0=performance.now();BKMS=0;
-  if(!last)last=ts;let dt=ts-last;last=ts;if(dt>100)dt=100;
+  if(!last)last=ts;let dt=ts-last;last=ts;const dtb=dt,rt=t0-ts;if(dt>100)dt=100;
   perf(dt);FDT=dt;musTick();
   let A=1;
   if(G&&(G.state==='play'||G.state==='dying'||G.state==='victory')){
@@ -362,16 +381,18 @@ function frame(ts){
     DIAG_T+=dt;DIAG_N++;DIAG_CJS+=FWK+BKMS;DIAG_CDT+=dt;if(dt>DIAG_MX)DIAG_MX=dt;
     if(AU.ac&&AU.next!=null){const m=AU.next-AU.ac.currentTime;if(m<DIAG_AUM)DIAG_AUM=m;}
     /* pire image : meme test que DIAG_MX (donc le meme nombre que « pire »), apparie au rappel PRECEDENT */
-    if(dt>DIAG_W[0]){const p=DIAG_PV,w=DIAG_W;w[0]=dt;w[1]=p[0];w[2]=p[1];w[3]=p[2];w[4]=p[0]<0?0:Math.max(0,WKN-p[4]);w[5]=p[3];}
-    DIAG_PV[0]=FWK+BKMS;DIAG_PV[1]=DIAG_EV[0];DIAG_PV[2]=DIAG_EV[1];DIAG_PV[3]=CHNEW;DIAG_PV[4]=WKN;}
+    if(dt>DIAG_W[0]){const p=DIAG_PV,w=DIAG_W;w[0]=dt;w[1]=p[0];w[2]=p[1];w[3]=p[2];w[4]=p[0]<0?0:Math.max(0,WKN-p[4]);w[5]=p[3];
+      w[6]=p[0]>=0&&p[5]>=0&&p[5]<=dtb+1?p[5]:-1;const wm=p[0]>=0&&!!JSPROF.wkRecv;w[7]=wm?DIAG_WK[0]:-1;w[8]=wm?DIAG_WK[1]:0;w[9]=dtb;}
+    DIAG_PV[0]=FWK+BKMS;DIAG_PV[1]=DIAG_EV[0];DIAG_PV[2]=DIAG_EV[1];DIAG_PV[3]=CHNEW;DIAG_PV[4]=WKN;DIAG_PV[5]=rt;}
   else DIAG_PV[0]=-1;
-  DIAG_EV[0]=DIAG_EV[1]=0;CHNEW=0;
+  DIAG_EV[0]=DIAG_EV[1]=0;CHNEW=0;DIAG_WK[0]=DIAG_WK[1]=0;
   if(DIAG_T>=1000){
     /* profil : on publie le top des postes (ms par image) puis on remet les compteurs a zero */
     JSPROFTOP=[];
     for(const k in JSPROF){const s=JSPROF[k];if(s[0]>=1)JSPROFTOP.push([k,s[0]/DIAG_N,s[1]]);s[0]=0;s[1]=0;}
     JSPROFTOP.sort((a,b)=>b[1]-a[1]);if(JSPROFTOP.length>6)JSPROFTOP.length=6;
     DIAG_JS=DIAG_CJS/DIAG_N;DIAG_DT=DIAG_CDT/DIAG_N;DIAG_PEAK=DIAG_MX;DIAG_WORST=DIAG_W.slice();DIAG_W[0]=0;
+    DIAG_LTP=LT_ST===1?DIAG_LT.slice():null;DIAG_LT[0]=0;
     /* Les ips derivent du MEME cumul que « image : N ms » : deux compteurs separes finissaient par
        afficher, sur la meme ligne, deux nombres qui ne se correspondaient pas. 1000/ips = ms, par
        construction, et non par coincidence. */

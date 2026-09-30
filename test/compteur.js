@@ -358,7 +358,7 @@ const TOP = [['render', 6.06, 12], ['glow', 1.28, 4], ['drawHUD', 1.09, 5], ['dr
     const o = { W: 1536, H: 864, top: TOP, wk: true, deskt: true, worst: WORST };
     const L = drawBlock(o), l1 = L[0] ? L[0].s : 'absente';
     check('pire image, PC 1536 px : le detail COMPLETE la ligne des ips — aucune ligne de plus (4 au total)',
-      L.length === 4 && /ips · image .* · pire 34 ms : JS 21\.3 ms · gen 2 · spr 14 · reçus 1 · collés 2$/.test(l1), L.length + ' lignes — ' + l1);
+      L.length === 4 && /ips · image .* · pire 34 ms : JS 21\.3 ms · gen 2 · spr 14 · reçus 1 · collés 2( · |$)/.test(l1), L.length + ' lignes — ' + l1);
     o.worst = [50, -1, 0, 0, 0, 0];
     const L2 = drawBlock(o);
     check('pire image : apres une reprise (rien de mesure avant), le compteur dit « JS ? » et n\'invente pas un nombre',
@@ -413,7 +413,106 @@ const TOP = [['render', 6.06, 12], ['glow', 1.28, 4], ['drawHUD', 1.09, 5], ['dr
   EM = 0.50;
   const o = { W: 411, H: 900, PS: 1.5, cw: 617, ch: 1351, top: TOP, wk: true, worst: r.w };
   const L = drawBlock(o), lp = L.find(l => /^pire .* :/.test(l.s));
-  check('pic force : la ligne ecrite sur le S22 dit exactement cela', !!lp && lp.s === 'pire 50 ms : JS 9.0 ms · gen 1 · spr 2 · reçus 1 · collés 1' && fits(lp, o), lp ? '« ' + lp.s + ' »' : 'absente — ' + L.map(l => l.s.slice(0, 24)).join(' | '));
+  /* depuis A4 la ligne se poursuit (retard, wkRecv, longtask : S10) : on exige ce debut-la, a l'identique */
+  check('pic force : la ligne ecrite sur le S22 dit exactement cela', !!lp && /^pire 50 ms : JS 9\.0 ms · gen 1 · spr 2 · reçus 1 · collés 1( · |$)/.test(lp.s) && fits(lp, o), lp ? '« ' + lp.s + ' »' : 'absente — ' + L.map(l => l.s.slice(0, 24)).join(' | '));
+}
+
+/* ================= S10 — le « hors JS » ATTRIBUE (chantier A4) =================
+   Capture du S22 le 30/09/2026 : « pire 75 ms : JS 3.0 ms · gen 0 · spr 0 · reçus 2 · collés 0 » — 72 ms que
+   rien ne nommait. Trois temoins de plus dans le detail de la pire image :
+     retard  = performance.now() a l'entree du rappel N-1 moins son ts : le temps qu'il a ATTENDU ;
+     wkRecv  = cumul/pire appel de la reception des chunks du worker ENTRE les deux rappels ;
+     longtask = la pire tâche longue de la seconde selon le navigateur (PerformanceObserver), et son attribution ;
+     réel    = l'intervalle BRUT quand [0] a ete plafonne a 100 ms.
+   a) mise en page : emis EN ENTIER, tiennent a 411 et 320 px, police large comprise, sans « … » ;
+   b) VERITE DES ABSENCES (le defaut du 30/09 : « ref 0.0 » muet puis « ref 0.4 » faux) : API longtask absente ->
+      « longtask absent », jamais « 0 » ; observateur actif sans tâche -> « aucune » ; retard/wkRecv non mesures,
+      ou tableau ancien a 6 champs -> « ? » ;
+   c) de VRAIES images, horloges concordantes (ts et performance.now() sur la meme base, comme dans un navigateur) :
+      le rappel B attend 12 ms, puis deux wkRecv REELS (enveloppe de jsProfStart) de 3 et 1 ms, puis l'image suivante
+      arrive 130 ms plus tard. Leurres : un rappel qui attend 8 ms et un wkRecv de 5 ms, dans des intervalles
+      NORMAUX. Attendu : pire 100 ms · retard 12.0 ms · wkRecv 4.00/3.00 ms · réel 130 ms. */
+{
+  const PLEIN = [75, 3.0, 0, 0, 2, 0, 71.8, 0.42, 0.31, 75];
+  const exige = ['retard 71.8 ms', 'wkRecv 0.42/0.31 ms', 'longtask 72 ms (self, unknown)'];
+  call(`LT_ST=1;DIAG_LTP=[72.4,'self','unknown'];`);
+  for (const [nom, o, em] of [
+    ['S22 411 px', { W: 411, H: 900, PS: 1.5, cw: 617, ch: 1351, top: TOP, wk: true }, 0.50],
+    ['S22 411 px, police large', { W: 411, H: 900, PS: 1.5, cw: 617, ch: 1351, top: TOP, wk: true }, 0.68],
+    ['320 px', { W: 320, H: 640, PS: 1.5, cw: 480, ch: 960, top: TOP, wk: true }, 0.50],
+    ['320 px, police large', { W: 320, H: 640, PS: 1.5, cw: 480, ch: 960, top: TOP, wk: true }, 0.68],
+    ['couche 568×320, police large', { W: 568, H: 320, PS: 1.5, cw: 852, ch: 480, top: TOP, wk: true }, 0.68],
+  ]) {
+    EM = em; o.worst = PLEIN;
+    const L = drawBlock(o), tout = L.map(l => l.s).join(' | '), manq = exige.filter(m => tout.indexOf(m) < 0);
+    const lw = L.filter(l => exige.some(m => l.s.indexOf(m) >= 0));
+    check('hors JS attribue, ' + nom + ' : retard, wkRecv et longtask emis EN ENTIER, dans la largeur',
+      manq.length === 0 && lw.every(l => fits(l, o) && l.s.indexOf('…') < 0) && L.every(l => fits(l, o) && l.y - l.px >= 0),
+      manq.length ? 'manque : ' + manq.join(', ') + ' — ' + tout.slice(0, 120) : lw.map(l => '« ' + l.s + ' » ' + (l.x + l.w).toFixed(0) + '/' + (o.W - PAD)).join(' + '));
+    check('hors JS attribue, ' + nom + ' : « réel » n\'apparait PAS quand l\'intervalle n\'a pas ete plafonne', tout.indexOf('réel ') < 0, tout.slice(0, 60));
+  }
+  EM = 0.50;
+  const o = { W: 411, H: 900, PS: 1.5, cw: 617, ch: 1351, top: TOP, wk: true };
+  const txt = w => { o.worst = w; return drawBlock(o).map(l => l.s).join(' | '); };
+  call(`LT_ST=-1;DIAG_LTP=null;`);
+  let t = txt(PLEIN);
+  check('longtask : API ABSENTE -> « longtask absent », et aucun nombre a la place', /longtask absent/.test(t) && !/longtask \d|longtask aucune/.test(t), (t.match(/longtask[^|·]*/) || ['aucun champ longtask'])[0]);
+  call(`LT_ST=1;DIAG_LTP=[0,'',''];`);
+  t = txt(PLEIN);
+  check('longtask : observe, aucune tâche longue dans la seconde -> « longtask aucune » (pas « 0 ms »)', /longtask aucune/.test(t) && !/longtask 0/.test(t), (t.match(/longtask[^|·]*/) || ['aucun champ longtask'])[0]);
+  call(`LT_ST=1;DIAG_LTP=null;`);
+  t = txt(PLEIN);
+  check('longtask : observe mais rien de publie -> « longtask ? »', /longtask \?/.test(t), (t.match(/longtask[^|·]*/) || ['aucun champ longtask'])[0]);
+  call(`LT_ST=-2;DIAG_LTP=null;`);
+  t = txt(PLEIN);
+  check('longtask : observe() a echoue -> « longtask ? », pas « absent » ni zero', /longtask \?/.test(t), (t.match(/longtask[^|·]*/) || ['aucun champ longtask'])[0]);
+  call(`LT_ST=1;DIAG_LTP=[72.4,'self','unknown'];`);
+  t = txt([75, 3.0, 0, 0, 2, 0, -1, -1, 0, 75]);
+  check('retard / wkRecv non mesures -> « retard ? » et « wkRecv ? », jamais « 0.0 ms »', /retard \?/.test(t) && /wkRecv \?/.test(t) && !/retard \d|wkRecv \d/.test(t), t.slice(t.indexOf('collés'), t.indexOf('collés') + 60));
+  t = txt([123, -1, 7, 8, 9, 10]);
+  check('tableau a 6 champs (sentinelle de test/pire-navigateur.js) -> « ? », pas de nombre invente', /retard \?/.test(t) && /wkRecv \?/.test(t) && /collés 10/.test(t), t.slice(t.indexOf('collés'), t.indexOf('collés') + 60));
+  t = txt([100, 3.0, 0, 0, 2, 0, 12, 4, 3, 217]);
+  check('intervalle plafonne : « pire 100 ms » dit en plus « réel 217 ms »', /pire 100 ms :/.test(t) && /réel 217 ms/.test(t), t.slice(t.indexOf('pire'), t.indexOf('pire') + 150));
+
+  /* ---- c) de vraies images, horloges concordantes ---- */
+  sandbox.__horloge = v => { CLOCK = v; };
+  sandbox.__tick = ms => { CLOCK += ms; };
+  let LTCB = null;
+  sandbox.PerformanceObserver = class { constructor(cb) { LTCB = cb; } observe(o) { this.o = o; } };
+  sandbox.PerformanceObserver.supportedEntryTypes = ['longtask', 'paint'];
+  sandbox.__lt = (d, n, a) => LTCB && LTCB({ getEntries: () => [{ duration: d, name: n, attribution: [{ name: a }] }] });
+  const r = JSON.parse(call(`(()=>{
+    meta.fps=true;meta.q='auto';jsProfStart();WK=false;WKN=0;
+    LT_ST=0;if(typeof ltStart==='function')ltStart();   /* --ref=HEAD : pas de ltStart, les criteres echouent en le nommant */
+    const recoit=ms=>wkRecv({data:{get t(){__tick(ms);return 'autre';}}});   /* le VRAI wkRecv, par la globale, comme w.onmessage */
+    let t=last+16.7;const img=(d,ret)=>{__horloge(t+(ret||0));frame(t);t+=d;};
+    G.state='play';for(let i=0;i<8;i++)img(16.7,1);
+    DIAG_T=0;DIAG_N=0;DIAG_CDT=0;DIAG_CJS=0;DIAG_MX=0;DIAG_WORST=null;DIAG_W[0]=0;
+    for(let i=0;i<10;i++)img(16.7,1);
+    img(16.7,8);                                  /* leurre : attend 8 ms, intervalle suivant normal */
+    for(let i=0;i<3;i++)img(16.7,1);
+    __horloge(t-8);recoit(5);                      /* leurre : wkRecv de 5 ms dans un intervalle normal */
+    for(let i=0;i<3;i++)img(16.7,1);
+    __lt(64,'self','unknown');__lt(88,'self','unknown');
+    img(130,12);                                  /* B : attend 12 ms ; l'image suivante 130 ms plus tard */
+    __horloge(t-100);recoit(3);recoit(1);
+    img(16.7,1);                                  /* C : constate l'intervalle */
+    let n=0;while(DIAG_T>0&&n++<80)img(16.7,1);
+    const lp=()=>typeof DIAG_LTP==='undefined'?'DIAG_LTP absent du code':DIAG_LTP;
+    const w1=DIAG_WORST,lt1=lp();
+    n=0;img(16.7,1);while(DIAG_T>0&&n++<80)img(16.7,1);
+    return JSON.stringify({w:w1,lt:lt1,lt2:lp(),st:LT_ST});})()`));
+  const w = r.w || [];
+  check('vraies images : la pire image est l\'intervalle de 130 ms, plafonne a 100, BRUT 130', w[0] === 100 && Math.abs(w[9] - 130) < 1e-6, JSON.stringify(w));
+  check('vraies images : retard = 12 ms (celui du rappel B, pas le leurre de 8 ms ni celui du rappel C)', Math.abs(w[6] - 12) < 1e-6, 'retard=' + w[6]);
+  check('vraies images : wkRecv = 4 ms cumules, pire appel 3 ms (les 5 ms du leurre ne fuient pas)', Math.abs(w[7] - 4) < 1e-6 && Math.abs(w[8] - 3) < 1e-6, 'wkRecv=' + w[7] + '/' + w[8]);
+  check('vraies images : l\'API longtask detectee au lancement, et la pire tâche longue de la seconde gardee (88 ms)', r.st === 1 && r.lt && r.lt[0] === 88 && r.lt[1] === 'self' && r.lt[2] === 'unknown', 'LT_ST=' + r.st + ' · ' + JSON.stringify(r.lt));
+  check('vraies images : la seconde suivante, sans tâche longue, publie 0 — affiche « aucune »', r.lt2 && r.lt2[0] === 0, JSON.stringify(r.lt2));
+  o.worst = r.w; call(`DIAG_LTP=${JSON.stringify(r.lt)};LT_ST=1;`);
+  const L = drawBlock(o), tout = L.map(l => l.s).join(' · ');
+  check('vraies images : ce que le S22 ECRIT', /pire 100 ms : JS [\d.]+ ms · gen \d+ · spr \d+ · reçus 0 · collés \d+ · retard 12\.0 ms · wkRecv 4\.00\/3\.00 ms · réel 130 ms · longtask 88 ms \(self, unknown\)/.test(tout) && L.every(l => fits(l, o)),
+    '« ' + tout.slice(tout.indexOf('pire 100 ms :')).split(' · où :')[0] + ' »');
+  delete sandbox.PerformanceObserver;
 }
 
 /* ================= verdict ================= */
