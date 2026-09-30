@@ -234,8 +234,20 @@ function applyQuality(){const q=meta.q||'auto';
    est donc établie sur les 2 premières secondes de jeu, puis FIGÉE pour la partie : écran 120 Hz
    mais machine qui tient 60 ips -> référence 16,7 ms -> rien ne se déclenche. Elle n'est jamais
    mesurée hors du jeu (un menu n'a pas la charge d'une partie) ni héritée de la partie précédente. */
+/* ⚠️ Chantier A1 (30/09/2026) : « ref 0.4 ms » sur le S22 du proprietaire, a 65 ips, qualite bloquee au
+   plancher. La reference etait le MINIMUM BRUT des medianes : un minimum sur une serie bruitee n'est pas
+   une borne, c'est l'extreme du bruit, et il ne remonte jamais. Deux filtres, chacun contre un bruit nomme :
+   - DTMIN (4 ms = 250 Hz, au-dela de toute dalle mobile) : un intervalle plus court n'est PAS une image
+     mais un rappel rAF en double (rafale, reprise, transition d'etat). Il n'entre ni dans la fenetre ni
+     dans aucune decision. C'est le plancher physique ; il elimine l'absurde (0,4 ms).
+   - REFM, les 9 dernieres medianes : la reference est le minimum de leur MAXIMUM glissant. 9 evaluations
+     a 15 images d'ecart couvrent deux fenetres DISJOINTES de 120 images : une mediane basse n'abaisse la
+     reference que si elle a TENU ~2 s. Il elimine la rafale plausible mais breve (8 ms une seconde sur un
+     ecran 60 Hz), que le plancher laisse passer. Le minimum reste l'operateur de fond (un jeu lent ne
+     redefinit pas sa propre reference), mais il s'applique a une valeur SOUTENUE, pas a un echantillon. */
+const DTMIN=4,REFM=[];
 let REFDT=0,REFN=0,qn=0;
-function refReset(){REFDT=0;REFN=0;qn=0;slowT=0;upT=0;DTH.length=0;}
+function refReset(){REFDT=0;REFN=0;qn=0;slowT=0;upT=0;DTH.length=0;REFM.length=0;}
 function perf(dt){
   /* Les ips ne se calculent plus ici. Un compteur de 500 ms qui avancait sur TOUTES les images
      (menu, pause, ecran de fin compris, bien moins cheres) pouvait afficher 84 ips quand le jeu en
@@ -248,6 +260,7 @@ function perf(dt){
   /* fenetre de 120 images (2 s a 60 Hz) au lieu de 180 : l'echantillon revient plus vite, donc
      l'adaptation converge plus vite, sans baisser la robustesse de la mediane. L'echantillonnage est
      compte sur les images DE JEU (qn). */
+  if(dt<DTMIN)return;   /* rappel en double, pas une image (voir DTMIN) */
   DTH.push(dt);if(DTH.length>120)DTH.shift();
   if(DTH.length<120||(++qn%15))return;
   const so=DTH.slice().sort((a,b)=>a-b),med=so[60],p90=so[108];
@@ -260,11 +273,14 @@ function perf(dt){
      appris en manuel n'est PAS persiste (meta.qAuto appartient au mode auto) : applyQuality() repart
      du cran choisi a chaque partie. */
   const man=(meta.q||'auto')!=='auto',cap=man?QPRE[meta.q]:[3,1];
-  /* La reference est la PERIODE D'ECRAN, et le minimum des medianes observees en jeu l'estime par le
-     haut : l'intervalle entre deux images ne peut pas etre plus court que la periode. Un MINIMUM et
-     non une moyenne des premieres fenetres — sinon le demarrage (chunks a cuire, chargement) fixe la
-     reference vers le haut et le filet ne joue plus. */
-  REFDT=REFDT>0?Math.min(REFDT,med):med;
+  /* La reference est la PERIODE D'ECRAN. Un minimum et non une moyenne des premieres fenetres — sinon le
+     demarrage (chunks a cuire, chargement) fixe la reference vers le haut et le filet ne joue plus. Mais
+     le minimum porte sur le maximum glissant REFM, pas sur la mediane brute : deux rappels rAF PEUVENT
+     etre separes de moins d'une periode, et un minimum brut garde a vie la pire fenetre (voir DTMIN).
+     Tant que REFM n'est pas plein (etablissement, apres chaque refReset), la reference EST ce maximum :
+     sinon la premiere fenetre apres une reprise — la plus exposee aux rafales — se figerait seule. */
+  REFM.push(med);if(REFM.length>9)REFM.shift();
+  const env=Math.max(...REFM);REFDT=REFDT>0&&REFM.length>8?Math.min(REFDT,env):env;
   if(REFN<8){REFN++;return;}   /* ~2 s : etablissement, aucune decision */
   /* Descente rapide (~1 s au-dessus de 1,35x), remontée LENTE et plus exigeante (~5 s sous 1,10x).
      L'asymétrie est voulue : une oscillation entre deux crans saccaderait plus que le défaut, et

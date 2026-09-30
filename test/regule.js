@@ -7,6 +7,8 @@
      - quand ca saccade, QL puis RES doivent DESCENDRE sous le cran choisi ;
      - quand ca va mieux, la remontee doit revenir AU cran choisi et S'Y ARRETER, jamais au-dessus ;
      - le mode « Auto » ne doit pas avoir bouge d'un cran (trajectoire comparee a celle de TEMOIN).
+   Bloc X (chantier A1) : entrees ABERRANTES — fenetre a 0,4 ms, rafale breve a 8 ms, reprise apres
+   pause. La reference doit rester plausible et le regulateur ne doit ni tomber ni rester verrouille.
 
    Fait mesure a l'origine (S22 du proprietaire) : 46 ips / pire 59 ms et 58 ips / pire 25 ms avec
    exactement le meme « effets 2/3 · PS 1.25 · ref 0.0 ms » — perf() sortait des que meta.q!=='auto'.
@@ -208,6 +210,82 @@ for (const q of ['mid', 'high', 'low']) {
       : `diverge a l'image ${k} : ici ${a[k]} , ${TEMOIN} ${b[k]}`;
   } catch (e) { detail = `temoin ${TEMOIN} illisible : ${String(e.message || e).split('\n')[0]}`; }
   check(`Auto : trajectoire identique a ${TEMOIN}, image par image (descente, remontee, qAuto persiste)`, ok, detail);
+}
+
+/* ================= X — entrees ABERRANTES (chantier A1, 30/09/2026) =================
+   Fait mesure (S22 du proprietaire) : « 65 ips · image 15.4 ms … régul plafond mid ↓ 1/3 ×0.90 … ref 0.4 ms ».
+   0,4 ms = 2500 Hz : aucune dalle. La reference etait le MINIMUM BRUT des medianes, donc une seule fenetre
+   aberrante la verrouillait pour la partie : p90 > 1,35×0,4 toujours vrai (descente permanente), mediane
+   < 1,10×0,4 jamais vraie (aucune remontee). P2 n'avait teste que des entrees saines ; ce bloc teste le bruit.
+   PLANCHER = 4 ms (250 Hz) : une reference en dessous n'est pas une periode d'ecran. */
+const PLANCHER = 4;
+const S15 = () => 15.4;                                /* le regime du S22 : 65 ips */
+const ABS = () => 0.4;                                 /* rafale de rappels rAF : mediane absurde */
+const RAF8 = () => 8;                                  /* rafale PLAUSIBLE (120 Hz) mais breve, sur un ecran 60 Hz */
+/* suit une sequence : pire reference non nulle, pire cran, et le cran final */
+function suivi(g, etapes) {
+  let refMin = Infinity, qMin = '9/9', bas = null;
+  const vu = (S) => {
+    if (S.ref > 0 && S.ref < refMin) refMin = S.ref;
+    if (!bas || S.QL < bas.QL || (S.QL === bas.QL && S.RES < bas.RES)) { bas = S; qMin = J(S); }
+  };
+  for (const e of etapes) typeof e === 'string' ? g.call(e) : g.play(e[0], e[1], vu);
+  return { refMin, qMin, F: g.st() };
+}
+const cause0 = (r) => r < PLANCHER ? ` ; CAUSE : la reference a pris ${r.toFixed(1)} ms — REFDT est le minimum BRUT des medianes, une fenetre aberrante la verrouille (g4.js, perf())` : '';
+const plausible = (r) => r >= PLANCHER && r > 14 && r < 17;
+const PAUSE = [`G.state='pause'`, [1, S15], `G.state='play'`];   /* sortie de play : perf() appelle refReset() */
+
+/* X1 — Auto au cran haut : une fenetre absurde au milieu de 15,4 ms ne doit RIEN changer */
+for (const [q, qa, cran] of [['auto', null, '3/1'], ['mid', null, '2/1']]) {
+  GAME.pose(q, qa);
+  const R = suivi(GAME, [[IMG(10), S15], [120, ABS], [IMG(60), S15]]);
+  check(`${q} : fenetre absurde (120 images a 0,4 ms) — la reference reste PLAUSIBLE (jamais sous ${PLANCHER} ms, ~15,4 ms)`,
+    R.refMin >= PLANCHER && plausible(R.F.ref), `pire REFDT=${R.refMin.toFixed(2)} ms, final ${R.F.ref.toFixed(2)} ms` + cause0(R.refMin));
+  check(`${q} : fenetre absurde — la qualite ne tombe PAS pour rien (reste ${cran} a toute image)`, R.qMin === cran && J(R.F) === cran,
+    `pire cran ${R.qMin}, final ${J(R.F)} (le jeu tient 65 ips du debut a la fin)` + cause0(R.refMin));
+}
+
+/* X2 — l'etat du proprietaire : deja au plancher (qAuto 1/0.8 appris), fenetre absurde, puis 90 s saines : il DOIT remonter */
+{
+  GAME.pose('auto', [1, .8]);
+  const R = suivi(GAME, [[IMG(10), S15], [120, ABS], [IMG(90), S15]]);
+  check(`auto depuis le plancher 1/0.8 : apres une fenetre absurde puis 90 s a 65 ips, la remontee se DECLENCHE (pas de verrou)`,
+    J(R.F) === '3/1', `final ${J(R.F)} (attendu 3/1), REFDT=${R.F.ref.toFixed(2)} ms` + cause0(R.refMin));
+}
+/* X2b — meme chose en manuel « Équilibrée » apres une vraie descente (le libelle « plafond mid ↓ » du S22) */
+{
+  GAME.pose('mid', null);
+  const R = suivi(GAME, [[IMG(5), SAIN], [IMG(30), SACCADE], [120, ABS], [IMG(90), S15]]);
+  check(`mid descendu par saccade, puis fenetre absurde, puis 90 s saines : remonte AU cran 2/1`,
+    J(R.F) === '2/1' && R.qMin !== '2/1', `pire cran ${R.qMin}, final ${J(R.F)} (attendu 2/1), REFDT=${R.F.ref.toFixed(2)} ms` + cause0(R.refMin));
+}
+
+/* X3 — rafale PLAUSIBLE mais BREVE (90 images a 8 ms, > plancher) sur un ecran 60 Hz : ne doit pas devenir la reference */
+{
+  GAME.pose('auto', null);
+  const R = suivi(GAME, [[IMG(10), SAIN], [90, RAF8], [IMG(60), SAIN]]);
+  check(`auto : rafale breve a 8 ms (plausible, au-dessus du plancher) — la reference reste ~16,7 ms, la qualite reste 3/1`,
+    R.refMin > 16 && J(R.F) === '3/1' && R.qMin === '3/1',
+    `pire REFDT=${R.refMin.toFixed(2)} ms, pire cran ${R.qMin}, final ${J(R.F)}` + (R.refMin < 16 ? ` ; CAUSE : une seule fenetre breve a abaisse la reference (minimum brut)` : ''));
+}
+
+/* X4 — REPRISE : sortie puis retour en play (refReset), et la rafale tombe juste a la reprise */
+for (const [nom, raf] of [['rafale absurde (0,4 ms)', [120, ABS]], ['rafale breve a 8 ms', [90, RAF8]]]) {
+  GAME.pose('auto', null);
+  const R = suivi(GAME, [[IMG(10), S15], ...PAUSE, raf, [IMG(60), S15]]);
+  check(`auto, reprise apres pause suivie d'une ${nom} : reference plausible et qualite 3/1 conservee`,
+    plausible(R.F.ref) && R.refMin >= PLANCHER && J(R.F) === '3/1' && R.qMin === '3/1',
+    `pire REFDT=${R.refMin.toFixed(2)} ms, final ${R.F.ref.toFixed(2)} ms, pire cran ${R.qMin}, final ${J(R.F)}` + cause0(R.refMin)
+    + (R.refMin >= PLANCHER && R.F.ref < 14 ? ` ; CAUSE : la premiere fenetre apres refReset() a fixe seule la reference` : ''));
+}
+
+/* X5 — une VRAIE lenteur reste vue malgre le filtre : ecran 60 Hz, jeu a 30 ips -> descente (le filtre n'aveugle pas) */
+{
+  GAME.pose('auto', null);
+  const R = suivi(GAME, [[IMG(5), SAIN], [120, ABS], [IMG(20), () => 33.3]]);
+  check(`auto : apres une fenetre absurde, une vraie lenteur (30 ips sur ecran 60 Hz) fait toujours DESCENDRE`,
+    R.F.QL === 1 && R.F.RES === .8 && R.F.ref > 16 && R.F.ref < 17.5, `final ${J(R.F)} (attendu 1/0.8), REFDT=${R.F.ref.toFixed(2)} ms`);
 }
 
 /* ---------- verdict ---------- */
