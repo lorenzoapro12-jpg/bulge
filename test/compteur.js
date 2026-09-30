@@ -20,6 +20,10 @@
      5. **L'etat de la regulation est affiche** (S8) : « régul auto » ou « régul plafond <reglage> »,
         avec QL et RES reels, et « ↓ » quand la qualite est descendue SOUS son plafond. Un reglage qui
         n'adapte plus doit se LIRE — c'est le defaut que ce mot corrige (voir la note du S8).
+     6. **La pire image dit ce qui s'y est passe** (S9, chantier J0) : son intervalle, SON JS (la meme
+        image, pas deux maxima independants) et quatre compteurs d'evenements — genChunk, sprites
+        d'obstacles crees, chunks recus du worker, cuissons collees pour la premiere fois. Verifie
+        sur de VRAIES images avec un pic force et deux leurres.
      3. **La lisibilite ne coute pas la mesure** : la ligne « ou : » garde TOUJOURS ses postes
         les plus couteux (le tri est decroissant, on retire par la fin).
 
@@ -128,6 +132,10 @@ function drawBlock(o) {
      617x1351 de surface pour 411x900 de dessin, donc PS 1.50. */
   call(`W=${o.W};H=${o.H};PS=${o.PS == null ? 1 : o.PS};cv.width=${o.cw || o.W};cv.height=${o.ch || o.H};`);
   call(`JSPROFTOP=${JSON.stringify(o.top || [])};FPSV=${o.ips == null ? 53 : o.ips};DIAG_DT=${o.dt == null ? 18.6 : o.dt};DIAG_JS=${o.js == null ? 6.6 : o.js};DIAG_PEAK=${o.peak == null ? 34 : o.peak};DIAG_MARGIN=${o.margin == null ? 0.89 : o.margin};`);
+  /* la pire image (S9) est PRESENTE par defaut dans toutes les situations : c'est la mise en page la
+     plus haute, donc celle que les criteres de largeur et de chevauchement (S1-S8) doivent defendre.
+     `worst: null` = rien de publie. Sur --ref=HEAD cette affectation cree une globale que rien ne lit. */
+  call(`DIAG_WORST=${JSON.stringify(o.worst === undefined ? WORST : o.worst)};`);
   call(`inp.touch=${o.deskt ? 'false' : 'true'};`);
   call(o.wk ? `WK={w:1};WKN=${o.wkn == null ? 37 : o.wkn};` : `WK=false;WKN=0;`);
   if (o.noWk) call(`WK=null;WKN=0;`);
@@ -142,6 +150,8 @@ function drawBlock(o) {
   return lines;
 }
 const fits = (l, o) => l.x + l.w <= o.W - PAD + 0.5;
+/* [intervalle, JS, genChunk, sprites, recus du worker, colles] — voir DIAG_W, g4.js */
+const WORST =[34, 21.3, 2, 14, 1, 2];
 const WKSTATE = 'worker 37';
 /* Zone interdite du bouton de dash (g3.js:434) : centre (W-62, H-92), rayon 34. */
 const dansDash = (l, o) => (l.x + l.w > o.W - 96) && (l.y > o.H - 126);
@@ -314,6 +324,96 @@ const TOP = [['render', 6.06, 12], ['glow', 1.28, 4], ['drawHUD', 1.09, 5], ['dr
   L = drawBlock(o);
   check('regulation : descendue SOUS son plafond, la ligne le dit — « plafond high ↓ »', /^régul plafond high ↓ 1\/3 ×0\.80/.test(l3(L)), l3(L));
   call(`meta.q='auto';QL=3;RES=1;`);
+}
+
+/* ================= S9 — la PIRE IMAGE : ce qui s'y est passe (chantier J0) =================
+   Le compteur disait des cumuls (« où : render 6.72/31 ») et un « pire 25 ms » nu : on ne savait pas
+   CE QUI avait coute ces 25 ms. Il doit dire, pour l'image dont l'intervalle est le plus long de la
+   seconde : son intervalle, SON JS, et quatre compteurs d'evenements (genChunk, sprites d'obstacles
+   crees, chunks recus du worker, cuissons collees pour la premiere fois).
+   a) mise en page : le detail est ecrit EN ENTIER (jamais coupe par « … ») et tient, police large et
+      320 px compris ; sur poste fixe il complete la ligne des ips (aucune ligne de plus) ;
+   b) verite : de VRAIES images (frame(ts)), un pic FORCE, et deux leurres qui piegent les deux
+      facons de se tromper — prendre le plus long JS de la fenetre (maximum independant), ou prendre
+      le rappel qui CONSTATE le long intervalle au lieu de celui qui s'est execute pendant. */
+{
+  const GROS = [100, 98.7, 12, 140, 2, 12];
+  const det = w => ['pire ' + w[0] + ' ms : JS ' + w[1].toFixed(1) + ' ms', 'gen ' + w[2], 'spr ' + w[3], 'reçus ' + w[4], 'collés ' + w[5]];
+  for (const [nom, o, em] of [
+    ['S22 411 px', { W: 411, H: 900, PS: 1.5, cw: 617, ch: 1351, top: TOP, wk: true }, 0.50],
+    ['S22 411 px, police large', { W: 411, H: 900, PS: 1.5, cw: 617, ch: 1351, top: TOP, wk: true }, 0.68],
+    ['320 px', { W: 320, H: 640, PS: 1.5, cw: 480, ch: 960, top: TOP, wk: true }, 0.50],
+    ['320 px, police large', { W: 320, H: 640, PS: 1.5, cw: 480, ch: 960, top: TOP, wk: true }, 0.68],
+    ['couche 568×320, police large', { W: 568, H: 320, PS: 1.5, cw: 852, ch: 480, top: TOP, wk: true }, 0.68],
+  ]) for (const w of [WORST, GROS]) {
+    EM = em; o.worst = w;
+    const L = drawBlock(o), tout = L.map(l => l.s).join(' | '), manq = det(w).filter(m => tout.indexOf(m) < 0);
+    const lw = L.filter(l => det(w).some(m => l.s.indexOf(m) >= 0));
+    check('pire image, ' + nom + ' (' + w.join('/') + ') : le detail est emis EN ENTIER et tient dans la largeur',
+      manq.length === 0 && lw.length >= 1 && lw.every(l => fits(l, o) && l.s.indexOf('…') < 0) && L.every(l => fits(l, o)),
+      manq.length ? 'manque : ' + manq.join(', ') + ' — ' + tout.slice(0, 80) : lw.map(l => '« ' + l.s + ' » ' + (l.x + l.w).toFixed(0) + '/' + (o.W - PAD) + ' en ' + l.px + ' px').join(' + '));
+  }
+  {
+    EM = 0.50;
+    const o = { W: 1536, H: 864, top: TOP, wk: true, deskt: true, worst: WORST };
+    const L = drawBlock(o), l1 = L[0] ? L[0].s : 'absente';
+    check('pire image, PC 1536 px : le detail COMPLETE la ligne des ips — aucune ligne de plus (4 au total)',
+      L.length === 4 && /ips · image .* · pire 34 ms : JS 21\.3 ms · gen 2 · spr 14 · reçus 1 · collés 2$/.test(l1), L.length + ' lignes — ' + l1);
+    o.worst = [50, -1, 0, 0, 0, 0];
+    const L2 = drawBlock(o);
+    check('pire image : apres une reprise (rien de mesure avant), le compteur dit « JS ? » et n\'invente pas un nombre',
+      /pire 50 ms : JS \? · gen 0/.test(L2[0] ? L2[0].s : ''), L2[0] ? L2[0].s : 'absente');
+    o.worst = null;
+    const L3 = drawBlock(o), t3 = L3.map(l => l.s).join(' | ');
+    check('pire image : rien de publie -> aucun detail (ni « gen », ni « collés »), et « pire » reste sur la ligne des ips',
+      !/gen |collés |reçus /.test(t3) && /ips · image .* · pire 34 ms$/.test(L3[0] ? L3[0].s : ''), L3[0] ? L3[0].s : 'absente');
+  }
+  /* ---- b) le pic force ----
+     Horloge : `ts` (l'horodatage rAF) et `performance.now()` (CLOCK) sont deux choses. Le JS d'un rappel
+     est ce que CLOCK avance PENDANT frame() ; on l'avance depuis l'interieur de render(), enveloppee ici.
+     Les evenements sont de VRAIS appels : genChunk() et obsSprite() du jeu (donc a travers les enveloppes
+     de jsProfStart), et une cuisson neuve posee sur le chunk du centre de l'ecran, que la vraie
+     drawChunks() colle. L'arrivee du worker est simulee par ce que fait wkRecv (gw2.js:413) : c.bake=…, WKN++
+     — ENTRE deux rappels, comme une tache de message.
+       rappel A (leurre 1) : 3 genChunk, 15 ms de JS, intervalle suivant NORMAL (16,7 ms) ;
+       rappel B (le pic)   : 1 genChunk + 2 sprites + 1 cuisson collee, 9 ms de JS ; puis 1 chunk recu du
+                             worker, et l'image suivante arrive 50 ms plus tard ;
+       rappel C (leurre 2) : celui qui constate les 50 ms ; 2 genChunk, 10 ms de JS, et il colle le chunk recu.
+     Attendu : pire = 50 ms · JS 9.0 · gen 1 · spr 2 · reçus 1 · collés 1. */
+  sandbox.__tick = ms => { CLOCK += ms; };
+  const r = JSON.parse(call(`(()=>{
+    meta.fps=true;meta.q='auto';jsProfStart();WK=false;WKN=0;   /* drawBlock laisse un faux worker ({w:1}) : ici, de vraies images */
+    const rd0=render;let hook=null;render=function(){if(hook){const h=hook;hook=null;h();}return rd0.apply(this,arguments);};
+    const centre=()=>getChunk(Math.floor(CAM.x/CH),Math.floor(CAM.y/CH));
+    const neuve=()=>{centre().bake=document.createElement('canvas');};
+    /* obstacles sans sprite, pris dans des chunks du monde loin de la camera (hors de la zone que
+       streamWorld habille), generes AVANT la mesure */
+    const libres=[],kx=Math.floor(CAM.x/CH),ky=Math.floor(CAM.y/CH);
+    for(let k=12;libres.length<2&&k<200;k++)for(const s of [1,-1]){const c=getChunk(kx+s*k,ky);if(c)for(const o of c.obs)if(!o.wall&&!o.spr&&libres.length<2)libres.push(o);}
+    let t=last+16.7,far=0;const img=d=>{frame(t);t+=d;};
+    G.state='play';for(let i=0;i<8;i++)img(16.7);       /* mise en regime : tout ce qui est visible est cuit et colle */
+    DIAG_T=0;DIAG_N=0;DIAG_CDT=0;DIAG_CJS=0;DIAG_MX=0;DIAG_WORST=null;if(typeof DIAG_W!=='undefined')DIAG_W[0]=0;
+    const etat=[];
+    for(let i=0;i<12;i++)img(16.7);
+    hook=()=>{for(let k=0;k<3;k++){__tick(5);genChunk(-60-(far++),-60);}};img(16.7);                       /* A */
+    for(let i=0;i<6;i++)img(16.7);
+    neuve();hook=()=>{__tick(7);genChunk(-60-(far++),-60);for(const o of libres){__tick(1);obsSprite(o);}};frame(t);   /* B */
+    neuve();WKN++;t+=50;                                                                                  /* recu du worker, puis 50 ms */
+    hook=()=>{for(let k=0;k<2;k++){__tick(5);genChunk(-60-(far++),-60);}};img(16.7);                       /* C */
+    let n=0;while(DIAG_T>0&&n++<80){etat.push(G.state);img(16.7);}
+    render=rd0;
+    return JSON.stringify({w:typeof DIAG_WORST==='undefined'?null:DIAG_WORST,pk:DIAG_PEAK,js:+DIAG_JS.toFixed(2),n:n,libres:libres.length,st:G.state});})()`));
+  const w = r.w || [];
+  check('pic force : la pire image est celle de l\'intervalle de 50 ms, et c\'est le MEME nombre que « pire »',
+    w[0] === 50 && r.pk === 50, 'pire image=' + JSON.stringify(r.w) + ' · pire=' + r.pk + ' ms · etat ' + r.st + ' · ' + r.n + ' images de fin de fenetre');
+  check('pic force : SON JS (9 ms) — ni le plus long JS de la fenetre (15 ms, leurre A), ni celui du rappel qui constate (10 ms, leurre C)',
+    Math.abs(w[1] - 9) < 1e-6, 'JS de la pire image=' + (w[1] == null ? 'absent' : w[1].toFixed(1)) + ' ms · JS moyen de la fenetre=' + r.js + ' ms');
+  check('pic force : SES evenements — gen 1 (pas 3 ni 2), spr 2, reçus 1, collés 1 (le chunk recu, colle par le rappel suivant, n\'est pas compte)',
+    w[2] === 1 && w[3] === 2 && w[4] === 1 && w[5] === 1 && r.libres === 2, 'gen ' + w[2] + ' · spr ' + w[3] + ' · reçus ' + w[4] + ' · collés ' + w[5]);
+  EM = 0.50;
+  const o = { W: 411, H: 900, PS: 1.5, cw: 617, ch: 1351, top: TOP, wk: true, worst: r.w };
+  const L = drawBlock(o), lp = L.find(l => /^pire .* :/.test(l.s));
+  check('pic force : la ligne ecrite sur le S22 dit exactement cela', !!lp && lp.s === 'pire 50 ms : JS 9.0 ms · gen 1 · spr 2 · reçus 1 · collés 1' && fits(lp, o), lp ? '« ' + lp.s + ' »' : 'absente — ' + L.map(l => l.s.slice(0, 24)).join(' | '));
 }
 
 /* ================= verdict ================= */

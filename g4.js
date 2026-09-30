@@ -178,6 +178,19 @@ let DIAG_JS=0,DIAG_DT=0,DIAG_PEAK=0,DIAG_MARGIN=-1;
    tete, pas un accumulateur). Le banc de mesure de l'atelier est un autre processeur que celui
    de Lorenzo : seul ce profil dit ou passent SES millisecondes. */
 const JSPROF={};let JSPROF_ON=false,JSPROFTOP=[];
+/* ---------- PIRE IMAGE (chantier J0) ----------
+   Le profil dit des CUMULS et des pires APPELS sur une seconde : il ne dit pas QUELLE image a derape,
+   ni ce qui s'y est passe. Ici on garde, pour l'image dont l'intervalle est le plus long de la fenetre,
+   SON JS et SES evenements — une seule et meme image, pas des maxima independants.
+   ⚠️ Appariement : `dt` lu par le rappel N vaut ts(N)-ts(N-1) ; le JS qui s'est execute PENDANT cet
+   intervalle est celui du rappel N-1 (c'est lui qui, trop long, fait rater le rendez-vous et retarde
+   ts(N)). On apparie donc dt(N) avec le rappel N-1, pas avec le rappel N qui ne fait que le constater.
+   DIAG_EV : evenements du rappel en cours [genChunk, sprites d'obstacles crees] ; CHNEW (g3.js) : cuissons
+   collees pour la premiere fois. DIAG_PV : le rappel precedent [JS, gen, spr, colles, WKN] ; JS<0 = pas
+   de precedent mesure (reprise). DIAG_W : pire de la fenetre [dt, JS, gen, spr, recus, colles], publie dans
+   DIAG_WORST avec le reste. « recus » = WKN gagne entre les deux rappels : les messages du worker sont des
+   taches a part, ils n'arrivent jamais AU MILIEU d'un rappel. Aucun de ces nombres n'entre dans le jeu. */
+const DIAG_EV=[0,0],DIAG_PV=[-1,0,0,0,0],DIAG_W=[0,-1,0,0,0,0];let DIAG_WORST=null;
 const JSPROF_N=['render','step','streamWorld','bakeStep','genChunk','getChunk','perf',
   'drawChunks','drawLive','drawHUD','gcHUD','gxHUD','gtHUD','drawMinimap',
   'drawEdges','drawObstacles','drawEnemies','drawBoss','drawPlayer','drawBullets',
@@ -190,11 +203,16 @@ function jsProfStart(){
   if(JSPROF_ON)return;JSPROF_ON=true;
   for(const n of JSPROF_N){
     const f=globalThis[n];if(typeof f!=='function')continue;
-    JSPROF[n]=[0,0];
+    JSPROF[n]=[0,0];const gen=n==='genChunk';
     globalThis[n]=function(){if(!meta.fps)return f.apply(this,arguments);
+      if(gen)DIAG_EV[0]++;
       const a=performance.now();try{return f.apply(this,arguments);}
       finally{const d=performance.now()-a;const s=JSPROF[n];s[0]+=d;if(d>s[1])s[1]=d;}};
   }
+  /* obsSprite est appele a CHAQUE image pour chaque obstacle visible (g3.js) et rend alors son cache :
+     on ne compte que les CREATIONS (o.spr encore vide), et sans le chronometrer — deux performance.now()
+     par obstacle visible fausseraient la mesure qu'on cherche a faire. */
+  const os=globalThis.obsSprite;if(typeof os==='function')globalThis.obsSprite=function(o){if(!o.spr)DIAG_EV[1]++;return os(o);};
 }
 /* Qualité. Ancienne méthode : baisse de résolution dès que le temps moyen dépassait 1,22× le meilleur
    temps récent -> se déclenchait sur une simple gigue de vsync, même sur une machine capable.
@@ -326,13 +344,18 @@ function frame(ts){
      decrivait un melange de deux choses, et les ips gonflaient d'autant. */
   if(G&&(G.state==='play'||G.state==='dying'||G.state==='victory')){
     DIAG_T+=dt;DIAG_N++;DIAG_CJS+=FWK+BKMS;DIAG_CDT+=dt;if(dt>DIAG_MX)DIAG_MX=dt;
-    if(AU.ac&&AU.next!=null){const m=AU.next-AU.ac.currentTime;if(m<DIAG_AUM)DIAG_AUM=m;}}
+    if(AU.ac&&AU.next!=null){const m=AU.next-AU.ac.currentTime;if(m<DIAG_AUM)DIAG_AUM=m;}
+    /* pire image : meme test que DIAG_MX (donc le meme nombre que « pire »), apparie au rappel PRECEDENT */
+    if(dt>DIAG_W[0]){const p=DIAG_PV,w=DIAG_W;w[0]=dt;w[1]=p[0];w[2]=p[1];w[3]=p[2];w[4]=p[0]<0?0:Math.max(0,WKN-p[4]);w[5]=p[3];}
+    DIAG_PV[0]=FWK+BKMS;DIAG_PV[1]=DIAG_EV[0];DIAG_PV[2]=DIAG_EV[1];DIAG_PV[3]=CHNEW;DIAG_PV[4]=WKN;}
+  else DIAG_PV[0]=-1;
+  DIAG_EV[0]=DIAG_EV[1]=0;CHNEW=0;
   if(DIAG_T>=1000){
     /* profil : on publie le top des postes (ms par image) puis on remet les compteurs a zero */
     JSPROFTOP=[];
     for(const k in JSPROF){const s=JSPROF[k];if(s[0]>=1)JSPROFTOP.push([k,s[0]/DIAG_N,s[1]]);s[0]=0;s[1]=0;}
     JSPROFTOP.sort((a,b)=>b[1]-a[1]);if(JSPROFTOP.length>6)JSPROFTOP.length=6;
-    DIAG_JS=DIAG_CJS/DIAG_N;DIAG_DT=DIAG_CDT/DIAG_N;DIAG_PEAK=DIAG_MX;
+    DIAG_JS=DIAG_CJS/DIAG_N;DIAG_DT=DIAG_CDT/DIAG_N;DIAG_PEAK=DIAG_MX;DIAG_WORST=DIAG_W.slice();DIAG_W[0]=0;
     /* Les ips derivent du MEME cumul que « image : N ms » : deux compteurs separes finissaient par
        afficher, sur la meme ligne, deux nombres qui ne se correspondaient pas. 1000/ips = ms, par
        construction, et non par coincidence. */

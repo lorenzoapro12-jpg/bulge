@@ -147,10 +147,16 @@ function drawFar(mix){
       const x=((i+u)*cell-fx)*sc+W/2+RSX*.5,y=((j+v)*cell-fy)*sc+H/2+RSY*.5;fn(x,y,s,sc,m.w,cell);}}
   ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
 }
+/* Chantier J0 — « collé pour la première fois » : le premier drawImage d'une cuisson TERMINÉE (c.bake ;
+   une cuisson en cours, c.bk.cv, n'en est pas une). Clé = la surface cuite, tenue FAIBLEMENT : rien
+   n'est retenu après l'éviction (un ImageBitmap fermé, une toile rendue au pool restent libres). La
+   valeur est le chunk, pour qu'une toile du pool recuite pour un AUTRE chunk recompte. frame() (g4.js)
+   lit CHNEW puis le remet à zéro à chaque image. N'émet aucune opération de dessin. */
+const CHV=new WeakMap();let CHNEW=0;
 function drawChunks(){
   const c0=Math.floor(VL/CH),c1=Math.floor(VR/CH),r0=Math.floor(VT/CH),r1=Math.floor(VB/CH);
   /* un chunk en cours de cuisson (c.bk) s'affiche tel quel : opaque, il part du même sol que drawGround */
-  for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy),b=c&&(c.bake||c.bk&&c.bk.cv);if(b)ctx.drawImage(b,c.x0,c.y0,CH,CH);}
+  for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy),b=c&&(c.bake||c.bk&&c.bk.cv);if(b){if(c.bake&&CHV.get(b)!==c){CHV.set(b,c);CHNEW++;}ctx.drawImage(b,c.x0,c.y0,CH,CH);}}
   fleeBuild();STB=10;DCB=1;DEC=G&&G.p&&G.dec?G.biome:'';
   for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(c){for(const it of c.live)drawLive(it);if(c.bake||c.bk)drawDeco(c);}}
   ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
@@ -725,14 +731,24 @@ function drawHUD(){
        — sinon la ligne s'ecrit « ou : · render 6.06/12 » au lieu de « ou : render 6.06/12 ». */
     const jn=a=>{let s='';for(let i=0;i<a.length;i++)s+=(i?(a[i-1].slice(-1)===':'?' ':' · '):'')+a[i];return s;};
     const MWj=a=>c.measureText(jn(a)).width;
+    /* PIRE IMAGE (chantier J0) : ce qui s'est passe dans l'image dont l'intervalle est le plus long
+       de la seconde — UNE image, pas des maxima independants (voir DIAG_W, g4.js). « JS » = le JS de
+       CETTE image ; gen = genChunk ; spr = sprites d'obstacles crees ; reçus = chunks arrives du
+       worker pendant l'intervalle ; collés = cuissons dessinees pour la premiere fois. « JS ? » =
+       premiere image apres une reprise : ce qui la precede n'a pas ete mesure. Pas de detail tant que
+       rien n'est publie. Si tout tient sur la ligne des ips (poste fixe), le detail la COMPLETE et
+       aucune ligne n'est ajoutee ; sinon il a sa ligne, pavee comme les autres, sous la ligne materielle. */
+    const pw=typeof DIAG_WORST!=='undefined'&&DIAG_WORST||null,pk='pire '+(pw?pw[0]:DIAG_PEAK).toFixed(0)+' ms';
+    const segW=pw?[pk+' :','JS '+(pw[1]<0?'?':pw[1].toFixed(1)+' ms'),'gen '+pw[2],'spr '+pw[3],'reçus '+pw[4],'collés '+pw[5]]:null;
     /* mise en page pour une largeur MW donnee, puis pose : le bloc part du bas et monte au-dessus
        de chaque zone qu'il coupe (il ne fait que monter : au plus une passe par zone). */
     const pose=MW=>{
       /* les trois lignes de mesure sont PAVEES (un morceau qui ne tient plus ouvre la ligne suivante) :
          rien n'est tronque, meme a 320 px en police large. Seule « ou : » se raccourcit par la fin. */
       const out=[];c.font='500 '+PX0+'px '+FD;
-      for(const g of [[FPSV+' ips','image '+DIAG_DT.toFixed(1)+' ms','pire '+DIAG_PEAK.toFixed(0)+' ms'],
-                      ['JS '+DIAG_JS.toFixed(1)+' ms','hors-JS '+Math.max(0,DIAG_DT-DIAG_JS).toFixed(1)+' ms','effets '+QL+'/3','resol '+Math.round(RES*100)+' %'],seg3]){
+      const g0=[FPSV+' ips','image '+DIAG_DT.toFixed(1)+' ms'],g1=segW?g0.concat(segW):null,un=!!g1&&MWj(g1)<=MW;
+      for(const g of [un?g1:g0.concat([pk]),
+                      ['JS '+DIAG_JS.toFixed(1)+' ms','hors-JS '+Math.max(0,DIAG_DT-DIAG_JS).toFixed(1)+' ms','effets '+QL+'/3','resol '+Math.round(RES*100)+' %'],seg3].concat(segW&&!un?[segW]:[])){
         let cu=[];for(const s of g){if(cu.length&&MWj(cu.concat([s]))>MW){out.push(cu);cu=[];}cu.push(s);}
         if(cu.length)out.push(cu);}
       if(typeof JSPROFTOP!=='undefined'&&JSPROFTOP.length)out.push(['où :'].concat(JSPROFTOP.map(q=>q[0]+' '+q[1].toFixed(2)+'/'+q[2].toFixed(0))));
