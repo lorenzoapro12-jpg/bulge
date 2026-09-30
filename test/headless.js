@@ -732,6 +732,10 @@ const sub = (f, args) => { const r = cp.spawnSync(process.execPath, [path.join(_
     (r.out.match(/CAUSE [^\n]*/g) || []).slice(0, 2).map(s => s.trim().slice(0, 240)).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
 /* test/worker.js (identité au pixel worker / sur place) exige un VRAI Chromium : il n'entre pas ici, et ce n'est pas un
    oubli — la raison est écrite en tête de test/navigateur.js. Ce harnais le DIT au lieu de le taire (voir le verdict). */
+{ const r = sub('duel-annonces.js', REF ? ['--ref=' + REF] : []);
+  check('duel : ce que l’écran annonce (noms, pourcentages, invitations) est ce que le code applique (test/duel-annonces.js)', r.ok,
+    (r.out.match(/[ÉE]CHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim().slice(0, 220)).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
+
 const NAV = 'NON EXERCÉ ICI (vrai Chromium requis) : node test/navigateur.js — test/worker.js + le défaut dans un vrai navigateur';
 
 /* ---------- verdict ---------- */

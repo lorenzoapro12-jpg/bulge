@@ -13,7 +13,13 @@
         ni invite ni minicarte ; témoin : éveillé, il l'est.
 
    node test/duel-annonces.js              arbre de travail
-   node test/duel-annonces.js --ref=HEAD   code d'avant (témoin : doit ÉCHOUER sur 1, 2, 3, 4, 5)
+   node test/duel-annonces.js --ref=<sha>  code d'avant (témoin : doit ÉCHOUER sur 1, 2, 3, 4, 5)
+
+   ⚠️ PAS --ref=HEAD : le chantier J2 (annonces du duel) est MERGE dans main depuis le 30/09/2026, donc
+   HEAD contient déjà le corrigé et le témoin ne désigne plus rien — « code d'avant » veut dire un commit
+   ANTÉRIEUR à la fusion. Vérifié le 30/09/2026 : avec --ref=HEAD, l'arbre et le témoin rendent la MÊME
+   sortie (7 critères OK), ce qui n'accuse pas le test mais le choix de la référence. Lire l'en-tête d'un
+   témoin avant de conclure qu'il discrimine.
    Code de sortie : 0 si tout passe, 1 sinon.
    ========================================================= */
 const fs = require('fs'), path = require('path'), vm = require('vm'), cp = require('child_process');
