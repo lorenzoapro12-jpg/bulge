@@ -515,6 +515,76 @@ const TOP = [['render', 6.06, 12], ['glow', 1.28, 4], ['drawHUD', 1.09, 5], ['dr
   delete sandbox.PerformanceObserver;
 }
 
+/* ================= S11 — LoAF : ce que CONTIENT l'image longue (chantier A6) =================
+   A4 nommait la tâche longue, mais Chromium l'attribue a (self, unknown) MEME pour une boucle de script pure.
+   Les Long Animation Frames la DECOUPENT : DIAG_LFP (g4.js) = [duree, blockingDuration, script, style/layout,
+   nom du plus long script ('' = scripts[] VIDE), sa duree]. Le compteur ecrit, apres longtask :
+     « loaf D ms : <phase dominante> · « <nom> » N ms | aucun script · style N ms [· bloq N ms] ».
+   a) VERITE DES ABSENCES : API absente -> « loaf absent » ; observe() echoue, pas lance, rien publie -> « loaf ? » ;
+      observe sans image longue -> « loaf aucune » — jamais « loaf 0 » ;
+   b) le detail : phase dominante juste (script / style/layout / ni script ni style), nom TRONQUE a 14 signes
+      (« … »), « aucun script » quand la liste est vide, « bloq » seulement s'il est nettement plus court ;
+   c) largeur : detail EN ENTIER a 411/320 px, police large, couche ; chaque ligne tient ;
+   d) PAS DE LIGNE PERMANENTE DE PLUS : en regime calme (longtask et loaf sans rien), un seul mot « LT/LoAF aucune »
+      remplace « longtask aucune » A LA MEME PLACE et n'est pas plus long : le pavage glouton ne coupe qu'au vu des
+      largeurs, il coupe donc comme avant (on verifie la longueur ET la place : juste apres wkRecv, dernier morceau). */
+{
+  const PLEIN = [75, 3.0, 0, 0, 2, 0, 71.8, 0.42, 0.31, 75];
+  const FMT = [
+    ['S22 411 px', { W: 411, H: 900, PS: 1.5, cw: 617, ch: 1351, top: TOP, wk: true }, 0.50],
+    ['S22 411 px, police large', { W: 411, H: 900, PS: 1.5, cw: 617, ch: 1351, top: TOP, wk: true }, 0.68],
+    ['320 px', { W: 320, H: 640, PS: 1.5, cw: 480, ch: 960, top: TOP, wk: true }, 0.50],
+    ['320 px, police large', { W: 320, H: 640, PS: 1.5, cw: 480, ch: 960, top: TOP, wk: true }, 0.68],
+    ['couche 568×320, police large', { W: 568, H: 320, PS: 1.5, cw: 852, ch: 480, top: TOP, wk: true }, 0.68],
+  ];
+  const o = { W: 411, H: 900, PS: 1.5, cw: 617, ch: 1351, top: TOP, wk: true, worst: PLEIN };
+  const txt = st => { EM = 0.50; call(st); return drawBlock(o).map(l => l.s).join(' | '); };
+  const champ = t => (t.match(/(loaf|LT\/LoAF)[^|·]*/) || ['aucun champ loaf'])[0];
+  let t = txt(`LT_ST=1;DIAG_LTP=[72.4,'self','unknown'];LF_ST=-1;DIAG_LFP=null;`);
+  check('loaf : API ABSENTE -> « loaf absent », aucun nombre a la place', /loaf absent/.test(t) && !/loaf \d|loaf aucune/.test(t), champ(t));
+  for (const [st, qui] of [[`LF_ST=0;DIAG_LFP=null;`, 'pas lance'], [`LF_ST=-2;DIAG_LFP=null;`, 'observe() a echoue'], [`LF_ST=1;DIAG_LFP=null;`, 'observe, rien de publie']]) {
+    t = txt(`LT_ST=1;DIAG_LTP=[72.4,'self','unknown'];` + st);
+    check('loaf : ' + qui + ' -> « loaf ? », ni « absent » ni zero', /loaf \?/.test(t) && !/loaf absent|loaf \d|loaf aucune/.test(t), champ(t));
+  }
+  t = txt(`LT_ST=1;DIAG_LTP=[72.4,'self','unknown'];LF_ST=1;DIAG_LFP=[0,0,0,0,'',0];`);
+  check('loaf : observe, aucune image longue (mais une tâche longue) -> « loaf aucune », pas « loaf 0 »', /loaf aucune/.test(t) && !/loaf 0/.test(t) && /longtask 72 ms/.test(t), champ(t));
+  t = txt(`LT_ST=1;DIAG_LTP=[0,'',''];LF_ST=1;DIAG_LFP=[0,0,0,0,'',0];`);
+  check('loaf : calme (ni tâche ni image longue) -> un seul mot « LT/LoAF aucune »', /LT\/LoAF aucune/.test(t) && !/longtask aucune|loaf aucune|loaf 0/.test(t), champ(t));
+
+  /* b) le detail — les trois cas releves dans le vrai Chromium (test/navigateur.js) + un « bloq » non significatif */
+  const DET = [
+    ['script force (setTimeout qui boucle)', `[222,104,150,4,'TimerHandler:setTimeout',150]`, ['loaf 222 ms : script', '« TimerHandler:… » 150 ms', 'style 4 ms', 'bloq 104 ms']],
+    ['image longue SANS script', `[55,0,0,0.2,'',0]`, ['loaf 55 ms : ni script ni style', 'aucun script', 'style 0 ms', 'bloq 0 ms']],
+    ['reflow force', `[335,281,71.1,259.8,'forceLayout',330.6]`, ['loaf 335 ms : style/layout', '« forceLayout » 331 ms', 'style 260 ms']],
+    ['bloq proche de la duree', `[100,90,80,5,'frame',80]`, ['loaf 100 ms : script', '« frame » 80 ms', 'style 5 ms']],
+  ];
+  for (const [nom, lf, exige] of DET) {
+    t = txt(`LT_ST=1;DIAG_LTP=[72.4,'self','unknown'];LF_ST=1;DIAG_LFP=${lf};`);
+    const tout = t.split(' | ').join(' · '), manq = exige.filter(m => tout.indexOf(m) < 0);
+    const extra = /bloq proche|reflow/.test(nom) ? /bloq/.test(t) : false, tronc = nom.startsWith('script') ? /setTimeout/.test(t) : false;
+    check('loaf, ' + nom + ' : ' + exige.join(' · ') + (extra ? ' (et PAS de bloq)' : ''), !manq.length && !extra && !tronc,
+      manq.length ? 'manque : ' + manq.join(', ') + ' — ' + tout.slice(tout.indexOf('loaf'), tout.indexOf('loaf') + 110) : tronc ? 'nom NON tronque' : extra ? 'bloq affiche' : tout.slice(tout.indexOf('loaf')).split(' · où :')[0]);
+  }
+
+  /* c) largeur — le detail le plus long (script tronque + bloq), et d) le calme, dans tous les formats */
+  const DLONG = ['loaf 222 ms : script', '« TimerHandler:… » 150 ms', 'style 4 ms', 'bloq 104 ms'];
+  for (const [nom, o, em] of FMT) {
+    EM = em; o.worst = PLEIN; call(`LT_ST=1;DIAG_LTP=[72.4,'self','unknown'];LF_ST=1;DIAG_LFP=[222,104,150,4,'TimerHandler:setTimeout',150];`);
+    let L = drawBlock(o), tout = L.map(l => l.s).join(' | ');
+    const manq = DLONG.filter(m => tout.indexOf(m) < 0), lw = L.filter(l => DLONG.some(m => l.s.indexOf(m) >= 0));
+    check('loaf, ' + nom + ' : detail emis EN ENTIER, chaque ligne dans la largeur',
+      !manq.length && lw.every(l => !/ …$/.test(l.s)) && L.every(l => fits(l, o) && l.y - l.px >= 0),
+      manq.length ? 'manque : ' + manq.join(', ') : lw.map(l => '« ' + l.s + ' » ' + (l.x + l.w).toFixed(0) + '/' + (o.W - PAD) + ' en ' + l.px + ' px').join(' + '));
+    call(`LT_ST=1;DIAG_LTP=[0,'',''];LF_ST=1;DIAG_LFP=[0,0,0,0,'',0];`);
+    L = drawBlock(o);
+    const l = L.find(x => /LT\/LoAF aucune/.test(x.s)), tc = L.map(x => x.s).join(' | ');
+    check('loaf, ' + nom + ' : calme -> pas de ligne de plus (« LT/LoAF aucune » <= « longtask aucune », a sa place, apres wkRecv)',
+      !!l && 'LT/LoAF aucune'.length <= 'longtask aucune'.length && /wkRecv [\d.\/]+ ms( · | \| )LT\/LoAF aucune( \| où|$)/.test(tc) && L.every(x => fits(x, o)),
+      l ? L.length + ' lignes ; « ' + l.s + ' » ' + (l.x + l.w).toFixed(0) + '/' + (o.W - PAD) : 'absent — ' + L.map(x => x.s).join(' | ').slice(-120));
+  }
+  EM = 0.50;
+}
+
 /* ================= verdict ================= */
 let all = true;
 for (const c of checks) { if (!c.ok) all = false; console.log((c.ok ? '  OK  ' : ' ECHEC') + ' ' + c.name + (c.detail ? '  — ' + c.detail : '')); }

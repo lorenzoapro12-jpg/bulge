@@ -77,6 +77,48 @@ const check = (label, cond, info) => { if (!cond) ok = false; console.log((cond 
       const trop = ((r && r.lignes) || []).filter(l => 14 + l.w > l.W - 14 + .5);
       check('A4 vrai navigateur : chaque ligne tient dans W - pad', r && r.lignes && r.lignes.length > 0 && !trop.length, trop.length ? 'deborde : ' + trop.map(l => (14 + l.w).toFixed(1)).join(', ') : 'plus large ' + Math.max(...r.lignes.map(l => 14 + l.w)).toFixed(1) + ' / ' + (r.W - 14) + ' px');
     } catch (e) { check('A4 vrai navigateur : execution', false, e.message); } finally { B.close(); } }
+  /* 5. chantier A6 — Long Animation Frames, dans le VRAI Chromium (meme S22). A4 : Chromium attribue toute tâche
+     longue a (self, unknown). Ici on constate (a) 'long-animation-frame' detecte au lancement (LF_ST=1) ;
+     (b) une tâche de SCRIPT forcee (setTimeout qui boucle 150 ms) : la ligne ecrite dit « loaf N ms : script »
+     et nomme un script de >= 140 ms ; (c) un setTimeout qui ne fait que DORMIR 150 ms : AUCUN script de
+     minuterie dans scripts[] (on recopie ce que le navigateur a livre pendant ce temps) ; (d) chaque ligne tient.
+     Un second observateur, BRUT, recopie scripts[] tel quel (invoker, sourceFunctionName, duree, reflow force). */
+  { const B = await launch(), H = s => B.ev(s).catch(e => ({ err: e.message }));
+    try {
+      await B.cdp('Emulation.setDeviceMetricsOverride', { width: 360, height: 780, deviceScaleFactor: 2.625, mobile: true });
+      await B.cdp('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+      await B.nav('file://' + html);
+      for (let i = 0; i < 80; i++) { await sleep(250); if (await H("typeof startGame==='function'&&typeof MAINCTX!=='undefined'&&document.readyState==='complete'") === true) break; }
+      for (let i = 0; i < 40; i++) { if (await H('(()=>{meta.fps=true;try{if(!G||G.state!=="play"){startGame("bal",false);show(null);}}catch(e){}return !!G&&G.state==="play";})()') === true) break; await sleep(500); }
+      await sleep(3000);
+      const e = await H(`(()=>({lf:LF_ST,sup:(PerformanceObserver.supportedEntryTypes||[]).indexOf('long-animation-frame')>=0}))()`);
+      check('A6 vrai navigateur : API long-animation-frame detectee au lancement (LF_ST=1)', e.lf === 1 && e.sup, JSON.stringify(e));
+      await H(`(()=>{window.__R=[];new PerformanceObserver(l=>{for(const e of l.getEntries())window.__R.push({t:e.startTime,d:+e.duration.toFixed(1),bloq:+e.blockingDuration.toFixed(1),
+          rs:+(e.renderStart-e.startTime).toFixed(1),sls:+(e.styleAndLayoutStart-e.startTime).toFixed(1),
+          sc:[...e.scripts].map(s=>({invoker:s.invoker,type:s.invokerType,fn:s.sourceFunctionName,src:s.sourceURL.split('/').pop(),d:+s.duration.toFixed(1),fsl:+s.forcedStyleAndLayoutDuration.toFixed(1)}))});}).observe({type:'long-animation-frame'});
+        window.__L=[];const mc=MAINCTX,of=mc.fillText;mc.fillText=function(t,x,y){if(x===14&&String(mc.fillStyle).toLowerCase()==='#8f89b3')window.__L.push({f:FRAME,t:String(t),w:mc.measureText(String(t)).width,W});return of.apply(this,arguments);};return 1;})()`);
+      const raw = async (t0) => (await H(`window.__R.filter(r=>r.t+r.d>=${t0})`)) || [];
+      const brut = rs => rs.map(r => r.d + ' ms (bloq ' + r.bloq + ', renderStart +' + r.rs + ', style +' + r.sls + ') scripts=' + JSON.stringify(r.sc)).join('\n            ');
+      /* (b) script force */
+      let t0 = await H(`(()=>{const t=performance.now();setTimeout(()=>{const a=performance.now();while(performance.now()-a<150);},0);return t;})()`);
+      let r = null, m = null, s = '';
+      for (let i = 0; i < 16 && !m; i++) { await sleep(250);
+        r = await H(`(()=>{const L=window.__L,fs=[...new Set(L.map(l=>l.f))];const f=fs.length>1?fs[fs.length-2]:-1;window.__L=L.filter(l=>l.f>=f);return {lignes:L.filter(l=>l.f===f),W};})()`);
+        s = (r.lignes || []).map(l => l.t).join(' · '); if ((m = s.match(/loaf (\d+) ms : (script|style\/layout|ni script ni style) · (« [^»]+ » (\d+) ms|aucun script) · style \d+ ms/)) && +m[1] < 150) m = null; }
+      console.log('        ce que l\'ecran ECRIT (image apres le script force) :');
+      for (const l of (r && r.lignes) || []) console.log('          ' + (14 + l.w).toFixed(1).padStart(7) + ' px | ' + l.t);
+      console.log('        ce que LoAF a LIVRE (brut, images >= 100 ms) :\n            ' + brut((await raw(t0)).filter(x => x.d >= 100)));
+      check('A6 vrai navigateur : script force -> « loaf >= 150 ms : script » et un script NOMME de >= 140 ms', !!m && m[2] === 'script' && +m[4] >= 140, m ? m[0] : 'introuvable dans « ' + s.slice(s.indexOf('loaf'), s.indexOf('loaf') + 160) + ' »');
+      const trop = ((r && r.lignes) || []).filter(l => 14 + l.w > l.W - 14 + .5);
+      check('A6 vrai navigateur : chaque ligne tient dans W - pad (detail LoAF compris)', r && r.lignes && r.lignes.length > 0 && !trop.length, trop.length ? 'deborde : ' + trop.map(l => (14 + l.w).toFixed(1)).join(', ') : 'plus large ' + Math.max(...r.lignes.map(l => 14 + l.w)).toFixed(1) + ' / ' + (r.W - 14) + ' px');
+      /* (c) setTimeout qui DORT : la minuterie ne tient pas le fil, elle ne doit pas apparaitre comme script */
+      await sleep(1500);
+      t0 = await H(`(()=>{const t=performance.now();window.__DORT=0;setTimeout(()=>{window.__DORT=performance.now()-t;},150);return t;})()`);
+      await sleep(1500);
+      const rd = await raw(t0), dort = await H('window.__DORT'), tm = rd.filter(x => x.sc.some(q => /setTimeout/.test(q.invoker)));
+      console.log('        setTimeout qui DORT 150 ms (rappel apres ' + (+dort).toFixed(1) + ' ms) — LoAF livres dans les 1,5 s : ' + rd.length + (rd.length ? '\n            ' + brut(rd) : ''));
+      check('A6 vrai navigateur : un setTimeout qui DORT n\'apparait comme script dans AUCUNE image longue', dort >= 150 && !tm.length, tm.length ? 'minuterie vue : ' + brut(tm) : rd.length + ' image(s) longue(s), aucune avec un script de minuterie');
+    } catch (e) { check('A6 vrai navigateur : execution', false, e.message); } finally { B.close(); } }
   console.log('\n' + (ok ? 'TOUT PASSE' : 'ECHEC'));
   process.exit(ok ? 0 : 1);
 })().catch(e => { console.error(e); process.exit(1); });
