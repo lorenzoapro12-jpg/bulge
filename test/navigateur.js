@@ -44,6 +44,39 @@ const check = (label, cond, info) => { if (!cond) ok = false; console.log((cond 
         if (r.wk !== '?' && (r.wk !== 'worker' || r.wkn > 0)) break; }
     } finally { B.close(); }
     check('vrai navigateur, URL « ' + q + ' » => cuisson ' + want, r && r.wk === want && (want !== 'worker' || r.wkn > 0), r ? 'etat « ' + r.wk + ' », ' + r.wkn + ' chunks recus du worker, location.search=« ' + r.s + ' »' : ''); }
+  /* 4. chantier A4 — le « hors JS » attribue, dans un VRAI Chromium (S22 standard 360x780, DPR 2.625, tactile).
+     Sous `vm` il n'y a ni PerformanceObserver, ni vrai worker, ni horloges concordantes : ici, on constate que
+     (a) 'longtask' est detecte au lancement (LT_ST=1) et que wkRecv recu par le worker est bien l'ENVELOPPE
+     mesuree (w.onmessage === la globale enveloppee) ; (b) apres une tâche FORCEE de 150 ms hors de frame()
+     (setTimeout qui boucle), la ligne ecrite nomme une tâche longue >= 150 ms, et retard / wkRecv sont des
+     NOMBRES (horloges concordantes : pas de « ? ») ; (c) chaque ligne tient dans W - pad. Les durees
+     affichees sont RECOPIEES, pas jugees : ce banc n'est pas le S22. */
+  { const B = await launch(), H = (s, n) => B.ev(s).catch(e => ({ err: e.message }));
+    try {
+      await B.cdp('Emulation.setDeviceMetricsOverride', { width: 360, height: 780, deviceScaleFactor: 2.625, mobile: true });
+      await B.cdp('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+      await B.nav('file://' + html);
+      for (let i = 0; i < 80; i++) { await sleep(250); if (await H("typeof startGame==='function'&&typeof MAINCTX!=='undefined'&&document.readyState==='complete'") === true) break; }
+      for (let i = 0; i < 40; i++) { if (await H('(()=>{meta.fps=true;try{if(!G||G.state!=="play"){startGame("bal",false);show(null);}}catch(e){}return !!G&&G.state==="play";})()') === true) break; await sleep(500); }
+      await sleep(3000);
+      const e = await H(`(()=>({lt:LT_ST,sup:(PerformanceObserver.supportedEntryTypes||[]).indexOf('longtask')>=0,wk:WK?'worker':String(WK),wkn:WKN,
+        env:!!JSPROF.wkRecv&&/meta\\.fps/.test(String(wkRecv)),lie:!!WK&&WK.w.onmessage===wkRecv}))()`);
+      check('A4 vrai navigateur : API longtask detectee au lancement (LT_ST=1)', e.lt === 1 && e.sup, JSON.stringify(e));
+      check('A4 vrai navigateur : wkRecv du worker passe par l\'enveloppe mesuree', e.wk === 'worker' && e.env && e.lie && e.wkn > 0, 'cuisson ' + e.wk + ', ' + e.wkn + ' chunks recus, enveloppe=' + e.env + ', onmessage=enveloppe:' + e.lie);
+      await H(`(()=>{window.__L=[];const mc=MAINCTX,of=mc.fillText;mc.fillText=function(t,x,y){if(x===14&&String(mc.fillStyle).toLowerCase()==='#8f89b3')window.__L.push({f:FRAME,t:String(t),w:mc.measureText(String(t)).width,W});return of.apply(this,arguments);};
+        setTimeout(()=>{const a=performance.now();while(performance.now()-a<150);},0);return 1;})()`);
+      let r = null, m = null;
+      for (let i = 0; i < 16 && !m; i++) { await sleep(250);
+        r = await H(`(()=>{const L=window.__L,fs=[...new Set(L.map(l=>l.f))];const f=fs.length>1?fs[fs.length-2]:-1;window.__L=L.filter(l=>l.f>=f);return {lignes:L.filter(l=>l.f===f),W};})()`);
+        const s = (r.lignes || []).map(l => l.t).join(' · '); if ((m = s.match(/longtask (\d+) ms \(([^,]+), ([^)]+)\)/)) && +m[1] < 150) m = null; }
+      const s = r && r.lignes ? r.lignes.map(l => l.t).join(' · ') : '', i0 = s.indexOf('pire ');
+      console.log('        ce que l\'ecran ECRIT (image apres la tâche forcee) :');
+      for (const l of (r && r.lignes) || []) console.log('          ' + (14 + l.w).toFixed(1).padStart(7) + ' px | ' + l.t);
+      check('A4 vrai navigateur : la tâche forcee de 150 ms est NOMMEE par le navigateur (longtask >= 150 ms, attribution)', !!m, m ? m[0] : 'pas de longtask >= 150 ms dans « ' + s.slice(i0, i0 + 200) + ' »');
+      check('A4 vrai navigateur : retard et wkRecv sont MESURES (des nombres, pas « ? »)', /retard \d+\.\d ms/.test(s) && /wkRecv \d+\.\d\d\/\d+\.\d\d ms/.test(s), (s.match(/retard [^·]*· wkRecv [^·]*/) || ['champs introuvables'])[0]);
+      const trop = ((r && r.lignes) || []).filter(l => 14 + l.w > l.W - 14 + .5);
+      check('A4 vrai navigateur : chaque ligne tient dans W - pad', r && r.lignes && r.lignes.length > 0 && !trop.length, trop.length ? 'deborde : ' + trop.map(l => (14 + l.w).toFixed(1)).join(', ') : 'plus large ' + Math.max(...r.lignes.map(l => 14 + l.w)).toFixed(1) + ' / ' + (r.W - 14) + ' px');
+    } catch (e) { check('A4 vrai navigateur : execution', false, e.message); } finally { B.close(); } }
   console.log('\n' + (ok ? 'TOUT PASSE' : 'ECHEC'));
   process.exit(ok ? 0 : 1);
 })().catch(e => { console.error(e); process.exit(1); });
