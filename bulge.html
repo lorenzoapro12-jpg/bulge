@@ -2125,8 +2125,10 @@ const HEART_LINES=['Iris… pardonne-moi…','Je gardais… un souvenir… de pl
 /* ---------- vaisseaux, apparences ---------- */
 Object.assign(PROF,{
   spectre:{n:'Spectre',d:'Fragile mais mortel : critiques fréquents, dash nerveux.',spd:3.8,rate:1.08,dmg:1.18,size:.9,bub:7,armor:1.15,dash:.8,col:'#c77dff',ic:'✧',start:['crit'],cost:350},
-  oracle:{n:'Oracle',d:'Entend les échos de loin. Aimant immense, tirs chercheurs.',spd:3.5,rate:1,dmg:.95,size:.95,bub:9,armor:1,dash:1,col:'#7ef9c9',ic:'◈',start:['homing','magnet'],story:'c3'},
-  reine:{n:'Reine',d:'Commence avec un essaim de drones qui combat pour elle.',spd:3.2,rate:.9,dmg:.92,size:1.05,bub:11,armor:.95,dash:1,col:'#ff9f43',ic:'✺',start:['drone'],cost:600}});
+  oracle:{n:'Oracle',d:'Entend les échos de loin. Aimant élargi, tirs chercheurs.',spd:3.5,rate:1,dmg:.95,size:.95,bub:9,armor:1,dash:1,col:'#7ef9c9',ic:'◈',start:['homing','magnet'],story:'c3'},
+  reine:{n:'Reine',d:'Commence avec un drone qui combat pour elle.',spd:3.2,rate:.9,dmg:.92,size:1.05,bub:11,armor:.95,dash:1,col:'#ff9f43',ic:'✺',start:['drone'],cost:600}});
+/* l'Oracle entend les échos 2× plus loin : cercle de réveil (gsTick, gsDrawWorld) et portée de la flèche (drawSubs) */
+const echoK=()=>G.prof==='oracle'?2:1;
 const SKINS={def:{n:'Origine',col:null},neon:{n:'Néon rose',col:'#ff2d95',cost:150},abysse:{n:'Abysse',col:'#3d7bff',cost:150},jade:{n:'Jade',col:'#3dffa8',cost:200},
   or:{n:'Or pur',col:'#ffd23c',ach:'boss'},aube:{n:'Aube',col:'#fff1b8',end:'endA'},reveil:{n:'Réveil',col:'#b8fff4',end:'endB'}};
 function shipOK(k){const p=PROF[k];return !!p&&((!p.cost&&!p.story)||!!meta.ships[k]||(p.story&&meta.chaps[p.story]));}
@@ -2185,7 +2187,7 @@ function gsTick(){
   const S=G.gs;if(!S)return;const P=G.p;S.tick++;
   if(S.tick%10===0){let f=G.arena||G.state!=='play';if(!f)for(const e of G.en)if(!e.dead&&e.aggro&&dist2(e.x,e.y,P.x,P.y)<650*650){f=true;break;}S.calm=!f;}
   {const q=S.subs.find(subOK);if(q&&++q.t>q.dur)S.subs.splice(S.subs.indexOf(q),1);}
-  if(S.tick%6===0&&!P.dead)for(let i=0;i<WD.lms.length;i++){const L=WD.lms[i];if(S.lm[i])continue;const r=L.R*.62;
+  if(S.tick%6===0&&!P.dead)for(let i=0;i<WD.lms.length;i++){const L=WD.lms[i];if(S.lm[i])continue;const r=L.R*.62*echoK();
     if(Math.abs(P.x-L.x)<r&&Math.abs(P.y-L.y)<r&&dist2(P.x,P.y,L.x,L.y)<r*r)wakeEcho(L,i);}
   if(S.tick%20===0){
     const dk=G.kills-S.k;if(dk>0){misEvt('kills',dk);S.k=G.kills;}
@@ -2234,7 +2236,7 @@ function drawSubs(){
     for(const L of s.lines){if(left<=0)break;c.fillText(L.slice(0,left),W/2,yy+4);left-=L.length+1;yy+=22;}
     c.globalAlpha=1;}
   /* flèche vers l'écho inconnu le plus proche */
-  const P=G.p;let best=null,bd=2600*2600;
+  const P=G.p;let best=null,bd=(2600*echoK())**2;
   for(let i=0;i<WD.lms.length;i++){const L=WD.lms[i];if(S.lm[i]||(meta.lore[L.t]||0)>=3)continue;const d=dist2(L.x,L.y,P.x,P.y);if(d<bd){bd=d;best=L;}}
   if(best){const sx=(best.x-CAM.x)*RZ+W/2,sy=(best.y-CAM.y)*RZ+H/2;
     if(sx<30||sx>W-30||sy<70||sy>H-70){const a=Math.atan2(sy-H/2,sx-W/2),ex=clamp(W/2+Math.cos(a)*W,40,W-40),ey=clamp(H/2+Math.sin(a)*H,90,H-90);
@@ -2243,7 +2245,7 @@ function drawSubs(){
 }
 function gsDrawWorld(){
   const S=G.gs;if(!S)return;const c=ctx;
-  for(let i=0;i<WD.lms.length;i++){const L=WD.lms[i];if(S.lm[i]||!vis(L.x,L.y,L.R))continue;const B=BIO[L.t]||BIO.plains,unk=(meta.lore[L.t]||0)<3,r=L.R*.62,p=.5+.5*Math.sin(RT*.06+i);
+  for(let i=0;i<WD.lms.length;i++){const L=WD.lms[i];if(S.lm[i]||!vis(L.x,L.y,L.R))continue;const B=BIO[L.t]||BIO.plains,unk=(meta.lore[L.t]||0)<3,r=L.R*.62*echoK(),p=.5+.5*Math.sin(RT*.06+i);
     c.globalAlpha=.35+.35*p;c.strokeStyle=unk?COL.gd:B.a;c.lineWidth=3;c.setLineDash([14,12]);c.lineDashOffset=-RT*.6;c.beginPath();c.arc(L.x,L.y,r,0,TAU);c.stroke();c.setLineDash([]);
     if(dist2(L.x,L.y,G.p.x,G.p.y)<(r+250)**2){c.globalAlpha=.8;c.textAlign='center';c.textBaseline='middle';c.font='700 12px '+FD;c.fillStyle=unk?COL.gd:B.a;c.fillText('ÉCHO',L.x,L.y-r-14);}c.globalAlpha=1;}
 }
@@ -2273,7 +2275,7 @@ function gsMenu(){
   const M=misToday(),lc=loreCount();
   {const lk=meta.runs<1;for(const id of ['bHangar','bSanct']){const b=$(id);if(b){b.disabled=lk;b.classList.toggle('lockedb',lk);}}
    $('bHangar').textContent=lk?'Hangar · après ton premier cycle':'Hangar'+(meta.pilot&&meta.pilot.pts?' · '+meta.pilot.pts+' points à répartir':'');$('bSanct').textContent=lk?'Sanctuaire · après ton premier cycle':'Sanctuaire';}
-  $('mStats').innerHTML='<div class="pill tank"><b>'+meta.tank.name.replace(/</g,'')+'</b><span>pilote niv. '+meta.pilot.lvl+(meta.pilot.pts?' · '+meta.pilot.pts+' pts':'')+'</span></div>'+$('mStats').innerHTML+'<div class="pill"><b>◇ '+fmt(meta.shards)+'</b><span>éclats</span></div><div class="pill"><b>'+lc+'/'+LORE_N+'</b><span>échos</span></div>'+(meta.streak>1?'<div class="pill"><b>'+meta.streak+' j</b><span>série</span></div>':'');
+  $('mStats').innerHTML='<div class="pill tank"><b>'+meta.tank.name.replace(/</g,'')+'</b><span>pilote niv. '+meta.pilot.lvl+(meta.pilot.pts?' · '+meta.pilot.pts+' pts':'')+'</span></div>'+$('mStats').innerHTML+'<div class="pill"><b>◇ '+fmt(meta.shards)+'</b><span>éclats</span></div><div class="pill"><b>'+lc+'/'+LORE_N+'</b><span>échos</span></div>'+(meta.streak>1&&(meta.lastDay===todayKey()||meta.lastDay===dayKeyOff(-1))?'<div class="pill"><b>'+meta.streak+' j</b><span>série</span></div>':'');
   $('mMis').innerHTML='<div class="mt">Missions du jour</div>'+M.list.map(m=>{const d=MIS.find(x=>x.id===m.id);if(!d)return '';return '<div class="mis'+(m.done?' done':'')+'"><span>'+(m.done?'✓ ':'')+d.t(m.n)+'</span><b>+'+m.r+' ◇</b><i style="--v:'+Math.round(m.p/m.n*100)+'%"></i></div>';}).join('');
 }
 function gsEndBox(){
