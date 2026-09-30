@@ -390,20 +390,25 @@ function bakeChunk(c){while(!bakeStep(c));}
    possible (bloc absent, harnais vm, navigateur sans OffscreenCanvas.transferToImageBitmap) : bakeStep sur place. */
 function bakeWorker(){const s=typeof Worker==='function'&&typeof OffscreenCanvas==='function'&&OffscreenCanvas.prototype.transferToImageBitmap&&$('wk-src');if(!s)return null;
   try{return new Worker(URL.createObjectURL(new Blob([s.textContent],{type:'text/javascript'})));}catch(e){return null;}}
-/* Cuisson deleguee — PAS active par defaut : le repli (cuisson sur place) reste l'etat du jeu tant que la mesure
-   sur telephone ne tranche pas. Activee par ?wk=1 (ou WKW=true avant la premiere image). WK : null = pas encore
-   decide, false = sur place, sinon {w, wd: monde envoye, g: generation, enc: chunks demandes (au plus WKMAX)}.
+/* Cuisson deleguee — ACTIVE PAR DEFAUT depuis le 30/09/2026 : la mesure sur telephone a tranche (Galaxy S22, cd10e7c,
+   compteur de diagnostic : sur place 46 ips, pire image 59 ms, JS 8,2 ms ; worker 58 ips, pire 25 ms, JS 4,3 ms).
+   ?wk=0 (ou WKW=false avant la premiere image) garde le TEMOIN sur place : c'est ce qui permet de comparer les deux
+   chemins sur le meme appareil — ne pas le retirer. ?wk=1 ne change plus rien. Le repli sur place reste le filet :
+   bakeWorker() null, erreur du worker (wkFail), worker muet (WKMUET images de suite avec des chunks en vol et aucun
+   message recu — compte en IMAGES, pas en ms : une page gelee en arriere-plan ne fait pas tomber un worker sain).
+   Garde-fou : test/defaut.js. WK : null = pas encore decide, false = sur place, sinon {w, wd: monde envoye,
+   g: generation, enc: chunks demandes (au plus WKMAX), m: images muettes}.
    WKMAX=2 : le worker cuit l'un pendant que l'autre attend ; jamais plus, pour que la priorite de streamWorld
    (visible d'abord, puis direction du mouvement) soit reevaluee a chaque image au lieu d'etre figee dans une
    file. Un chunk demande (c.wk) n'a ni bake ni bk : chunksCover() le voit non pret -> sol de secours (drawGround). */
-let WKW=typeof location!=='undefined'&&/[?&]wk=1\b/.test(location.search||''),WK=null,WKN=0;const WKMAX=2;
-function wkOn(){if(WK===null){WK=false;const w=WKW&&bakeWorker();if(w){WK={w,wd:null,g:0,enc:[]};w.onmessage=wkRecv;w.onerror=wkFail;}}return WK;}
+let WKW=!(typeof location!=='undefined'&&/[?&]wk=0\b/.test(location.search||'')),WK=null,WKN=0;const WKMAX=2,WKMUET=600;
+function wkOn(){if(WK===null){WK=false;const w=WKW&&bakeWorker();if(w){WK={w,wd:null,g:0,enc:[],m:0};w.onmessage=wkRecv;w.onerror=wkFail;}}return WK;}
 /* worker en panne : retour a la cuisson sur place, les chunks demandes redeviennent a cuire */
 function wkFail(){if(!WK)return;for(const c of WK.enc)c.wk=0;try{WK.w.terminate();}catch(e){}WK=false;}
 function wkSync(){if(WK.wd===WD)return;if(WK.wd)for(const c of WK.wd.bakes)if(isBm(c.bake))c.bake.close();
-  for(const c of WK.enc)c.wk=0;WK.enc.length=0;WK.wd=WD;WK.g++;WK.w.postMessage({t:'monde',seed:WD.seed,g:WK.g});}
+  for(const c of WK.enc)c.wk=0;WK.enc.length=0;WK.wd=WD;WK.g++;WK.m=0;WK.w.postMessage({t:'monde',seed:WD.seed,g:WK.g});}
 function wkAsk(c){c.wk=1;WK.enc.push(c);WK.w.postMessage({t:'cuis',cx:c.cx,cy:c.cy});}
-function wkRecv(e){const m=e.data;if(m.t!=='cuis'||!WK)return;const i=m.g===WK.g&&WK.wd===WD?WK.enc.findIndex(c=>c.cx===m.cx&&c.cy===m.cy):-1;
+function wkRecv(e){const m=e.data;if(WK)WK.m=0;if(m.t!=='cuis'||!WK)return;const i=m.g===WK.g&&WK.wd===WD?WK.enc.findIndex(c=>c.cx===m.cx&&c.cy===m.cy):-1;
   if(i<0){m.bm&&m.bm.close();return;}const c=WK.enc[i];WK.enc.splice(i,1);c.wk=0;if(!m.bm)return;
   c.bake=m.bm;c.bk=null;c.used=FRAME;WD.bakes.push(c);WKN++;}
 /* lisières (42 lucioles) cuites par lots : voir lisiereStep, plus haut */
@@ -461,7 +466,7 @@ function streamWorld(budget){
      BURG ms de cuisson par image, comptés depuis ici (les sprites d'obstacles, plus haut, peuvent avoir
      mangé le budget) ; un chunk en cours s'affiche tel quel (drawChunks) — le sol de secours (mapInto)
      plus les couches déjà posées, dans l'ordre d'origine. Puis la file de prewarm, avec le reste. */
-  const Q=WD.pq,W=wkOn();
+  const Q=WD.pq;let W=wkOn();if(W&&W.enc.length&&++W.m>WKMUET){wkFail();W=false;}
   /* worker (meme a budget nul, menu : il ne coute rien ici) : on demande dans l'ordre exact de `need` puis de la file de prewarm, au plus WKMAX en vol ; la file
      n'avance que sur des chunks deja recus (ses sprites d'obstacles restent cuits ici) */
   if(W){wkSync();for(let i=0;i<need.length&&W.enc.length<WKMAX;i++)if(!need[i][1].wk)wkAsk(need[i][1]);

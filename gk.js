@@ -4,7 +4,8 @@
    bloc script de type text/js-worker, id wk-src, que bakeWorker() (gw2.js) lance en worker.
    Le worker ne recoit que la GRAINE : il regenere le monde lui-meme (genWorld est deterministe, prouve
    champ par champ par test/worker.js), puis cuit un chunk avec les MEMES bakeStep que la page, sur un
-   OffscreenCanvas neuf (mkCanvas, gw2.js). Branche par streamWorld (gw2.js, wkAsk/wkRecv) si ?wk=1.
+   OffscreenCanvas neuf (mkCanvas, gw2.js). Branche par streamWorld (gw2.js, wkAsk/wkRecv) PAR DEFAUT ;
+   ?wk=0 garde le temoin sur place (gw2.js : WKW).
    Protocole : {t:'monde',seed,g} -> {t:'monde',seed}   (g : generation, renvoyee avec chaque chunk)
                {t:'cuis',cx,cy}   -> {t:'cuis',cx,cy,g,bm}  (ImageBitmap transfere ; null hors du monde)
    ========================================================= */

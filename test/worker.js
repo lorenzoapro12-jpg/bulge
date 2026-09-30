@@ -10,6 +10,8 @@
    node test/worker.js --gpu           idem, Chromium avec son GPU (ici probablement logiciel)
    node test/worker.js --graines=1,2,3
    Code de sortie : 0 si tout passe, 1 sinon.
+   BRANCHEMENT : lance par `node test/navigateur.js` (la porte « vrai navigateur »), PAS par test/headless.js —
+   la raison est ecrite en tete de test/navigateur.js ; headless.js affiche « NON EXERCE ICI » pour le rappeler.
 
    (Surfaces : la page cuit sur OffscreenCanvas depuis la passe d'integration, comme le worker ; « DOM » = la surface d'avant.)
    RESULTAT CONNU : a surface egale (OffscreenCanvas des deux cotes) le worker est identique a l'octet ; contre

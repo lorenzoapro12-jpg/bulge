@@ -34,7 +34,7 @@ const LENT = +((process.argv.find(a => a.startsWith('--lent=')) || '=0').split('
 const EXTRA = (wk, voy) => `
 <script>
 /* ===== compteurs de la mesure worker : ne font pas partie du jeu ===== */
-${wk ? 'WKW=true;' : ''}${voy ? 'window.__VOY=1;' : ''}${wk && LENT ? '{const r=wkRecv;wkRecv=e=>setTimeout(()=>r(e),' + LENT + ');}' : ''}
+${wk ? 'WKW=true;' : 'WKW=false;/* depuis P1 le worker est le defaut : le REPLI se force */'}${voy ? 'window.__VOY=1;' : ''}${wk && LENT ? '{const r=wkRecv;wkRecv=e=>setTimeout(()=>r(e),' + LENT + ');}' : ''}
 window.__pw={f:[],lt:[],sol:0,t0:0,n0:0,s0:0,go:0};
 (function(){const P=window.__pw;let sol=0,bms=0,bn=0,ang=0;
   const dg=drawGround;drawGround=function(){sol++;return dg.apply(this,arguments);};

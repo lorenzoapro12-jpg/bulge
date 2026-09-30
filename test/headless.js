@@ -724,10 +724,18 @@ const sub = (f, args) => { const r = cp.spawnSync(process.execPath, [path.join(_
   check('terrain : le courant porte, la glace prolonge le dash, le balayage alarme hors abri, le relais protège, le vent vise le prochain nœud (test/terrain.js)', r.ok,
     (r.out.match(/[ÉE]CHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim().slice(0, 220)).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
 
+{ const r = sub('defaut.js', REF ? ['--ref=' + REF] : []);
+  check('cuisson déléguée : worker pris PAR DÉFAUT, ?wk=0 = témoin sur place, repli propre si worker absent, en panne ou muet (test/defaut.js)', r.ok,
+    (r.out.match(/CAUSE [^\n]*/g) || []).slice(0, 2).map(s => s.trim().slice(0, 240)).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
+/* test/worker.js (identité au pixel worker / sur place) exige un VRAI Chromium : il n'entre pas ici, et ce n'est pas un
+   oubli — la raison est écrite en tête de test/navigateur.js. Ce harnais le DIT au lieu de le taire (voir le verdict). */
+const NAV = 'NON EXERCÉ ICI (vrai Chromium requis) : node test/navigateur.js — test/worker.js + le défaut dans un vrai navigateur';
+
 /* ---------- verdict ---------- */
 console.log('\n---------------- VERDICT ----------------');
 let all = true;
 for (const c of checks) { console.log((c.ok ? '  OK  ' : '  KO  ') + c.name + (c.detail ? '  — ' + c.detail : '')); if (!c.ok) all = false; }
 console.log('-----------------------------------------');
+console.log(NAV);
 console.log(all ? 'TOUT PASSE' : 'ECHEC PARTIEL');
 process.exit(all ? 0 : 1);
