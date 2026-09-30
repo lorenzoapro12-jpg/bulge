@@ -747,6 +747,12 @@ function revealFog(x,y,rad){
 /* ---------- morceaux (chunks) et obstacles ---------- */
 const EMPTY=[];
 function getChunk(cx,cy){const ix=cx+COFF,iy=cy+COFF;if(ix<0||iy<0||ix>=NC||iy>=NC)return null;const i=ix*NC+iy;return WD.chunks[i]||(WD.chunks[i]=genChunk(cx,cy));}
+/* index du chunk dans WD.chunks (-1 hors grille), SANS le générer : streamWorld (gw2.js) s'en sert pour
+   borner la génération. genChunk ne dépend ni de l'ordre ni du moment de l'appel : il ne lit que l'état
+   figé par genWorld (graine, sites, gauchissement, cœurs, noyau, monuments, falaises, sentiers) et un
+   générateur PROPRE au chunk (hash2(cx,cy,seed)) ; son seul effet partagé, `p.home` des pièces de monument,
+   revient au chunk qui contient leur centre (intervalles demi-ouverts disjoints). Garde : test/cuisson.js (d). */
+function chunkIdx(cx,cy){const ix=cx+COFF,iy=cy+COFF;return ix<0||iy<0||ix>=NC||iy>=NC?-1:ix*NC+iy;}
 function clearOK(x,y,r){
   if(x*x+y*y<(430+r)**2)return false;
   if(x*x+y*y>(WR-90-r)**2)return false;
@@ -1370,18 +1376,24 @@ let FWK=-1,FDT=0,BKMS=0;const BMIN=1.5,BURG=4;
    prouve rien — les pics se baladent d'un facteur 5. */
 function bakeBudget(){const jouable=!!G&&(G.state==='play'||G.state==='dying'||G.state==='victory');if(!jouable)return 0;if(FWK<0)return 3;const P=REFDT||16.7,J=P*.6;let b=clamp(J-FWK,BMIN,J);if(FDT>P*1.5)b=Math.max(BMIN,b/2);return b;}
 /* streaming : cuit en avance dans la direction du mouvement, avec un budget de temps par frame */
-const STRM={x:0,y:0,vx:0,vy:0};
+const STRM={x:0,y:0,vx:0,vy:0},GENK=2;
 function streamWorld(budget){
   const t0=performance.now();
   STRM.vx=lerp(STRM.vx,CAM.x-STRM.x,.08);STRM.vy=lerp(STRM.vy,CAM.y-STRM.y,.08);STRM.x=CAM.x;STRM.y=CAM.y;
   const PV=G&&G.p?[G.p.vx,G.p.vy]:[STRM.vx,STRM.vy],lx=clamp(Math.max(Math.abs(STRM.vx),Math.abs(PV[0]))*Math.sign(PV[0]||STRM.vx)*130/CH,-4,4),ly=clamp(Math.max(Math.abs(STRM.vy),Math.abs(PV[1]))*Math.sign(PV[1]||STRM.vy)*130/CH,-4,4);
   const c0=Math.floor(VL/CH),c1=Math.floor(VR/CH),r0=Math.floor(VT/CH),r1=Math.floor(VB/CH);
   const a0=c0-2+Math.min(0,Math.floor(lx)),a1=c1+2+Math.max(0,Math.ceil(lx)),b0=r0-2+Math.min(0,Math.floor(ly)),b1=r1+2+Math.max(0,Math.ceil(ly));
-  const fx=CAM.x+PV[0]*50,fy=CAM.y+PV[1]*50,need=[];let n=0;
-  for(let cx=a0;cx<=a1;cx++)for(let cy=b0;cy<=b1;cy++){const c=getChunk(cx,cy);if(!c)continue;n++;
-    const iv=cx>=c0&&cx<=c1&&cy>=r0&&cy<=r1;
-    if(c.bake)c.used=FRAME;else need.push([(c.x0+CH/2-fx)**2+(c.y0+CH/2-fy)**2+(iv?0:1e8),c]);
-    for(const o of c.obs){if(o.wall)continue;if(o.spr){o.su=FRAME;continue;}if(performance.now()-t0<budget){obsSprite(o);o.su=FRAME;OSPR.push(o);}}}
+  const fx=CAM.x+PV[0]*50,fy=CAM.y+PV[1]*50,need=[],gen=[];let n=0;
+  const use=(c,iv)=>{if(c.bake)c.used=FRAME;else need.push([(c.x0+CH/2-fx)**2+(c.y0+CH/2-fy)**2+(iv?0:1e8),c]);
+    for(const o of c.obs){if(o.wall)continue;if(o.spr){o.su=FRAME;continue;}if(performance.now()-t0<budget){obsSprite(o);o.su=FRAME;OSPR.push(o);}}};
+  /* La GÉNÉRATION aussi est bornée (elle échappait au budget : une frontière franchie générait une rangée
+     entière d'un bloc) : les chunks absents de la fenêtre vont en file, visibles d'abord puis par distance,
+     au plus GENK par image — le premier toujours (le streaming avance même à budget nul), les suivants si le
+     budget le permet. Le rendu et la simulation génèrent toujours à la demande ce qu'ils touchent. */
+  for(let cx=a0;cx<=a1;cx++)for(let cy=b0;cy<=b1;cy++){const i=chunkIdx(cx,cy);if(i<0)continue;n++;
+    const iv=cx>=c0&&cx<=c1&&cy>=r0&&cy<=r1,c=WD.chunks[i];
+    if(c)use(c,iv);else gen.push([(cx*CH+CH/2-fx)**2+(cy*CH+CH/2-fy)**2+(iv?0:1e8),cx,cy,iv]);}
+  if(gen.length){gen.sort((a,b)=>a[0]-b[0]);for(let k=0;k<gen.length&&k<GENK&&(!k||performance.now()-t0<budget);k++){const g=gen[k];use(getChunk(g[1],g[2]),g[3]);}}
   need.sort((a,b)=>a[0]-b[0]);
   /* Plus jamais un chunk entier d'un bloc : les chunks visibles passent en tête et reçoivent au moins
      BURG ms de cuisson par image, comptés depuis ici (les sprites d'obstacles, plus haut, peuvent avoir
@@ -5186,6 +5198,12 @@ function revealFog(x,y,rad){
 /* ---------- morceaux (chunks) et obstacles ---------- */
 const EMPTY=[];
 function getChunk(cx,cy){const ix=cx+COFF,iy=cy+COFF;if(ix<0||iy<0||ix>=NC||iy>=NC)return null;const i=ix*NC+iy;return WD.chunks[i]||(WD.chunks[i]=genChunk(cx,cy));}
+/* index du chunk dans WD.chunks (-1 hors grille), SANS le générer : streamWorld (gw2.js) s'en sert pour
+   borner la génération. genChunk ne dépend ni de l'ordre ni du moment de l'appel : il ne lit que l'état
+   figé par genWorld (graine, sites, gauchissement, cœurs, noyau, monuments, falaises, sentiers) et un
+   générateur PROPRE au chunk (hash2(cx,cy,seed)) ; son seul effet partagé, `p.home` des pièces de monument,
+   revient au chunk qui contient leur centre (intervalles demi-ouverts disjoints). Garde : test/cuisson.js (d). */
+function chunkIdx(cx,cy){const ix=cx+COFF,iy=cy+COFF;return ix<0||iy<0||ix>=NC||iy>=NC?-1:ix*NC+iy;}
 function clearOK(x,y,r){
   if(x*x+y*y<(430+r)**2)return false;
   if(x*x+y*y>(WR-90-r)**2)return false;
@@ -5809,18 +5827,24 @@ let FWK=-1,FDT=0,BKMS=0;const BMIN=1.5,BURG=4;
    prouve rien — les pics se baladent d'un facteur 5. */
 function bakeBudget(){const jouable=!!G&&(G.state==='play'||G.state==='dying'||G.state==='victory');if(!jouable)return 0;if(FWK<0)return 3;const P=REFDT||16.7,J=P*.6;let b=clamp(J-FWK,BMIN,J);if(FDT>P*1.5)b=Math.max(BMIN,b/2);return b;}
 /* streaming : cuit en avance dans la direction du mouvement, avec un budget de temps par frame */
-const STRM={x:0,y:0,vx:0,vy:0};
+const STRM={x:0,y:0,vx:0,vy:0},GENK=2;
 function streamWorld(budget){
   const t0=performance.now();
   STRM.vx=lerp(STRM.vx,CAM.x-STRM.x,.08);STRM.vy=lerp(STRM.vy,CAM.y-STRM.y,.08);STRM.x=CAM.x;STRM.y=CAM.y;
   const PV=G&&G.p?[G.p.vx,G.p.vy]:[STRM.vx,STRM.vy],lx=clamp(Math.max(Math.abs(STRM.vx),Math.abs(PV[0]))*Math.sign(PV[0]||STRM.vx)*130/CH,-4,4),ly=clamp(Math.max(Math.abs(STRM.vy),Math.abs(PV[1]))*Math.sign(PV[1]||STRM.vy)*130/CH,-4,4);
   const c0=Math.floor(VL/CH),c1=Math.floor(VR/CH),r0=Math.floor(VT/CH),r1=Math.floor(VB/CH);
   const a0=c0-2+Math.min(0,Math.floor(lx)),a1=c1+2+Math.max(0,Math.ceil(lx)),b0=r0-2+Math.min(0,Math.floor(ly)),b1=r1+2+Math.max(0,Math.ceil(ly));
-  const fx=CAM.x+PV[0]*50,fy=CAM.y+PV[1]*50,need=[];let n=0;
-  for(let cx=a0;cx<=a1;cx++)for(let cy=b0;cy<=b1;cy++){const c=getChunk(cx,cy);if(!c)continue;n++;
-    const iv=cx>=c0&&cx<=c1&&cy>=r0&&cy<=r1;
-    if(c.bake)c.used=FRAME;else need.push([(c.x0+CH/2-fx)**2+(c.y0+CH/2-fy)**2+(iv?0:1e8),c]);
-    for(const o of c.obs){if(o.wall)continue;if(o.spr){o.su=FRAME;continue;}if(performance.now()-t0<budget){obsSprite(o);o.su=FRAME;OSPR.push(o);}}}
+  const fx=CAM.x+PV[0]*50,fy=CAM.y+PV[1]*50,need=[],gen=[];let n=0;
+  const use=(c,iv)=>{if(c.bake)c.used=FRAME;else need.push([(c.x0+CH/2-fx)**2+(c.y0+CH/2-fy)**2+(iv?0:1e8),c]);
+    for(const o of c.obs){if(o.wall)continue;if(o.spr){o.su=FRAME;continue;}if(performance.now()-t0<budget){obsSprite(o);o.su=FRAME;OSPR.push(o);}}};
+  /* La GÉNÉRATION aussi est bornée (elle échappait au budget : une frontière franchie générait une rangée
+     entière d'un bloc) : les chunks absents de la fenêtre vont en file, visibles d'abord puis par distance,
+     au plus GENK par image — le premier toujours (le streaming avance même à budget nul), les suivants si le
+     budget le permet. Le rendu et la simulation génèrent toujours à la demande ce qu'ils touchent. */
+  for(let cx=a0;cx<=a1;cx++)for(let cy=b0;cy<=b1;cy++){const i=chunkIdx(cx,cy);if(i<0)continue;n++;
+    const iv=cx>=c0&&cx<=c1&&cy>=r0&&cy<=r1,c=WD.chunks[i];
+    if(c)use(c,iv);else gen.push([(cx*CH+CH/2-fx)**2+(cy*CH+CH/2-fy)**2+(iv?0:1e8),cx,cy,iv]);}
+  if(gen.length){gen.sort((a,b)=>a[0]-b[0]);for(let k=0;k<gen.length&&k<GENK&&(!k||performance.now()-t0<budget);k++){const g=gen[k];use(getChunk(g[1],g[2]),g[3]);}}
   need.sort((a,b)=>a[0]-b[0]);
   /* Plus jamais un chunk entier d'un bloc : les chunks visibles passent en tête et reçoivent au moins
      BURG ms de cuisson par image, comptés depuis ici (les sprites d'obstacles, plus haut, peuvent avoir

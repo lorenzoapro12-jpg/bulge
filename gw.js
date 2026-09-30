@@ -86,6 +86,12 @@ function revealFog(x,y,rad){
 /* ---------- morceaux (chunks) et obstacles ---------- */
 const EMPTY=[];
 function getChunk(cx,cy){const ix=cx+COFF,iy=cy+COFF;if(ix<0||iy<0||ix>=NC||iy>=NC)return null;const i=ix*NC+iy;return WD.chunks[i]||(WD.chunks[i]=genChunk(cx,cy));}
+/* index du chunk dans WD.chunks (-1 hors grille), SANS le générer : streamWorld (gw2.js) s'en sert pour
+   borner la génération. genChunk ne dépend ni de l'ordre ni du moment de l'appel : il ne lit que l'état
+   figé par genWorld (graine, sites, gauchissement, cœurs, noyau, monuments, falaises, sentiers) et un
+   générateur PROPRE au chunk (hash2(cx,cy,seed)) ; son seul effet partagé, `p.home` des pièces de monument,
+   revient au chunk qui contient leur centre (intervalles demi-ouverts disjoints). Garde : test/cuisson.js (d). */
+function chunkIdx(cx,cy){const ix=cx+COFF,iy=cy+COFF;return ix<0||iy<0||ix>=NC||iy>=NC?-1:ix*NC+iy;}
 function clearOK(x,y,r){
   if(x*x+y*y<(430+r)**2)return false;
   if(x*x+y*y>(WR-90-r)**2)return false;

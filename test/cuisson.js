@@ -25,6 +25,9 @@
        sous PLAFOND ms : budget maximal (0,6 × 16,7 = 10 ms) + une unité ;
    (c) la plus grosse unité indivisible (un seul appel à bakeStep) reste sous UNITE ms : ce que
        le budget ne peut pas interrompre est ce qui déborde.
+   (d) jamais plus de GENMAX genChunk par image (hors newRun et hors pilote de test) : streamWorld
+       générait d'un bloc toute une rangée de sa fenêtre, hors budget (J1a) — --ref=04635d4 échoue ;
+   (e) genChunk indépendant de l'ordre d'appel : la condition pour que (d) ne change pas le monde.
    Mesures rapportées sans seuil : images où un chunk visible n'était pas prêt à l'entrée de
    streamWorld (cache vide), images où un chunk inachevé est À L'ÉCRAN, images manquées (vsync).
    ========================================================= */
@@ -32,7 +35,7 @@ const fs = require('fs'), path = require('path'), vm = require('vm'), cp = requi
 const ROOT = path.resolve(__dirname, '..');
 const ARG = k => { const a = process.argv.find(x => x === '--' + k || x.startsWith('--' + k + '=')); return a ? (a.split('=')[1] || true) : null; };
 const REF = ARG('ref'), K = +(ARG('k') || 5) / 1000, NFR = +(ARG('frames') || 2400), STEPC = 1.5, VS = 1000 / 60;
-const PLAFOND = 12, UNITE = 4;
+const PLAFOND = 12, UNITE = 4, GENMAX = 2;
 const ORDER = ['g1.js', 'gw.js', 'gw2.js', 'g2.js', 'gs.js', 'gc.js', 'gi.js', 'gx.js', 'gt.js', 'gv.js', 'g3.js', 'g4.js'];
 const readModule = f => REF ? cp.execFileSync('git', ['show', REF + ':' + f], { cwd: ROOT, encoding: 'utf8' }) : fs.readFileSync(path.join(ROOT, f), 'utf8');
 
@@ -83,16 +86,25 @@ globalThis.bakeStep = function (c) {
     if (r === true && START.get(c) === CALL) { M.whole++; M.wholeMs = Math.max(M.wholeMs || 0, COST.get(c)); if (M.budget == null || COST.get(c) > M.budget) M.horsBudget++; } }
   return r;
 };
-const visChunks = (x0, x1, y0, y1) => { const r = []; for (let cx = Math.floor(x0 / CH); cx <= Math.floor(x1 / CH); cx++) for (let cy = Math.floor(y0 / CH); cy <= Math.floor(y1 / CH); cy++) { const c = getChunk(cx, cy); if (c) r.push(c); } return r; };
+/* (d) générations par image, et qui les a demandées : streamWorld, ou le reste (rendu, simulation).
+   La sonde visChunks ne génère RIEN (elle lit WD.chunks ; un chunk absent compte comme « pas prêt ») :
+   sinon elle générerait avant streamWorld ce que la garde doit lui voir faire.
+   Le PILOTE de test (ai-test.js : navBfs sonde pointHit loin devant) génère aussi ; ce n'est pas le jeu,
+   il est compté à part (genP) et exclu du critère. */
+let DANS = 0, PILOTE = 0;
+const oGen = globalThis.genChunk;
+globalThis.genChunk = function (cx, cy) { if (M) { if (PILOTE) M.genP++; else { M.gen++; if (DANS) M.genS++; } } return oGen(cx, cy); };
+const pilote = () => { const f = win.__SIM_INPUT; if (f) win.__SIM_INPUT = function () { PILOTE++; try { return f.apply(this, arguments); } finally { PILOTE--; } }; };
+const visChunks = (x0, x1, y0, y1) => { const r = []; for (let cx = Math.floor(x0 / CH); cx <= Math.floor(x1 / CH); cx++) for (let cy = Math.floor(y0 / CH); cy <= Math.floor(y1 / CH); cy++) { const ix = cx + COFF, iy = cy + COFF; if (ix < 0 || iy < 0 || ix >= NC || iy >= NC) continue; r.push(WD.chunks[ix * NC + iy] || {}); } return r; };
 globalThis.streamWorld = function (b) {
   if (M) { M.miss += visChunks(VL, VR, VT, VB).filter(c => !c.bake).length ? 1 : 0; M.budget = b; }
-  const r = oStream(b);
+  DANS++; let r; try { r = oStream(b); } finally { DANS--; }
   if (M) { const hw = W / 2 / RZ, hh = H / 2 / RZ, sc = visChunks(CAM.x - hw, CAM.x + hw, CAM.y - hh, CAM.y + hh); M.screen += sc.filter(c => !c.bake).length ? 1 : 0;
     M.etat = sc.map(c => c.bake ? 'P' : c.bk ? 'e' + c.bk.s : '-').join(' ') + ' / marge ' + visChunks(VL, VR, VT, VB).length; }
   return r;
 };
 const oS = globalThis.step; globalThis.step = function () { VCLK += STEPC; return oS(); };
-const begin = () => { CALL++; M = { bake: 0, bakeOps: 0, unit: 0, unitOps: 0, whole: 0, horsBudget: 0, miss: 0, screen: 0, budget: null }; return VCLK; };
+const begin = () => { CALL++; M = { bake: 0, bakeOps: 0, unit: 0, unitOps: 0, whole: 0, horsBudget: 0, miss: 0, screen: 0, budget: null, gen: 0, genS: 0, genP: 0 }; return VCLK; };
 
 /* entrée « course » : ligne droite, virage toutes les 4 s, dash dès que possible — la demande de
    chunks la plus forte qu'un joueur puisse créer */
@@ -102,6 +114,7 @@ const COURSE = `window.__SIM_INPUT=function(){const P=G.p;if(!P||P.dead)return;c
 function partie(nom, prof, seed, entree) {
   call(`Math.__seed(${seed});meta.runs=5;meta.tuto=999;`);
   if (entree === 'course') { vm.runInThisContext(AI, { filename: 'ai-test.js' }); call(COURSE); } else vm.runInThisContext(AI, { filename: 'ai-test.js' });
+  pilote();
   win.__SIM_PICK = (c) => c[Math.floor(call('Math.random()') * c.length)];
   let fin = false; win.__SIM_END = () => { fin = true; };
   const t0 = begin();
@@ -123,8 +136,9 @@ const q = (a, p) => { const s = a.slice().sort((x, y) => x - y); return s[Math.m
 const f1 = v => (v == null ? '-' : (+v).toFixed(1));
 const res = [partie('IA bal', 'bal', 12345, 'ia'), partie('course scout', 'scout', 2718, 'course'), partie('course bal', 'bal', 999, 'course')];
 console.log(`# cuisson ${REF ? 'git ' + REF : 'arbre de travail'} — modèle : ${K * 1000} µs/op canvas, ${STEPC} ms/pas, vsync 60 Hz, ${NFR} images max par partie`);
-let pire = { bake: 0 }, pireU = { unit: 0 }, whole = 0;
+let pire = { bake: 0 }, pireU = { unit: 0 }, whole = 0, pireG = { gen: 0, genS: 0 };
 for (const r of res) {
+  for (const m of r.im) if (m.gen > pireG.gen) pireG = Object.assign({ ou: r.nom }, m);
   const all = [r.lanc, ...r.im], im = r.im, n = im.length;
   whole += all.reduce((a, m) => a + m.horsBudget, 0);
   for (const m of all) { if (m.bake > pire.bake) pire = Object.assign({ ou: r.nom + (m === r.lanc ? ' / newRun' : ' / image') }, m); if (m.unit > pireU.unit) pireU = Object.assign({ ou: r.nom }, m); }
@@ -135,14 +149,34 @@ for (const r of res) {
   console.log(`  cuisson/image  : médiane ${f1(q(im.map(m => m.bake), .5))} ms, p99 ${f1(q(im.map(m => m.bake), .99))} ms, pire ${f1(Math.max(...im.map(m => m.bake)))} ms ; total ${f1(im.reduce((a, m) => a + m.bake, 0))} ms`);
   console.log(`  budget demandé : médiane ${f1(q(bud, .5))} ms, min ${f1(Math.min(...bud))}, max ${f1(Math.max(...bud))}`);
   console.log(`  chunks entiers dans une image : ${im.reduce((a, m) => a + m.whole, 0)} (le plus cher : ${f1(Math.max(0, ...im.map(m => m.wholeMs || 0)))} ms, budget de l'image ${f1((im.find(m => m.whole) || {}).budget)} ms) ; plus grosse unité : ${f1(Math.max(...all.map(m => m.unit)))} ms`);
+  const gm = im.reduce((a, m) => (m.gen > a.gen ? m : a), { gen: 0, genS: 0 });
+  console.log(`  genChunk/image : pire ${gm.gen} (dont ${gm.genS} par streamWorld) ; total ${im.reduce((a, m) => a + m.gen, 0)} dans les images, ${r.lanc.gen} dans newRun ; images à plus de ${GENMAX} : ${im.filter(m => m.gen > GENMAX).length} ; pilote de test (hors critère) : ${im.reduce((a, m) => a + m.genP, 0)}`);
   if (ARG('detail')) for (let i = 0; i < +ARG('detail'); i++) console.log(`    image ${i} : ${f1(im[i].ms)} ms, budget ${f1(im[i].budget)}, cuisson ${f1(im[i].bake)} ms ; chunks à l'écran (P prêt, eN en cours à l'étape N) : ${im[i].etat}`);
   const fade = Math.ceil(900 / VS), mi = im.map((m, i) => m.miss ? i : -1).filter(i => i >= 0);
   console.log(`  cache vide (chunk visible pas prêt à l'entrée de streamWorld) : ${mi.length} images, dont ${mi.filter(i => i >= fade).length} après le fondu d'entrée (${fade} images)${mi.some(i => i >= fade) ? ' [images ' + mi.filter(i => i >= fade).slice(0, 12).join(',') + ']' : ''} ; chunk inachevé À L'ÉCRAN : ${im.filter(m => m.screen).length} images`);
 }
+/* (e) la PREUVE que borner la génération ne change pas le monde : pour une même graine, tous les chunks
+   de la grille générés dans trois ordres (lignes, inverse, mélangé) donnent le même contenu — obstacles,
+   vie, cache, et le chunk qui revendique chaque pièce de monument (p.home, seul état partagé écrit) */
+const ORDRE = (() => {
+  const cells = []; for (let ix = 0; ix < NC; ix++) for (let iy = 0; iy < NC; iy++) cells.push([ix - COFF, iy - COFF]);
+  const sans = (k, v) => (k === 'home' || k === 'spr' || k === 'su' ? undefined : v);
+  const empreinte = (seed, ordre) => { call(`genWorld(${seed})`); for (const [cx, cy] of ordre) getChunk(cx, cy);
+    const h = cells.map(([cx, cy]) => { const c = getChunk(cx, cy); return JSON.stringify([c.obs, c.live, c.cachePos], sans); });
+    for (const L of WD.lms) for (const p of L.parts) h.push(p.home ? p.home.cx + ',' + p.home.cy : '-');
+    return require('crypto').createHash('sha256').update(h.join('\n')).digest('hex').slice(0, 16); };
+  let s = 7; const mel = cells.slice(); for (let i = mel.length - 1; i > 0; i--) { s = (s * 16807) % 2147483647; const j = s % (i + 1); [mel[i], mel[j]] = [mel[j], mel[i]]; }
+  const d = [];
+  for (const seed of [12345, 2718]) d.push(seed + ' : ' + [cells, cells.slice().reverse(), mel].map(o => empreinte(seed, o)).join(' '));
+  return { n: cells.length, ok: d.every(l => new Set(l.split(' : ')[1].split(' ')).size === 1), d: d.join(' ; ') };
+})();
 const checks = [
   ['(a) aucun chunk entier d\'un bloc hors budget (newRun : aucun ; image : seulement s\'il tient dans son budget)', whole === 0, `${whole} chunk(s) entier(s) hors budget`],
   [`(b) travail de cuisson continu par appel <= ${PLAFOND} ms`, pire.bake <= PLAFOND, `pire ${f1(pire.bake)} ms (${pire.bakeOps} op) — ${pire.ou}`],
   [`(c) plus grosse unité indivisible <= ${UNITE} ms`, pireU.unit <= UNITE, `pire ${f1(pireU.unit)} ms (${pireU.unitOps} op, étape ${pireU.unitS} ; -1 = création + relief) — ${pireU.ou}`],
+  [`(d) jamais plus de ${GENMAX} genChunk par image (la génération est bornée comme la cuisson)`, pireG.gen <= GENMAX,
+    `pire ${pireG.gen} genChunk dans une image, dont ${pireG.genS} par streamWorld${pireG.genS > GENMAX ? ' (une rangée entière de la fenêtre de streaming générée d\'un bloc, hors budget)' : ''} — ${pireG.ou || '-'}`],
+  [`(e) genChunk indépendant de l'ordre d'appel (${ORDRE.n} chunks, 3 ordres, graines 12345 et 2718)`, ORDRE.ok, ORDRE.d],
 ];
 console.log('');
 for (const [n, ok, d] of checks) console.log(`  ${ok ? 'OK   ' : 'ECHEC'} ${n}  — ${d}`);
