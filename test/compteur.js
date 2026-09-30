@@ -10,6 +10,15 @@
      2. **L'etat de la cuisson est affiche.** Sans worker, le jeu retombe SILENCIEUSEMENT sur la
         cuisson sur place ; sans ce mot a l'ecran, une comparaison « avec / sans ?wk=1 » peut
         comparer deux fois le meme chemin sans que personne ne s'en apercoive.
+     4. **Le compteur ne chevauche AUCUN bouton** (S7). Constat du 30/09/2026 sur capture : avec 5
+        lignes, « worker 558 », « marge audio » et « soft » passaient PAR-DESSUS le bouton AUTEL.
+        L'ancre d'avant (H-132) ne connaissait que le bouton de dash ; les emplacements de
+        competence de gcSlots() (gc.js) montent jusqu'a H-207. Le critere est geometrique et
+        independant du code teste : rectangle de chaque ligne (et du bandeau) contre le DISQUE de
+        toucher de chaque bouton (rayon + 10, touchBtnAt de g4.js), positions lues dans les VRAIES
+        dashBtn() et gcSlots(). Et rien ne doit avoir disparu pour y arriver.
+     5. **L'etat de la regulation est affiche** (S8) : « régul auto » ou « régul FIGÉE <reglage> »,
+        avec QL et RES reels — un reglage manuel n'adapte plus jamais, et cela doit se LIRE.
      3. **La lisibilite ne coute pas la mesure** : la ligne « ou : » garde TOUJOURS ses postes
         les plus couteux (le tri est decroissant, on retire par la fin).
 
@@ -52,7 +61,7 @@ function mkCtx() {
     createRadialGradient: () => grad, createLinearGradient: () => grad, createPattern: () => ({}),
     font: '12px x', textAlign: 'left', textBaseline: 'top', globalAlpha: 1, fillStyle: '#000',
     measureText: s => ({ width: String(s || '').length * EM * pxOf(base.font) }),
-    fillText: (s, x, y) => { const t = String(s); FILLS.push({ s: t, x, y, w: t.length * EM * pxOf(base.font) }); },
+    fillText: (s, x, y) => { const t = String(s); FILLS.push({ s: t, x, y, w: t.length * EM * pxOf(base.font), px: pxOf(base.font), bl: base.textBaseline }); },
     strokeText: (s, x, y) => { const t = String(s); FILLS.push({ s: t, x, y, w: t.length * EM * pxOf(base.font) }); },
     fillRect: (x, y, w, h) => { RECTS.push({ x, y, w, h, fill: String(base.fillStyle) }); },
   };
@@ -127,7 +136,7 @@ function drawBlock(o) {
   const H = o.H;
   /* sur poste fixe le texte « Dash pret (Espace) » est lui aussi pose a x = pad, tout en bas :
      ce n'est pas une ligne du bloc de diagnostic, on l'ecarte par son prefixe. */
-  const lines = FILLS.slice(before).filter(f => f.x === PAD && f.y > H * 0.5 && !/^Dash /.test(f.s));
+  const lines = FILLS.slice(before).filter(f => f.x === PAD && f.bl === 'bottom' && !/^Dash /.test(f.s));
   lines.rects = RECTS.slice(rbefore);
   return lines;
 }
@@ -241,6 +250,59 @@ const TOP = [['render', 6.06, 12], ['glow', 1.28, 4], ['drawHUD', 1.09, 5], ['dr
   check('la mesure reste juste : 70 images a 16,7 ms donnent ~60 ips et 1000/ips = ms',
     r.reg.ips >= 58 && r.reg.ips <= 62 && Math.abs(1000 / r.reg.ips - r.reg.dt) <= 1,
     'ips=' + r.reg.ips + ' (attendu ~60) · image=' + r.reg.dt + ' ms · 1000/ips=' + (1000 / r.reg.ips).toFixed(2) + ' ms');
+}
+
+/* ================= S7 — le bloc ne chevauche AUCUN bouton =================
+   Boutons : dash (tactile seulement) et les trois emplacements de competence — lus dans le jeu.
+   Une ligne occupe [x, x+w] × [y-px, y] (ligne de base « bottom ») ; le bandeau est son rectangle. */
+{
+  const boutons = o => { call(`W=${o.W};H=${o.H};inp.touch=${o.deskt ? 'false' : 'true'};`);
+    const S = JSON.parse(call('JSON.stringify({d:dashBtn(),s:gcSlots()})'));
+    const nom = (b, n) => n + ' (W-' + Math.round(o.W - b.x) + ',H-' + Math.round(o.H - b.y) + ' r' + b.r + ')';
+    const B = S.s.map((b, i) => ({ x: b.x, y: b.y, r: b.r + 10, n: nom(b, i === 2 ? 'ULTIME' : 'AUTEL/competence ' + (i + 1)) }));
+    if (!o.deskt) B.push({ x: S.d.x, y: S.d.y, r: S.d.r + 10, n: nom(S.d, 'dash') });
+    return B; };
+  const coupe = (r, b) => { const dx = Math.max(r.x0 - b.x, 0, b.x - r.x1), dy = Math.max(r.y0 - b.y, 0, b.y - r.y1); return dx * dx + dy * dy < b.r * b.r; };
+  const SIT = [
+    ['S22 tactile 411×900', { W: 411, H: 900, PS: 1.5, cw: 617, ch: 1351, top: TOP, wk: true, wkn: 558 }],
+    ['S22 tactile, sans ligne « où » ni marge audio', { W: 411, H: 900, PS: 1.5, cw: 617, ch: 1351, top: [], wk: true, margin: -1 }],
+    ['tactile 320×640', { W: 320, H: 640, PS: 1.5, cw: 480, ch: 960, top: TOP, wk: true }],
+    ['tactile couche 780×360', { W: 780, H: 360, PS: 1.5, cw: 1170, ch: 540, top: TOP, wk: true }],
+    ['tactile couche 568×320', { W: 568, H: 320, PS: 1.5, cw: 852, ch: 480, top: TOP, wk: true }],
+    ['poste fixe 1536×864', { W: 1536, H: 864, top: TOP, wk: true, deskt: true }],
+    ['poste fixe 800×600', { W: 800, H: 600, top: TOP, wk: true, deskt: true }],
+  ];
+  const MORC = ['ips', 'image ', 'pire ', 'JS ', 'hors-JS ', 'effets ', 'resol ', 'PS ', 'canvas ', 'DPR ', 'ref ', 'cuisson '];
+  for (const [nom, o] of SIT) for (const em of [0.50, 0.68]) {
+    EM = em;
+    const L = drawBlock(o), B = boutons(o), pb = [];
+    for (const l of L) for (const b of B) if (coupe({ x0: l.x, x1: l.x + l.w, y0: l.y - l.px, y1: l.y }, b)) pb.push('« ' + l.s.slice(-22) + ' » (y=H-' + Math.round(o.H - l.y) + ') sur ' + b.n);
+    const bd = L.rects.filter(r => /rgba\(8,5,18/.test(r.fill));
+    for (const r of bd) for (const b of B) if (coupe({ x0: r.x, x1: r.x + r.w, y0: r.y, y1: r.y + r.h }, b)) pb.push('bandeau sur ' + b.n);
+    const tag = nom + ', police ' + em.toFixed(2) + ' em, ' + L.length + ' lignes';
+    check(tag + ' : le bloc ne chevauche AUCUN bouton', L.length >= 3 && pb.length === 0,
+      pb.length ? pb.length + ' chevauchement(s) — cause : ancre fixe sous le haut des boutons — ' + pb.slice(0, 3).join(' ; ') : 'bloc de y=H-' + Math.round(o.H - Math.min(...L.map(l => l.y - l.px))) + ' a H-' + Math.round(o.H - Math.max(...L.map(l => l.y))) + ', bouton le plus haut H-' + Math.round(o.H - Math.min(...B.map(b => b.y - b.r))));
+    const tout = L.map(l => l.s).join(' | '), manq = MORC.concat(o.margin === -1 ? [] : ['marge audio ']).filter(m => tout.indexOf(m) < 0);
+    check(tag + ' : rien n\'a disparu, tout tient dans la largeur et dans l\'ecran',
+      manq.length === 0 && L.every(l => fits(l, o) && l.y - l.px >= 0 && l.y <= o.H), manq.length ? 'manque : ' + manq.join(', ') : L.map(l => (l.x + l.w).toFixed(0) + '/' + (o.W - PAD)).join(' '));
+  }
+}
+
+/* ================= S8 — l'etat REEL de la regulation est affiche (ligne 3) ================= */
+{
+  EM = 0.68;
+  const o = { W: 411, H: 900, PS: 1.5, cw: 617, ch: 1351, top: TOP, wk: true };
+  const l3 = L => (L[2] ? L[2].s : 'absente');
+  call(`meta.q='auto';QL=3;RES=1;`);
+  let L = drawBlock(o);
+  check('regulation : « auto » est dit, avec QL et RES reels, en tete de la ligne 3', /^régul auto 3\/3 ×1\.00/.test(l3(L)) && L.every(l => fits(l, o)), l3(L));
+  call(`meta.q='auto';QL=1;RES=.8;`);
+  L = drawBlock(o);
+  check('regulation : apres une baisse automatique, la ligne 3 suit QL et RES', /^régul auto 1\/3 ×0\.80/.test(l3(L)), l3(L));
+  call(`meta.q='high';applyQuality();`);
+  L = drawBlock(o);
+  check('regulation : un prereglage manuel (perf() n\'adapte plus) se LIT — « FIGÉE high »', /^régul FIGÉE high 3\/3 ×1\.00/.test(l3(L)) && L.every(l => fits(l, o)), l3(L));
+  call(`meta.q='auto';QL=3;RES=1;`);
 }
 
 /* ================= verdict ================= */

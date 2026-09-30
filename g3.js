@@ -695,40 +695,62 @@ function drawHUD(){
        OffscreenCanvas, worker en panne), le jeu retombe SILENCIEUSEMENT sur la cuisson sur place.
        Sans ce mot, une comparaison « avec / sans ?wk=1 » peut comparer deux fois le meme chemin.
        « worker N » : N = chunks recus du worker ; 0 = rien n'est encore passe par lui. */
-    const MW=W-pad*2,PX0=narrow?10:12,DYS=narrow?15:16;
-    /* Le bloc est ancre AU-DESSUS des controles du bas, jamais colle au bord : sur tactile le
-       bouton de dash occupe (W-62, H-92) avec un rayon de 34, et sur poste fixe la ligne
-       « Dash pret (Espace) » occupe deja y = H-pad. Colle au bord, le compteur passait SOUS le
-       bouton de dash (constate a l'ecran le 29/09/2026) : « cuisson worker N » etait a moitie
-       masque — soit exactement le mot qu'on est venu lire. */
-    const YB=inp.touch?H-132:H-pad-20;
+    const PX0=narrow?10:12,DYS=narrow?15:16;
+    /* Le bloc ne doit chevaucher AUCUN bouton. L'ancre fixe d'avant (H-132 sur tactile, H-pad-20
+       sur poste fixe) ne protegeait que le bouton de dash : avec 5 lignes le bloc montait de H-208
+       a H-126 sur toute la largeur et passait PAR-DESSUS les emplacements de competence de gcSlots()
+       (gc.js) — « worker 558 », « marge audio » et « soft » sur le bouton AUTEL (constate sur
+       capture le 30/09/2026) ; sur poste fixe il traversait les trois emplacements du centre.
+       On ne devine donc plus une ancre : on lit les VRAIES positions (dashBtn, gcSlots), elargies
+       a la zone de TOUCHER (rayon + 10, comme touchBtnAt de g4.js) et au libelle pose dessous, et
+       le bloc monte jusqu'a n'en couper aucune. Sur poste fixe il reste au-dessus de la ligne
+       « Dash pret (Espace) » (y = H-pad). Si, pleine largeur, il devait monter dans la moitie
+       haute (telephone couche), on le pave plus etroit, A GAUCHE des boutons : rien n'est retire. */
+    const ZB=[];if(inp.touch){const d=dashBtn();ZB.push([d.x-d.r-10,d.y-d.r-10,d.x+d.r+10,d.y+d.r+10]);}
+    for(const s of gcSlots())ZB.push([s.x-s.r-10,s.y-s.r-10,s.x+s.r+10,s.y+s.r+18]);
     const cuis=(typeof WK==='undefined'||WK===null)?'?':(WK?'worker '+WKN:'sur place');
-    const seg3=['PS '+PS.toFixed(2),'canvas '+cv.width+'×'+cv.height,'DPR '+DPR,'ref '+REFDT.toFixed(1)+' ms','cuisson '+cuis];
+    /* Etat REEL de la regulation, en tete de la ligne materielle : le reglage choisi (meta.q) et
+       ce qu'il vaut a cet instant (QL, RES). « auto » = perf() adapte ; « FIGÉE » = un prereglage
+       manuel, perf() n'adapte plus JAMAIS (g4.js : retour immediat si meta.q n'est pas auto) —
+       sans ce mot, une qualite bloquee et une qualite qui s'adapte s'affichent pareil. */
+    const rq=meta.q||'auto',seg3=['régul '+(rq==='auto'?'auto':'FIGÉE '+rq)+' '+QL+'/3 ×'+RES.toFixed(2),'PS '+PS.toFixed(2),'canvas '+cv.width+'×'+cv.height,'DPR '+DPR,'ref '+REFDT.toFixed(1)+' ms','cuisson '+cuis];
     if(DIAG_MARGIN>=0)seg3.push('marge audio '+DIAG_MARGIN.toFixed(2)+' s');
-    const out=[[FPSV+' ips','image '+DIAG_DT.toFixed(1)+' ms','pire '+DIAG_PEAK.toFixed(0)+' ms'],
-               ['JS '+DIAG_JS.toFixed(1)+' ms','hors-JS '+Math.max(0,DIAG_DT-DIAG_JS).toFixed(1)+' ms','effets '+QL+'/3','resol '+Math.round(RES*100)+' %']];
-    c.font='500 '+PX0+'px '+FD;
     /* jointure : « · » entre morceaux, mais un simple espace apres un morceau qui finit par « : »
        — sinon la ligne s'ecrit « ou : · render 6.06/12 » au lieu de « ou : render 6.06/12 ». */
     const jn=a=>{let s='';for(let i=0;i<a.length;i++)s+=(i?(a[i-1].slice(-1)===':'?' ':' · '):'')+a[i];return s;};
     const MWj=a=>c.measureText(jn(a)).width;
-    let cu=[];for(const s of seg3){if(cu.length&&MWj(cu.concat([s]))>MW){out.push(cu);cu=[];}cu.push(s);}
-    if(cu.length)out.push(cu);
-    if(typeof JSPROFTOP!=='undefined'&&JSPROFTOP.length)out.push(['où :'].concat(JSPROFTOP.map(q=>q[0]+' '+q[1].toFixed(2)+'/'+q[2].toFixed(0))));
-    const y0=YB-(out.length-1)*DYS,dr=[];
-    for(let i=0;i<out.length;i++){let n=out[i].length,p=PX0;c.font='500 '+p+'px '+FD;
-      const tex=k=>jn(out[i].slice(0,k))+(k<n?' …':'');
-      while(n>1&&c.measureText(tex(n)).width>MW)n--;
-      const t=tex(n);let w=c.measureText(t).width;
-      if(w>MW&&p>9){p=Math.max(9,Math.floor(p*MW/w));c.font='500 '+p+'px '+FD;w=MW;}
-      dr.push([t,Math.min(w,MW)]);}
+    /* mise en page pour une largeur MW donnee, puis pose : le bloc part du bas et monte au-dessus
+       de chaque zone qu'il coupe (il ne fait que monter : au plus une passe par zone). */
+    const pose=MW=>{
+      /* les trois lignes de mesure sont PAVEES (un morceau qui ne tient plus ouvre la ligne suivante) :
+         rien n'est tronque, meme a 320 px en police large. Seule « ou : » se raccourcit par la fin. */
+      const out=[];c.font='500 '+PX0+'px '+FD;
+      for(const g of [[FPSV+' ips','image '+DIAG_DT.toFixed(1)+' ms','pire '+DIAG_PEAK.toFixed(0)+' ms'],
+                      ['JS '+DIAG_JS.toFixed(1)+' ms','hors-JS '+Math.max(0,DIAG_DT-DIAG_JS).toFixed(1)+' ms','effets '+QL+'/3','resol '+Math.round(RES*100)+' %'],seg3]){
+        let cu=[];for(const s of g){if(cu.length&&MWj(cu.concat([s]))>MW){out.push(cu);cu=[];}cu.push(s);}
+        if(cu.length)out.push(cu);}
+      if(typeof JSPROFTOP!=='undefined'&&JSPROFTOP.length)out.push(['où :'].concat(JSPROFTOP.map(q=>q[0]+' '+q[1].toFixed(2)+'/'+q[2].toFixed(0))));
+      const dr=[];let wmax=0;
+      for(let i=0;i<out.length;i++){let n=out[i].length,p=PX0;c.font='500 '+p+'px '+FD;
+        const tex=k=>jn(out[i].slice(0,k))+(k<n?' …':'');
+        while(n>1&&c.measureText(tex(n)).width>MW)n--;
+        const t=tex(n);let w=c.measureText(t).width;
+        if(w>MW&&p>9){p=Math.max(9,Math.floor(p*MW/w));w=MW;}
+        w=Math.min(w,MW);if(w>wmax)wmax=w;dr.push([t,w,p]);}
+      const bh=(dr.length-1)*DYS+22;let yb=inp.touch?H-pad-6:H-pad-20;
+      for(let k=0;k<=ZB.length;k++){let hit=0;for(const z of ZB)if(z[0]<pad+wmax+6&&z[2]>pad-6&&z[1]<yb+6&&z[3]>yb+6-bh){yb=z[1]-7;hit=1;}if(!hit)break;}
+      return{dr,wmax,bh,yb};};
+    let B=pose(W-pad*2);
+    if(B.yb+6-B.bh<H*.5){let zl=W;for(const z of ZB)if(z[0]<zl)zl=z[0];const B2=pose(Math.max(120,zl-pad-13));if(B2.yb-B2.bh>B.yb-B.bh)B=B2;}
+    const dr=B.dr,y0=B.yb-(dr.length-1)*DYS;
     /* Fond : en gris clair sur un terrain clair le compteur devient illisible (constate a
        l'ecran). Un bandeau sombre derriere le bloc, pose AVANT le texte, garantit la lecture
        quel que soit le biome dessous. */
-    let wmax=0;for(const d of dr)if(d[1]>wmax)wmax=d[1];
-    c.fillStyle='rgba(8,5,18,.62)';c.fillRect(pad-6,y0-16,wmax+12,(out.length-1)*DYS+22);
+    c.fillStyle='rgba(8,5,18,.62)';c.fillRect(pad-6,y0-16,B.wmax+12,B.bh);
     c.fillStyle='#8f89b3';
-    for(let i=0;i<out.length;i++)c.fillText(dr[i][0],pad,y0+i*DYS);}
+    /* chaque ligne est ecrite avec SA police : la reduction d'une ligne ne valait, avant, que si
+       c'etait la derniere (c.font gardait la police de la derniere ligne mesuree). */
+    for(let i=0;i<dr.length;i++){c.font='500 '+dr[i][2]+'px '+FD;c.fillText(dr[i][0],pad,y0+i*DYS);}}
   if(G.help>0){c.globalAlpha=Math.min(1,G.help/60);c.textAlign='center';c.textBaseline='bottom';c.font='500 14px '+FD;c.fillStyle='#e6e2ff';
     const hl=inp.touch?['Pouce gauche : bouger','Pouce droit : viser (auto sinon)','⚡ : dash']:['ZQSD ou flèches : bouger','Souris : viser (auto sinon)','Espace : dash'];
     if(narrow)hl.forEach((s,i)=>c.fillText(s,W/2,H-250+i*22));else c.fillText(hl.join('   ·   '),W/2,H-44);c.globalAlpha=1;}
