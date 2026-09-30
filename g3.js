@@ -743,11 +743,23 @@ function drawHUD(){
        commencer ; wkRecv cumul/pire appel entre les deux rappels ; « réel » seulement si l'intervalle a ete
        plafonne a 100 ms ; longtask = la pire tâche longue de la seconde vue par le NAVIGATEUR (nom, attribution).
        Tout champ non mesure ou invalide s'ecrit « ? », l'API absente « absent » : jamais un zero de remplacement. */
+    /* chantier A6 — la pire image longue de la seconde selon LoAF (DIAG_LFP, g4.js), APRES longtask : phase dominante
+       (script, style/layout, ou « ni script ni style » quand le reste l'emporte), le plus long script de scripts[] (nom
+       tronque a 14 signes) ou « aucun script » si la liste est VIDE, le style/layout, et « bloq » si blockingDuration
+       est nettement plus court (< 3/4). PAS UNE LIGNE DE PLUS en regime calme : quand longtask ET loaf observent et
+       n'ont rien vu, les deux mots fusionnent en « LT/LoAF aucune » (14 signes), PAS plus long que le « longtask
+       aucune » d'A4 qu'il remplace a la meme place : le pavage glouton coupe donc exactement comme avant, 320 px en
+       police large compris. Le detail (2 a 4 morceaux paves) ne s'ecrit que quand il y a eu une image longue. */
+    const lf=typeof DIAG_LFP!=='undefined'?DIAG_LFP:null,lfs=typeof LF_ST!=='undefined'?LF_ST:0,
+      trn=n=>n.length>14?n.slice(0,13)+'…':n,
+      segL=lfs===-1?['loaf absent']:lfs!==1||!lf?['loaf ?']:!(lf[0]>0)?['loaf aucune']:
+        [(r=>'loaf '+lf[0].toFixed(0)+' ms : '+(lf[2]>=lf[3]&&lf[2]>=r?'script':lf[3]>=r?'style/layout':'ni script ni style'))(lf[0]-lf[2]-lf[3]),
+         lf[4]?'« '+trn(lf[4])+' » '+lf[5].toFixed(0)+' ms':'aucun script','style '+lf[3].toFixed(0)+' ms'].concat(lf[1]<lf[0]*.75?['bloq '+lf[1].toFixed(0)+' ms']:[]);
     const nb=v=>typeof v==='number'&&v>=0,lp=DIAG_LTP;
     const segW=pw?[pk+' :','JS '+(pw[1]<0?'?':pw[1].toFixed(1)+' ms'),'gen '+pw[2],'spr '+pw[3],'reçus '+pw[4],'collés '+pw[5],
       'retard '+(nb(pw[6])?pw[6].toFixed(1)+' ms':'?'),'wkRecv '+(nb(pw[7])?pw[7].toFixed(2)+'/'+pw[8].toFixed(2)+' ms':'?')]
       .concat(nb(pw[9])&&pw[9]>pw[0]+.5?['réel '+pw[9].toFixed(0)+' ms']:[],
-        [LT_ST===-1?'longtask absent':LT_ST!==1||!lp?'longtask ?':lp[0]>0?'longtask '+lp[0].toFixed(0)+' ms ('+lp[1]+', '+lp[2]+')':'longtask aucune']):null;
+        [LT_ST===-1?'longtask absent':LT_ST!==1||!lp?'longtask ?':lp[0]>0?'longtask '+lp[0].toFixed(0)+' ms ('+lp[1]+', '+lp[2]+')':'longtask aucune'],segL).join('\n').replace('longtask aucune\nloaf aucune','LT/LoAF aucune').split('\n'):null;
     /* mise en page pour une largeur MW donnee, puis pose : le bloc part du bas et monte au-dessus
        de chaque zone qu'il coupe (il ne fait que monter : au plus une passe par zone). */
     const pose=MW=>{

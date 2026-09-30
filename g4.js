@@ -202,8 +202,22 @@ const JSPROF={};let JSPROF_ON=false,JSPROFTOP=[];
    DIAG_PV[5] : retard du rappel precedent. Les tâches longues (PerformanceObserver 'longtask') sont a part : le
    navigateur les livre en differe, on garde la pire de la seconde (DIAG_LT -> DIAG_LTP) avec son attribution.
    LT_ST : 0 pas lance, 1 observe, -1 API ABSENTE (supportedEntryTypes sans 'longtask'), -2 observe() a echoue.
-   Une API absente s'affiche « absent », jamais « 0 » : un champ muet qui a l'air d'un zero est un mensonge. */
-const DIAG_EV=[0,0],DIAG_PV=[-1,0,0,0,0,-1],DIAG_W=[0,-1,0,0,0,0,-1,-1,0,0],DIAG_WK=[0,0],DIAG_LT=[0,'',''];let DIAG_WORST=null,DIAG_LTP=null,LT_ST=0;
+   Une API absente s'affiche « absent », jamais « 0 » : un champ muet qui a l'air d'un zero est un mensonge.
+   ---- chantier A6 : Chromium attribue toute tâche longue a (self, unknown), meme une boucle de script pure. Les
+   Long Animation Frames ('long-animation-frame') DECOUPENT l'image longue ; on garde la pire de la seconde
+   (DIAG_LF -> DIAG_LFP) : [0] duree · [1] blockingDuration · [2] script = somme des scripts[].duration moins le
+   reflow qu'ils ont force · [3] style/layout = de styleAndLayoutStart a la fin de l'image, PLUS ce reflow force
+   (spec W3C : renderStart..styleAndLayoutStart, ce sont les rappels rAF — frame() y vit —, pas du style) ·
+   [4] nom du plus long script (sourceFunctionName, sinon invoker ; '' = scripts[] VIDE) · [5] sa duree.
+   LF_ST : memes etats que LT_ST. */
+const DIAG_EV=[0,0],DIAG_PV=[-1,0,0,0,0,-1],DIAG_W=[0,-1,0,0,0,0,-1,-1,0,0],DIAG_WK=[0,0],DIAG_LT=[0,'',''],DIAG_LF=[0,0,0,0,'',0];let DIAG_WORST=null,DIAG_LTP=null,LT_ST=0,DIAG_LFP=null,LF_ST=0;
+function lfStart(){if(LF_ST)return;const P=globalThis.PerformanceObserver,T=P&&P.supportedEntryTypes;
+  if(!T||T.indexOf('long-animation-frame')<0){LF_ST=-1;return;}
+  try{new P(l=>{for(const e of l.getEntries())if(e.duration>DIAG_LF[0]){let sc=0,fl=0,top=null;
+      for(const s of e.scripts||[]){const f=s.forcedStyleAndLayoutDuration||0;sc+=s.duration-f;fl+=f;if(!top||s.duration>top.duration)top=s;}
+      DIAG_LF[0]=e.duration;DIAG_LF[1]=e.blockingDuration;DIAG_LF[2]=sc;DIAG_LF[3]=Math.max(0,e.startTime+e.duration-e.styleAndLayoutStart)+fl;
+      DIAG_LF[4]=top?top.sourceFunctionName||top.invoker||top.name||'?':'';DIAG_LF[5]=top?top.duration:0;}}).observe({entryTypes:['long-animation-frame']});LF_ST=1;}
+  catch(e){LF_ST=-2;}}
 function ltStart(){if(LT_ST)return;const P=globalThis.PerformanceObserver,T=P&&P.supportedEntryTypes;
   if(!T||T.indexOf('longtask')<0){LT_ST=-1;return;}
   try{new P(l=>{for(const e of l.getEntries())if(e.duration>DIAG_LT[0]){const a=e.attribution&&e.attribution[0];DIAG_LT[0]=e.duration;DIAG_LT[1]=e.name||'?';DIAG_LT[2]=a&&a.name||'?';}}).observe({entryTypes:['longtask']});LT_ST=1;}
@@ -217,7 +231,7 @@ const JSPROF_N=['render','step','streamWorld','bakeStep','genChunk','getChunk','
   'gcDrawWorld','gsDrawWorld','giDrawWorld','gxDrawWorld','gvDrawWorld',
   'gcDrawUnder','gcDrawOver','gvDrawScreen','soft','softSpr','glow','worldTf','screenTf','wkRecv'];
 function jsProfStart(){
-  if(JSPROF_ON)return;JSPROF_ON=true;ltStart();
+  if(JSPROF_ON)return;JSPROF_ON=true;ltStart();lfStart();
   /* wkRecv : w.onmessage=wkRecv (gw2.js, wkOn) lit la globale a la creation du worker, APRES boot() : c'est donc
      cette enveloppe qui recoit les messages. Elle alimente en plus DIAG_WK (l'intervalle en cours). */
   for(const n of JSPROF_N){
@@ -392,7 +406,7 @@ function frame(ts){
     for(const k in JSPROF){const s=JSPROF[k];if(s[0]>=1)JSPROFTOP.push([k,s[0]/DIAG_N,s[1]]);s[0]=0;s[1]=0;}
     JSPROFTOP.sort((a,b)=>b[1]-a[1]);if(JSPROFTOP.length>6)JSPROFTOP.length=6;
     DIAG_JS=DIAG_CJS/DIAG_N;DIAG_DT=DIAG_CDT/DIAG_N;DIAG_PEAK=DIAG_MX;DIAG_WORST=DIAG_W.slice();DIAG_W[0]=0;
-    DIAG_LTP=LT_ST===1?DIAG_LT.slice():null;DIAG_LT[0]=0;
+    DIAG_LTP=LT_ST===1?DIAG_LT.slice():null;DIAG_LT[0]=0;DIAG_LFP=LF_ST===1?DIAG_LF.slice():null;DIAG_LF[0]=0;
     /* Les ips derivent du MEME cumul que « image : N ms » : deux compteurs separes finissaient par
        afficher, sur la meme ligne, deux nombres qui ne se correspondaient pas. 1000/ips = ms, par
        construction, et non par coincidence. */
