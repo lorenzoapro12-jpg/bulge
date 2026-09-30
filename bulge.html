@@ -1527,7 +1527,7 @@ function mkGame(){return{state:'play',t:0,time:0,room:1,p:null,en:[],eb:[],pb:[]
   banner:null,toasts:[],pendingEvo:[],evoDelay:14,heat:0,daily:false,dayKey:0,newAch:[],vacuum:false,vacuumT:0,
   win:false,trails:[],tgt:null,tgtT:0,dieT:0,vicT:0,prof:'bal',manual:false,
   hearts:[],heartsDone:0,lair:{open:false},arena:null,arenaOpen:null,biome:'plains',biomeCand:null,biomeN:0,visited:{},zoneT:null,spawnT:40,fightHit:false,
-  inX:0,inY:0,aimMan:false,aimA:0,choices:[],artChoices:[],freeArts:[],help:0,dec:{bite:[],car:[],fall:[]}};}
+  inX:0,inY:0,aimMan:false,aimA:0,choices:[],artChoices:[],freeArts:[],help:0,dec:{bite:[],car:[],fall:[],givre:[],glisseT:-1,sw:null,swO:{},vu:false,vuT:-1,relais:[]},courant:null,vent:null,ventVu:{}};}
 
 function mkPlayer(prof){
   const pr=PROF[prof];
@@ -1610,7 +1610,7 @@ function updWorld(){
   if(G.arenaOpen&&++G.arenaOpen.t>40)G.arenaOpen=null;
   if(G.vacuumT>0){G.vacuumT--;G.vacuum=G.vacuumT>0;}
   if(G.t%12===0){revealFog(P.x,P.y,760);const b=biomeAt(P.x,P.y);
-    if(b!==G.biome){if(G.biomeCand===b){if(++G.biomeN>=3){G.biome=b;if(!G.visited[b])G.zoneT={b,t:0};setBiome(b);biomeWash(b);G.visited[b]=1;if(Object.keys(G.visited).length>=8)unlock('explorer');}}else{G.biomeCand=b;G.biomeN=0;}}else G.biomeCand=null;}
+    if(b!==G.biome){if(G.biomeCand===b){if(++G.biomeN>=3){G.biome=b;if(!G.visited[b])G.zoneT={b,t:0};setBiome(b);biomeWash(b);G.visited[b]=1;if(Object.keys(G.visited).length>=8)unlock('explorer');}}else{G.biomeCand=b;G.biomeN=0;}}else G.biomeCand=null;terrainTick();}
   if(G.zoneT)G.zoneT.t++;
   if(G.lair.open&&!G.arena&&!G.boss&&dist2(P.x,P.y,WD.core.x,WD.core.y)<640*640)startBossFight();
   updSpawns();
@@ -1692,7 +1692,7 @@ function hurtPlayer(dmg,sx,sy){
 function tryDash(){
   if(!G||G.state!=='play')return;const P=G.p;if(P.dashT>0||P.dead)return;
   let dx=G.inX,dy=G.inY;if(!dx&&!dy){dx=Math.cos(P.ang);dy=Math.sin(P.ang);}const l=Math.hypot(dx,dy)||1;dx/=l;dy/=l;
-  P.dashing=12;P.dashT=P.dashMax;P.dvx=dx*P.spd*3.6;P.dvy=dy*P.spd*3.6;P.inv=Math.max(P.inv,18);P.dashHit=[];SFX.dash();
+  P.glisse=G.biome==='ice';P.dashing=P.glisse?ICE_DASH:12;if(P.glisse)G.dec.glisseT=G.t;P.dashT=P.dashMax;P.dvx=dx*P.spd*3.6;P.dvy=dy*P.spd*3.6;P.inv=Math.max(P.inv,18);P.dashHit=[];SFX.dash();
   ringFX(P.x,P.y,P.r,P.r*2.2,P.col,14,3);
 }
 function updPlayer(){
@@ -1702,10 +1702,11 @@ function updPlayer(){
   if(P.dashing>0){
     P.dashing--;P.vx=P.dvx;P.vy=P.dvy;
     if(G.t%2===0)FX({ty:3,x:P.x,y:P.y,vx:0,vy:0,r:P.r,life:16,max:16,col:P.col});
+    if(P.glisse&&G.t%2===0)G.dec.givre.push({x:P.x,y:P.y,r:P.r,t:G.t});
     if(P.ghost&&G.t%3===0)G.trails.push({x:P.x,y:P.y,r:P.r*1.15,life:70});
     if(P.dashDmg>0)for(const e of G.en){if(e.dead||e.spawn>0||P.dashHit.includes(e))continue;if(dist2(e.x,e.y,P.x,P.y)<(e.r+P.r+6)**2){P.dashHit.push(e);hurtEnemy(e,P.dashDmg*P.dmg*lvlDmg(),P.dvx*.5,P.dvy*.5);}}
     if(P.dashing===0){P.vx*=.35;P.vy*=.35;}
-  }else{P.vx=lerp(P.vx,G.inX*P.spd,.16);P.vy=lerp(P.vy,G.inY*P.spd,.16);}
+  }else{const m=porte()?CUR_K:1;P.vx=lerp(P.vx,G.inX*P.spd*m,.16);P.vy=lerp(P.vy,G.inY*P.spd*m,.16);}
   P.x+=P.vx;P.y+=P.vy;
   const oh=collideCircle(P,P.r*.92);if(oh){const vn=P.vx*oh[0]+P.vy*oh[1];if(vn<0){P.vx-=vn*oh[0];P.vy-=vn*oh[1];}}
   const cn=confine(P,P.r);if(cn){const vn=P.vx*cn[0]+P.vy*cn[1];if(vn>0){P.vx-=vn*cn[0]*1.6;P.vy-=vn*cn[1]*1.6;}}
@@ -1775,7 +1776,7 @@ function explode(b){
 /* ---------- ennemis ---------- */
 function ebul(x,y,a,s,r,dmg,col){s*=1+.035*(G.room-1)+.01*G.heat;const b={x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,r,dmg:dmg*dmgMul(),col,life:420,home:0,gz:false};if(G.eb.length<600)G.eb.push(b);return b;}
 function hurtEnemy(e,dmg,kx,ky,quiet){
-  if(e.dead||e.spawn>0)return;if(e.aff==='armor')dmg*=.45;if(e.mkT>0)dmg*=e.mkM;
+  if(e.dead||e.spawn>0)return;if(e.aff==='armor')dmg*=.45;if(relais(e)){dmg*=RELAY_M;e.relT=G.t;}if(e.mkT>0)dmg*=e.mkM;
   e.aggro=true;
   const crit=R()<G.p.crit;if(crit)dmg*=G.p.critM||2.5;
   dmg=giHit(e,dmg,crit);e.hp-=dmg;e.flash=4;giAfter(e,dmg,crit);
@@ -1811,7 +1812,7 @@ function updEnemy(e){
   if(e.flash>0)e.flash--;
   if(!e.aggro){const P0=G.p;if(dist2(e.x,e.y,P0.x,P0.y)<620*620)e.aggro=true;else{e.wob+=.02;e.wa+=rr(-.06,.06);e.vx=lerp(e.vx,Math.cos(e.wa)*.5,.05);e.vy=lerp(e.vy,Math.sin(e.wa)*.5,.05);e.x+=e.vx;e.y+=e.vy;if(collideCircle(e,e.r))e.wa+=Math.PI*.5;if(confine(e,e.r))e.wa+=Math.PI;return;}}
   const P=(e.tg&&!e.tg.dead)?e.tg:G.p,d=e.d,dx=P.x-e.x,dy=P.y-e.y,dd=Math.hypot(dx,dy)||1,ax=dx/dd,ay=dy/dd,aP=Math.atan2(dy,dx);
-  let tx=0,ty=0,sp=d.spd*(1+.03*(G.room-1));
+  let tx=0,ty=0,sp=d.spd*(1+.03*(G.room-1))*((e.alarmT||0)>G.t?SW_SP:1);
   e.wob+=.03;
   switch(e.t){
     case 'mite':tx=ax+Math.cos(e.wob*3)*.45;ty=ay+Math.sin(e.wob*3)*.45;break;
@@ -1878,7 +1879,9 @@ function carHits(it,t,x,y,r){const q=carAt(it,t);return Math.abs(x-q[0])<(it.ver
 function decorHurt(e,f){e.aggro=true;e.hp-=e.mhp*f;e.flash=4;if(e.hp<=0)killEnemy(e);}
 function decorTick(){
   const D=G.dec,t=G.t,P=G.p,b=G.biome;
-  D.bite=D.bite.filter(q=>t-q.t<30);D.car=D.car.filter(q=>t-q.t<30);
+  D.bite=D.bite.filter(q=>t-q.t<30);D.car=D.car.filter(q=>t-q.t<30);D.givre=D.givre.filter(q=>t-q.t<GIVRE_T);
+  const v=vu(P);if(v){if(!D.vu)D.vuT=t;for(const e of G.en)if(!e.dead&&dist2(e.x,e.y,P.x,P.y)<SW_R*SW_R){e.aggro=true;e.alarmT=t+SW_T;}}D.vu=v;
+  D.relais=[];if(b==='core')for(const e of G.en){if(e.dead)continue;const n=relais(e);if(!n)continue;let q=D.relais.find(r=>r.it===n);if(!q)D.relais.push(q={it:n,pro:[]});q.pro.push(e);}
   for(let i=D.fall.length-1;i>=0;i--){const e=D.fall[i];if(--e.fall<=0){D.fall.splice(i,1);killEnemy(e);}}
   if(b!=='floral'&&b!=='urban')return;
   const cx=Math.floor(P.x/CH),cy=Math.floor(P.y/CH);
@@ -1897,6 +1900,37 @@ function skyFalls(e,sp,oh){
   if(G.biome!=='sky'||e.aff||e.t==='cache'||Math.hypot(e.vx,e.vy)-sp<=SKY_KB||!wallNear(e.x,e.y,e.r+2))return false;
   e.fall=FALL_T;e.fdx=-oh[0];e.fdy=-oh[1];e.vx=e.vy=0;G.dec.fall.push(e);return true;
 }
+
+/* ---------- le terrain agit : courant (sea), glissade (ice), balayage (cyber), relais (core), vent (plains) ----------
+   Mêmes principes que ci-dessus : bord franc par G.biome, aucun tirage dans le flux global (directions = hash2 du site),
+   rien n'est placé, le joueur n'est jamais ralenti ni blessé par le décor. */
+const CUR_K=1.25,ICE_DASH=16,GIVRE_T=90,SW_W=90,SW_V=1.2,SW_L=2000,SW_ABRI=60,SW_R=900,SW_T=480,SW_SP=1.3,RELAY_R=110,RELAY_M=.45,VENT_R=700;
+function siteDir(i,k){const a=hash2(i,0,WD.seed^k)/4294967296*TAU;return [Math.cos(a),Math.sin(a)];}
+function nearSite(x,y,t){const q=warpXY(x,y),S=WD.sites;let b=-1,bd=1e18;for(let i=0;i<S.length;i++){if(S[i].t!==t)continue;const d=(S[i].x-q[0])**2+(S[i].y-q[1])**2;if(d<bd){bd=d;b=i;}}return b;}
+/* tous les 12 ticks, juste après la bascule de G.biome (updWorld) */
+function terrainTick(){
+  const P=G.p,b=G.biome,S=WD.sites,M=WD.mainPath,D=G.dec;
+  if(b==='sea'){const i=nearSite(P.x,P.y,'sea');if(!G.courant||G.courant.i!==i){const d=siteDir(i,0x5EA);G.courant={i,x:d[0],y:d[1]};}}else G.courant=null;
+  if(b==='cyber'){const i=nearSite(P.x,P.y,'cyber');let o=D.swO[i];
+    if(!o){const cx=Math.floor(P.x/CH),cy=Math.floor(P.y/CH);let bd=1e18;
+      for(let dx=-2;dx<=2;dx++)for(let dy=-2;dy<=2;dy++){const c=getChunk(cx+dx,cy+dy);if(!c)continue;
+        for(const it of c.live)if(it.t==='beacon'&&siteAt(it.x,it.y)===S[i]){const d=dist2(it.x,it.y,S[i].x,S[i].y);if(d<bd){bd=d;o=it;}}}
+      if(o)D.swO[i]=o;}
+    if(o){const d=siteDir(i,0xC7B);D.sw={i,x:o.x,y:o.y,dx:d[0],dy:d[1],it:o};}else D.sw=null;}else D.sw=null;
+  G.vent=null;if(!M)return;const V=G.ventVu;let n=-1;
+  for(const i of M)if(!V[i]&&dist2(P.x,P.y,S[i].x,S[i].y)<VENT_R*VENT_R)V[i]=1;
+  if(b==='plains'){for(const i of M)if(!V[i]){n=i;break;}if(n>=0){const dx=S[n].x-P.x,dy=S[n].y-P.y,l=Math.hypot(dx,dy)||1;G.vent={x:dx/l,y:dy/l,i:n};}}
+}
+/* courant : l'intention du joueur est-elle portée ? (jamais de frein à contre-courant) */
+function porte(){const C=G.courant;return G.biome==='sea'&&!!C&&G.inX*C.x+G.inY*C.y>0;}
+/* balayage : position du milieu de la bande sur l'axe (origine = balise), au tick t ; `vu` = la règle ET le dessin */
+function swS(t){return (t*SW_V)%SW_L-SW_L/2;}
+function swIn(x,y){const W=G.dec.sw;return !!W&&Math.abs((x-W.x)*W.dx+(y-W.y)*W.dy-swS(G.t))<=SW_W/2;}
+function vu(o){return G.biome==='cyber'&&swIn(o.x,o.y)&&!wallNear(o.x,o.y,SW_ABRI);}
+/* relais : le nœud qui protège l'ennemi (centre à moins de RELAY_R), ou null */
+function relais(e){if(G.biome!=='core')return null;const cx=Math.floor(e.x/CH),cy=Math.floor(e.y/CH);let best=null,bd=RELAY_R*RELAY_R;
+  for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){const c=getChunk(cx+dx,cy+dy);if(!c)continue;for(const it of c.live)if(it.t==='node'){const d=dist2(it.x,it.y,e.x,e.y);if(d<bd){bd=d;best=it;}}}
+  return best;}
 
 /* ---------- projectiles ---------- */
 

@@ -716,6 +716,10 @@ const sub = (f, args) => { const r = cp.spawnSync(process.execPath, [path.join(_
   check('écrans : chaque mot d’une description de classe est rattaché à une règle mesurée (portée d’écho par dichotomie), et la pastille « N j série » du menu dit la vérité aujourd’hui (test/ecrans.js)', r.ok,
     (r.out.match(/[ÉE]CHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim().slice(0, 220)).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
 
+{ const r = sub('terrain.js', REF ? ['--ref=' + REF] : []);
+  check('terrain : le courant porte, la glace prolonge le dash, le balayage alarme hors abri, le relais protège, le vent vise le prochain nœud (test/terrain.js)', r.ok,
+    (r.out.match(/[ÉE]CHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim().slice(0, 220)).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
+
 /* ---------- verdict ---------- */
 console.log('\n---------------- VERDICT ----------------');
 let all = true;
