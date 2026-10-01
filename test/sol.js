@@ -11,7 +11,7 @@
    l'ecran ou a change. Ce que ce test defend :
      1. MEME SOL : apres un trajet (pas entiers, diagonales, retours, ~40 images), le sol pose par le cache est
         celui du chemin direct, pixel pour pixel (camera alignee sur le pixel : les deux chemins posent alors le
-        sol au meme endroit). Le sol est capture juste apres sa pose, avant le decor et les personnages ;
+        sol au meme endroit). Le sol est capture juste apres drawChunks, decor vivant et decors de chunk coupes ;
      2. le cache a bien servi (sinon 1 ne prouverait rien) et il a DECALE la toile au lieu de tout redessiner ;
      3. un chunk dont la surface change pendant le trajet (cuisson refaite) est redessine : le cache ne garde
         pas l'ancienne image ;
@@ -33,7 +33,7 @@ const check = (label, cond, info) => { if (!cond) ok = false; console.log((cond 
 /* entre en partie, arrete la boucle (render est appele a la main), fige camera et zoom */
 const SETUP = `(()=>{meta.q='high';applyQuality();refReset();newRun('bal',false);gsRunStart();gcRunStart();giRunStart();gxRunStart();gtRunStart();gvRunStart();show(null);G.state='play';
   frame=function(){};G.kick=0;G.trauma=0;G.pcx=G.pcy=G.pzoom=null;
-  window.__S={snap:null,want:false,hit:0,full:0};const sd=solDraw;solDraw=function(){const k=SOLK;const r=sd.apply(this,arguments);if(r){__S.hit++;if(!k||SOLK.s!==k.s)__S.full++;else if(SOLK.tx!==k.tx||SOLK.ty!==k.ty)__S.dec=(__S.dec||0)+1;}return r;};const fb=fleeBuild;fleeBuild=function(){if(__S.want){__S.want=false;const g=MAINCTX;__S.snap=g.getImageData(0,0,cv.width,cv.height).data;}return fb.apply(this,arguments);};
+  window.__S={snap:null,want:false,hit:0,full:0};const sd=solDraw;solDraw=function(){const k=SOLK;const r=sd.apply(this,arguments);if(r){__S.hit++;if(!k||SOLK.s!==k.s)__S.full++;else if(SOLK.tx!==k.tx||SOLK.ty!==k.ty)__S.dec=(__S.dec||0)+1;}return r;};/* capture du sol seul : juste après drawChunks, le décor vivant et les décors de chunk étant coupés (avant le 01/10/2026 : à fleeBuild, retiré avec la faune) */drawLive=function(){};drawDeco=function(){};const dc=drawChunks;drawChunks=function(){const r=dc.apply(this,arguments);if(__S.want){__S.want=false;const g=MAINCTX;__S.snap=g.getImageData(0,0,cv.width,cv.height).data;}return r;};
   return {w:cv.width,h:cv.height,ps:PS};})()`;
 /* place la camera pour que la translation soit ENTIERE : PS*W/2 - CAM.x*s = n */
 const PLACE = (nx, ny) => `(()=>{G.kick=0;G.trauma=0;G.pcx=G.pcy=G.pzoom=null;G.state="play";const s=PS*G.zoom;G.cx=(PS*W/2-(${nx}))/s;G.cy=(PS*H/2-(${ny}))/s;return true;})()`;
