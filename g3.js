@@ -262,14 +262,6 @@ function drawLive(it){
       for(let w=0;w<2;w++){c.globalAlpha=(w?.55:.16)*k*(.6+.4*p);c.lineWidth=w?2:6;c.beginPath();for(const v of V){c.moveTo(it.x,it.y);for(let j=0;j<v.length;j+=2)c.lineTo(v[j],v[j+1]);}c.stroke();}
       soft(it.x,it.y,(22+p*20)*(.8+.4*k),'#ff3355',(.18+.5*p)*k);soft(it.x,it.y,7,'#ffd0c0',.5*k);
       c.globalCompositeOperation='source-over';c.globalAlpha=1;c.lineCap='butt';break;}
-    case 'jelly':{ /* Meduses du recif (E2) : montent lentement, cloche qui pulse ; fuient les ennemis en aggro.
-       Teinte blanc-bleu pale : hors de la palette des ennemis (COL.pk est plus sature). */
-      const cy=RT*.12*it.s+it.ph*90,x0=it.x+Math.sin(RT*.013+it.ph)*18,y0=it.y+60-((cy%240)+240)%240,fq=fleeOff(x0,y0),x=x0+fq[0],y=y0+fq[1];
-      if(!vis(x,y,40))return;const p=.5+.5*Math.sin(RT*(fq[2]>.15?.3:.09)+it.ph),r=(9+3*p)*it.s,h=r*(.75-.2*p);
-      c.globalCompositeOperation='lighter';soft(x,y,r*2.4,'#bfe8ff',.22);c.globalCompositeOperation='source-over';c.globalAlpha=1;
-      c.strokeStyle='rgba(214,244,255,.55)';c.lineWidth=1.2;c.beginPath();for(let k=-1;k<=1;k++){c.moveTo(x+k*r*.5,y);c.quadraticCurveTo(x+k*r*.5+Math.sin(RT*.08+k+it.ph)*5,y+r*1.2,x+k*r*.4,y+r*2.2);}c.stroke();
-      c.fillStyle='rgba(226,248,255,.7)';c.beginPath();c.ellipse(x,y,r,h,0,Math.PI,TAU);c.fill();
-      c.fillStyle='#ffffff';c.beginPath();c.arc(x,y-h*.35,1.8*it.s,0,TAU);c.fill();break;}
     case 'moth':{ /* Phalenes des plaines. Elles s'ecartent du joueur puis reviennent SANS AUCUN
        ETAT : le decalage est une fonction pure de la distance, donc la position reste
        reproductible et le retour est automatique des qu'on s'eloigne.
@@ -333,7 +325,7 @@ function fleeOff(x,y){let dx=0,dy=0,m=0;
   const L=Math.hypot(dx,dy);if(L>1){dx/=L;dy/=L;}FO[0]=dx*120;FO[1]=dy*120;FO[2]=m;return FO;}
 /* décor par chunk, calculé une fois au premier affichage */
 const DECV=new WeakMap();
-function decoOf(c){let d=DECV.get(c);if(d)return d;d={v:[],pk:[],je:[],st:[]};DECV.set(c,d);
+function decoOf(c){let d=DECV.get(c);if(d)return d;d={v:[],pk:[],st:[]};DECV.set(c,d);
   const r=mkRng(hash2(c.cx,c.cy,WD.seed^0x5e2a1)),x0=c.x0,y0=c.y0,Q=[biomeAt(x0+128,y0+128),biomeAt(x0+384,y0+128),biomeAt(x0+128,y0+384),biomeAt(x0+384,y0+384)];
   /* 1. lianes du Jardin : entre deux obstacles floraux du chunk séparés de moins de 220 px (bord à bord) */
   const F=c.obs.filter(o=>o.b==='floral'&&o.k===0);
@@ -344,8 +336,7 @@ function decoOf(c){let d=DECV.get(c);if(d)return d;d={v:[],pk:[],je:[],st:[]};DE
   if(Q.includes('cyber'))for(let i=0;i<8;i++){const h=r()<.5,li=1+(r()*7|0);let a=-1,best=[0,0];
     for(let s=0;s<=8;s++){const ok=s<8&&biomeAt(h?x0+s*64+32:x0+li*64+32,h?y0+li*64+32:y0+s*64+32)==='cyber';if(ok&&a<0)a=s;if(!ok&&a>=0){if(s-a>best[1]-best[0])best=[a,s];a=-1;}}
     const sp=(r()<.5?-1:1)*(1.4+r()*1.6),ph=r()*1e3;if(best[1]-best[0]>=2)d.pk.push({h,u:li*64,a:best[0]*64,b:best[1]*64,sp,ph});}
-  /* méduses du Récif */
-  if(Q.includes('sea'))for(let i=0;i<4&&d.je.length<3;i++){const x=x0+40+r()*(CH-80),y=y0+40+r()*(CH-80),s=.8+r()*.5,ph=r()*TAU;if(biomeAt(x,y)==='sea'&&!hitList(c.obs,x,y,30))d.je.push({t:'jelly',x,y,s,ph});}
+  /* méduses du Récif : retirées le 01/10/2026 à la demande du propriétaire (« au premier plan, c'est moche ») */
   /* 3. bouches de vapeur : sur la grille des lampadaires de drawCity (gw2.js : hash2(L>>8,t>>7,seed^0xc17e)),
      sur la chaussée d'en face, décalées de 70 px le long de la rue */
   if(Q.includes('urban')){const S=WD.seed^0xc17e;
@@ -372,7 +363,6 @@ function drawDeco(c){let d=DECV.get(c);if(!d){if(DCB<=0)return;DCB--;d=decoOf(c)
       g.globalAlpha=.7;g.strokeStyle='#2de2ff';g.lineWidth=2.5;g.beginPath();g.moveTo(x,y);g.lineTo(x+tx*Math.max(0,tl),y+ty*Math.max(0,tl));g.stroke();
       soft(x,y,13,'#2de2ff',.45);g.globalAlpha=1;g.fillStyle='#eaffff';g.fillRect(x-2.5,y-2.5,5,5);}
     g.globalCompositeOperation='source-over';g.globalAlpha=1;}
-  for(const q of d.je)drawLive(q);
   for(const q of d.st){if(STB<=0||!vis(q.x,q.y,70))continue;STB--;
     g.fillStyle='#0b0a12';g.fillRect(q.x-7,q.y-4,14,8);g.strokeStyle='rgba(150,150,175,.5)';g.lineWidth=1;g.beginPath();for(let k=-4;k<=4;k+=4){g.moveTo(q.x+k,q.y-3);g.lineTo(q.x+k,q.y+3);}g.stroke();
     for(let k=0;k<5;k++){const f=((RT*.011+q.ph+k/5)%1),r=5+f*17;soft(q.x+Math.sin(RT*.02+k*1.7+q.ph*9)*4*f+f*10,q.y-f*56,r,'#eef0fa',Math.min(1,f*9)*(1-f)*.75);}

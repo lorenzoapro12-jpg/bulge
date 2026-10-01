@@ -66,9 +66,9 @@ const check = (nom, fn) => { let err; try { err = fn(); } catch (e) { err = 'exc
 call(`genWorld(1);G={p:{x:-99999,y:-99999,r:10,dead:false,col:'#ffffff',vx:0,vy:0},en:[],visited:{plains:1},state:'play',t:0,biome:'plains'};RT=500;RZ=1;`);
 
 /* ---------- N2 ---------- */
-check('N2 : la faune (phalène, oiseau, méduse) fuit un ennemi en aggro hors du champ', () => {
+check('N2 : la faune (phalène, oiseau) fuit un ennemi en aggro hors du champ', () => {
   const errs = [];
-  for (const t of ['moth', 'bird', 'jelly']) {
+  for (const t of ['moth', 'bird']) /* méduses retirées le 01/10/2026 */ {
     const it = `{t:'${t}',x:2000,y:2000,s:1,ph:1.3}`;
     call('G.en=[]'); view(-1e6, 1e6, -1e6, 1e6);
     const c0 = centroid(draw(`drawLive(${it})`));
