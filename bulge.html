@@ -3713,10 +3713,56 @@ function drawFar(mix){
    valeur est le chunk, pour qu'une toile du pool recuite pour un AUTRE chunk recompte. frame() (g4.js)
    lit CHNEW puis le remet à zéro à chaque image. N'émet aucune opération de dessin. */
 const CHV=new WeakMap();let CHNEW=0;
+/* SOL EN CACHE (01/10/2026). Sur un canevas dessiné par le PROCESSEUR (Firefox du propriétaire : AzureCanvasBackend
+   « skia », Ryzen 3 5350G à graphique intégré), recopier les chunks À L'ÉCHELLE de la caméra coûte un plein écran
+   filtré à chaque image : drawChunks 12,4 ms sur 24,5 ms de JS, en 1920×1080. Ce chemin garde le sol de l'image
+   précédente dans une toile de la taille de l'écran, la DÉCALE d'un nombre entier de pixels (copie sans
+   redimensionnement, bien moins chère), et ne redessine que la bande entrée à l'écran et les chunks qui ont changé
+   (cuisson terminée, cuisson en cours, éviction). Le sol est posé au pixel entier près (écart ≤ 0,5 px avec le reste
+   du monde) ; un zoom qui s'écarte de plus de 0,1 % de celui de la toile la redessine entière.
+   Sur un canevas dessiné par la CARTE GRAPHIQUE, la copie des chunks ne coûte presque rien au JS (0,4 ms mesuré dans
+   Chromium) et ce chemin doublerait la surface remplie : il ne s'enclenche donc que si la copie directe coûte
+   (moyenne glissante SOLE > 3 ms sur au moins 30 images), et le reste ensuite. ?sol=1 le force, ?sol=0 l'interdit. */
+let SOLC=null,SOLI=0,SOLK=null,SOLE=0,SOLN=0,SOLON=false;const SOLB=new Map();
+const SOLM=(()=>{const m=typeof location!=='undefined'&&/[?&]sol=([01])\b/.exec(location.search||'');return m?+m[1]:-1;})();
+function solMeasure(ms){SOLK=null;if(SOLM>=0)return;SOLE=SOLN?SOLE*.9+ms*.1:ms;if(++SOLN>=30&&SOLE>3)SOLON=true;}
+function solDraw(c0,c1,r0,r1){
+  if(!(SOLM===1||SOLM<0&&SOLON)||typeof document==='undefined')return false;
+  const w=cv.width,h=cv.height,s=PS*RZ;
+  for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(!c||!c.bake&&!(c.bk&&c.bk.cv))return false;}
+  if(!SOLC||SOLC[0].width!==w||SOLC[0].height!==h){SOLC=[mkCanvas(w,h),mkCanvas(w,h)];SOLK=null;}
+  let K=SOLK;if(K&&Math.abs(s/K.s-1)>.001)K=null;
+  const sc=K?K.s:s,tx=Math.round(PS*(W/2+RSX)-CAM.x*sc),ty=Math.round(PS*(H/2+RSY)-CAM.y*sc),R=[];
+  let full=!K,dx=0,dy=0;
+  if(K){dx=tx-K.tx;dy=ty-K.ty;if(Math.abs(dx)>=w||Math.abs(dy)>=h)full=true;}
+  let T=SOLC[SOLI];
+  if(full){SOLB.clear();R.push([0,0,w,h]);}
+  else if(dx||dy){const D=SOLC[SOLI^1],g=D.getContext('2d');g.setTransform(1,0,0,1,0,0);g.globalAlpha=1;g.globalCompositeOperation='source-over';g.drawImage(T,dx,dy);T=D;SOLI^=1;
+    if(dx>0)R.push([0,0,dx,h]);else if(dx<0)R.push([w+dx,0,-dx,h]);
+    if(dy>0)R.push([0,0,w,dy]);else if(dy<0)R.push([0,h+dy,w,-dy]);}
+  /* chunks changés : cuisson en cours (toujours), ou surface différente de celle déjà posée dans la toile */
+  const V=[];
+  for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy),b=c.bake||c.bk.cv,k=cx+','+cy;V.push(c,b);
+    if(c.bake&&CHV.get(b)!==c){CHV.set(b,c);CHNEW++;}
+    if(!full&&(!c.bake||SOLB.get(k)!==b)){const x=Math.floor(c.x0*sc+tx)-1,y=Math.floor(c.y0*sc+ty)-1,e=Math.ceil(CH*sc)+3;R.push([x,y,e,e]);}
+    SOLB.set(k,b);}
+  if(SOLB.size>256)SOLB.clear();
+  const g=T.getContext('2d');g.globalAlpha=1;g.globalCompositeOperation='source-over';g.imageSmoothingEnabled=true;
+  for(const r of R){const x0=Math.max(0,r[0]),y0=Math.max(0,r[1]),x1=Math.min(w,r[0]+r[2]),y1=Math.min(h,r[1]+r[3]);if(x1<=x0||y1<=y0)continue;
+    g.save();g.setTransform(1,0,0,1,0,0);g.beginPath();g.rect(x0,y0,x1-x0,y1-y0);g.clip();g.fillStyle='#05030c';g.fillRect(x0,y0,x1-x0,y1-y0);
+    g.setTransform(sc,0,0,sc,tx,ty);
+    for(let i=0;i<V.length;i+=2){const c=V[i],X=c.x0*sc+tx,Y=c.y0*sc+ty,E=CH*sc;if(X+E<x0||X>x1||Y+E<y0||Y>y1)continue;g.drawImage(V[i+1],c.x0,c.y0,CH,CH);}
+    g.restore();}
+  SOLK={s:sc,tx,ty};
+  ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(T,0,0);worldTf();
+  return true;
+}
 function drawChunks(){
   const c0=Math.floor(VL/CH),c1=Math.floor(VR/CH),r0=Math.floor(VT/CH),r1=Math.floor(VB/CH);
   /* un chunk en cours de cuisson (c.bk) s'affiche tel quel : opaque, il part du même sol que drawGround */
-  for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy),b=c&&(c.bake||c.bk&&c.bk.cv);if(b){if(c.bake&&CHV.get(b)!==c){CHV.set(b,c);CHNEW++;}ctx.drawImage(b,c.x0,c.y0,CH,CH);}}
+  if(!solDraw(c0,c1,r0,r1)){const t0=performance.now();
+    for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy),b=c&&(c.bake||c.bk&&c.bk.cv);if(b){if(c.bake&&CHV.get(b)!==c){CHV.set(b,c);CHNEW++;}ctx.drawImage(b,c.x0,c.y0,CH,CH);}}
+    solMeasure(performance.now()-t0);}
   fleeBuild();STB=10;DCB=1;DEC=G&&G.p&&G.dec?G.biome:'';
   for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(c){for(const it of c.live)drawLive(it);if(c.bake||c.bk)drawDeco(c);}}
   ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';

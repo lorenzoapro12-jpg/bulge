@@ -26,7 +26,7 @@
    ========================================================= */
 const fs = require('fs'), path = require('path'), cp = require('child_process'), crypto = require('crypto');
 const ROOT = path.resolve(__dirname, '..'), sleep = ms => new Promise(r => setTimeout(r, ms));
-const TESTS = [['worker.js', []], ['pire-navigateur.js', []]];
+const TESTS = [['worker.js', []], ['pire-navigateur.js', []], ['sol.js', []]];
 let ok = true;
 const check = (label, cond, info) => { if (!cond) ok = false; console.log((cond ? '  OK    ' : '  ECHEC ') + label + (info ? '  — ' + info : '')); };
 (async () => {
