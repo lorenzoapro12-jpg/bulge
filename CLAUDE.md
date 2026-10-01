@@ -83,6 +83,15 @@ Outils complémentaires :
   plafonnés. `--ref=` pour l'ancien code, `--k=` pour le coût d'une opération. Appelé par headless.js.
 - `node test/art.js` — séquence BRUTE des opérations canvas de 378 chunks comparée à `e3a2c93` (chemin principal ; avant : `93b8cfe`,
   avant PERF-2) : toute modification de l'art du monde échoue. Appelé par headless.js.
+- `node test/regule.js` — garde-fou du **régulateur de qualité** (`perf()` : référence `REFDT`, crans,
+  plafond manuel). Il compte les **images dégradées**, pas seulement l'état final : c'est ce chiffre qui a
+  réfuté une première correction (elle rendait la qualité, au prix de 64 s de jeu dégradé). `--ref=` pour
+  l'ancien code. Appelé par headless.js.
+- `node test/saut.js` — garde-fou du **filet de budget** (`skipCtl` : `SKP`, `SKW`, `SKIPD`), sur horloge
+  virtuelle : un rappel en double (`dt < DTMIN`) ne nourrit plus la période estimée, la cuisson budgétée ne
+  bloque plus la remontée de `SKP`, `SKW` se révise des deux côtés. `--ref=` pour l'ancien code. Appelé par
+  headless.js. ⚠️ Il **extrait `skipCtl` de `g4.js`** : si ce bloc est renommé ou déplacé, le banc doit
+  échouer **en le disant** — ne jamais « réparer » en assouplissant l'extraction.
 - `node test/unused.js` — recensement du code mort (identifiants, `SFX`, `id` HTML,
   classes CSS, médias). À lancer avant d'affirmer qu'un symbole est utilisé.
 - `node test/compteur.js` — garde-fou du compteur de diagnostic (`meta.fps`) : chaque ligne doit
