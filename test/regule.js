@@ -9,6 +9,8 @@
      - le mode « Auto » ne doit pas avoir bouge d'un cran (trajectoire comparee a celle de TEMOIN).
    Bloc X (chantier A1) : entrees ABERRANTES — fenetre a 0,4 ms, rafale breve a 8 ms, reprise apres
    pause. La reference doit rester plausible et le regulateur ne doit ni tomber ni rester verrouille.
+   Bloc R (chantier R2) : la reference doit pouvoir REMONTER — debut leger PUIS 60 ips (l'ordre du S22),
+   saccade toujours combattue, jeu uniformement lent (decision ecrite), delai de revision borne des deux cotes.
 
    Fait mesure a l'origine (S22 du proprietaire) : 46 ips / pire 59 ms et 58 ips / pire 25 ms avec
    exactement le meme « effets 2/3 · PS 1.25 · ref 0.0 ms » — perf() sortait des que meta.q!=='auto'.
@@ -286,6 +288,83 @@ for (const [nom, raf] of [['rafale absurde (0,4 ms)', [120, ABS]], ['rafale brev
   const R = suivi(GAME, [[IMG(5), SAIN], [120, ABS], [IMG(20), () => 33.3]]);
   check(`auto : apres une fenetre absurde, une vraie lenteur (30 ips sur ecran 60 Hz) fait toujours DESCENDRE`,
     R.F.QL === 1 && R.F.RES === .8 && R.F.ref > 16 && R.F.ref < 17.5, `final ${J(R.F)} (attendu 1/0.8), REFDT=${R.F.ref.toFixed(2)} ms`);
+}
+
+/* ================= R — la reference doit pouvoir REMONTER (chantier R2, 01/10/2026) =================
+   Fait mesure (S22 du proprietaire, artefact 1167a527…) : « 60 ips · image 16.6 ms … régul plafond mid ↓ 1/3 ×0.80
+   … ref 8.4 ms ». REFDT etait un MINIMUM entre deux refReset() : un debut de partie leger (~2 s a 8,3 ms, ecran
+   120 Hz) la fixait a 8,3, puis 16,6 ms passait pour lent a vie — p90 > 1,35×8,3 toujours vrai (descente),
+   mediane < 1,10×8,3 jamais vraie (remontee impossible). Les blocs X1/X3 ne testaient que l'ordre inverse
+   (sain PUIS rafale) : avec un minimum historique, c'est l'ORDRE qui decide. */
+const R120 = () => 8.3;                                /* debut de partie leger sur ecran 120 Hz */
+const LENT = () => 33.3;
+const cliquet = (r) => r < 10 ? ` ; CAUSE : reference restee a ${r.toFixed(1)} ms — cliquet, REFDT est un minimum historique (g4.js, perf()), elle ne remonte jamais` : '';
+
+/* R1 — l'ordre du proprietaire : 240 images a 8,3 ms (2 s reelles a 120 Hz) puis 90 s a 16,7 ms, manuel « Équilibrée » */
+{
+  GAME.pose('mid', null);
+  let haut = '';
+  const vu = (S) => { if (!haut && (S.QL > 2 || S.RES > 1)) haut = `QL/RES=${J(S)} au-dessus du cran 2/1`; };
+  GAME.play(240, R120, vu);
+  const A = GAME.st();
+  GAME.play(IMG(90), SAIN, vu);
+  const F = GAME.st();
+  check(`R1 mid, ordre du proprietaire (2 s a 8,3 ms PUIS 90 s a 16,7 ms) : la reference ne reste pas a 8,3 ms`,
+    A.ref < 9 && F.ref > 16 && F.ref < 17.5,
+    `REFDT=${A.ref.toFixed(2)} ms apres le debut leger, ${F.ref.toFixed(2)} ms apres 90 s a 60 ips (attendu ~16,7)` + cliquet(F.ref)
+    + (A.ref >= 9 ? ` ; BANC : le debut leger n'a pas abaisse la reference, le cas n'est pas reproduit` : ''));
+  check(`R1 mid, ordre du proprietaire : la qualite REMONTE a 2/1 (la machine tient 60 ips)`, J(F) === '2/1',
+    `final ${J(F)} (attendu 2/1)` + cliquet(F.ref));
+  /* cas 4 — en manuel la remontee s'arrete au cran choisi : controle image par image sur toute la sequence */
+  check(`R1 mid : la remontee s'arrete a 2/1, jamais au-dessus, a aucune image`, !haut, haut || `${240 + IMG(90)} images controlees, final ${J(F)}`);
+}
+
+/* R2 — regime IRREGULIER (majorite 16,7, pointes 33,3), y compris apres que la reference a remonte : la descente
+   doit TOUJOURS se declencher, et la reference ne doit pas suivre les pointes (la mediane reste 16,7). */
+for (const [nom, pre, irr] of [
+  ['1 image sur 5 a 33,3 ms', [[IMG(5), SAIN]], SACCADE],
+  ['1 image sur 7 a 33,3 ms', [[IMG(5), SAIN]], (i) => (i % 7 === 3 ? 33.3 : 16.7)],
+  ['apres l\'ordre du proprietaire, 1 image sur 5 a 33,3 ms', [[240, R120], [IMG(90), SAIN]], SACCADE]]) {
+  for (const q of ['auto', 'mid']) {
+    GAME.pose(q, null);
+    const P = suivi(GAME, pre).F;                /* avant l'irregularite : la qualite doit etre AU cran, sinon rien a prouver */
+    const R = suivi(GAME, [[IMG(120), irr]]);
+    check(`R2 ${q}, ${nom} pendant 120 s : la descente se declenche (depuis le cran) et la qualite RESTE au plancher 1/0.8`,
+      J(P) === J({ QL: CRAN[q === 'auto' ? 'high' : q][0], RES: 1 }) && J(R.F) === '1/0.8' && R.F.ref > 16 && R.F.ref < 17.5,
+      `avant ${J(P)}, final ${J(R.F)} (attendu 1/0.8), REFDT=${R.F.ref.toFixed(2)} ms (attendu ~16,7 : les pointes ne deviennent pas la reference)` + cliquet(R.F.ref));
+  }
+}
+
+/* R3 — jeu UNIFORMEMENT a 33,3 ms. Ce que l'instrument decide, ecrit ici pour qu'aucun changement ne le deplace en silence :
+   a) des le debut : la reference S'ETABLIT a 33,3 ms (2 premieres secondes de jeu), rien ne descend. Aveugle par
+      construction — c'etait deja le cas avant R2 (l'etablissement prend le maximum glissant), R2 n'y change rien.
+   b) apres 5 s saines : descente au plancher 1/0.8 (X5) ; puis, si le PLANCHER LUI-MEME reste a 33,3 ms (~20 s
+      d'images au plancher, lentes, mediane >= 1,10× la reference), la reference est revisee a 33,3 ms et la qualite
+      remonte au cran : tout retirer n'a rien rendu, la lenteur ne vient pas des pixels — les garder bas ne coute
+      que de la qualite. C'est exactement la situation du S22 (60 ips au plancher comme au cran). */
+{
+  GAME.pose('auto', null);
+  const a = suivi(GAME, [[IMG(60), LENT]]);
+  check(`R3a auto, 33,3 ms des la premiere image (60 s) : reference etablie a 33,3 ms, aucune descente (aveugle, comme avant R2)`,
+    a.qMin === '3/1' && a.F.ref > 33 && a.F.ref < 34, `pire cran ${a.qMin}, final ${J(a.F)}, REFDT=${a.F.ref.toFixed(2)} ms`);
+  GAME.pose('auto', null);
+  const b1 = suivi(GAME, [[IMG(5), SAIN], [IMG(20), LENT]]);
+  check(`R3b auto, 5 s saines puis 20 s a 33,3 ms : DESCENTE au plancher, reference toujours 16,7 ms`,
+    J(b1.F) === '1/0.8' && b1.F.ref > 16 && b1.F.ref < 17.5, `final ${J(b1.F)}, REFDT=${b1.F.ref.toFixed(2)} ms`);
+  /* le delai de revision est BORNE PAR LE BAS : une phase lourde de 25 s (descente ~10 s, puis ~15 s au plancher)
+     est encore COMBATTUE — sinon la qualite remonterait au milieu d'une scene chargee. Sans ce point, un seuil
+     de 300 images passait toute la garde. */
+  GAME.pose('auto', null);
+  const c = suivi(GAME, [[IMG(5), SAIN], [IMG(25), LENT]]);
+  check(`R3c auto, 5 s saines puis 25 s a 33,3 ms : toujours au plancher, reference NON revisee (pas d'abandon precoce)`,
+    J(c.F) === '1/0.8' && c.F.ref > 16 && c.F.ref < 17.5,
+    `final ${J(c.F)}, REFDT=${c.F.ref.toFixed(2)} ms` + (c.F.ref > 20 ? ` ; CAUSE : reference revisee apres moins de ~15 s au plancher — la lenteur est acceptee au lieu d'etre combattue` : ''));
+  GAME.pose('auto', null);
+  GAME.play(IMG(5), SAIN); GAME.play(IMG(20), LENT);
+  const b2 = suivi(GAME, [[IMG(100), LENT]]);
+  check(`R3b auto, puis 100 s de plus a 33,3 ms AU PLANCHER : reference revisee a 33,3 ms, qualite rendue (3/1)`,
+    J(b2.F) === '3/1' && b2.F.ref > 33 && b2.F.ref < 34, `final ${J(b2.F)}, REFDT=${b2.F.ref.toFixed(2)} ms`
+    + (b2.F.ref < 20 ? ` ; CAUSE : reference restee a ${b2.F.ref.toFixed(1)} ms alors que le plancher lui-meme tient 33,3 ms — cliquet, minimum historique` : ''));
 }
 
 /* ---------- verdict ---------- */

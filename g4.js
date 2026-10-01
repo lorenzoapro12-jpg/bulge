@@ -279,8 +279,8 @@ function applyQuality(){const q=meta.q||'auto';
      ecran 60 Hz), que le plancher laisse passer. Le minimum reste l'operateur de fond (un jeu lent ne
      redefinit pas sa propre reference), mais il s'applique a une valeur SOUTENUE, pas a un echantillon. */
 const DTMIN=4,REFM=[];
-let REFDT=0,REFN=0,qn=0;
-function refReset(){REFDT=0;REFN=0;qn=0;slowT=0;upT=0;DTH.length=0;REFM.length=0;}
+let REFDT=0,REFN=0,qn=0,flT=0;
+function refReset(){REFDT=0;REFN=0;qn=0;flT=0;slowT=0;upT=0;DTH.length=0;REFM.length=0;}
 function perf(dt){
   /* Les ips ne se calculent plus ici. Un compteur de 500 ms qui avancait sur TOUTES les images
      (menu, pause, ecran de fin compris, bien moins cheres) pouvait afficher 84 ips quand le jeu en
@@ -315,6 +315,18 @@ function perf(dt){
   REFM.push(med);if(REFM.length>9)REFM.shift();
   const env=Math.max(...REFM);REFDT=REFDT>0&&REFM.length>8?Math.min(REFDT,env):env;
   if(REFN<8){REFN++;return;}   /* ~2 s : etablissement, aucune decision */
+  /* ⚠️ Chantier R2 (01/10/2026) : « 60 ips · image 16.6 ms … plafond mid ↓ 1/3 ×0.80 … ref 8.4 ms » sur le S22.
+     Le minimum ci-dessus ne fait que DESCENDRE : ~2 s legeres a 8,3 ms (ecran 120 Hz, debut de partie) et 16,6 ms
+     passait pour lent jusqu'a la fin de la partie (p90 > 1,35x toujours vrai, mediane < 1,10x jamais vraie).
+     La reference REMONTE donc sur une seule preuve : le regulateur a TOUT retire (plancher 1/0.8) et la mediane
+     reste >= 1,10x la reference pendant ~20 s d'images (1200). Retirer n'a rien rendu : la periode visee n'est
+     pas atteignable par la qualite, elle devient le maximum glissant REFM (la mediane SOUTENUE, pas les pointes).
+     Une saccade (mediane 16,7, p90 33,3) ne remplit pas la condition : la descente reste entiere. 20 s et non
+     moins : une vraie lenteur doit d'abord etre combattue (descente en ~10 s), pas aussitot acceptee.
+     Refuse : estimer la periode sur les images HORS partie (menus). La boucle y tourne bien, mais elle y mesure
+     la DALLE — 8,3 ms sur ce S22 — c'est-a-dire precisement la valeur qui l'a verrouille. */
+  flT=p90>REFDT*1.35&&med>=REFDT*1.10&&QL<=1&&RES<=.8?flT+15:0;
+  if(flT>1200){flT=0;slowT=0;upT=0;REFDT=env;}
   /* Descente rapide (~1 s au-dessus de 1,35x), remontée LENTE et plus exigeante (~5 s sous 1,10x).
      L'asymétrie est voulue : une oscillation entre deux crans saccaderait plus que le défaut, et
      une remontée est indolore (au pire on redescend au cran suivant). Sans elle, la qualité était
