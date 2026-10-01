@@ -17,12 +17,15 @@
      M4. retour au jeu : le canevas est de nouveau dessiné à chaque image ;
      M5. après une mort, revenir au menu ne laisse pas le canevas assombri (classe `dying`) ;
      M6. CSS : aucun `backdrop-filter`, aucun `filter` dans une animation (@keyframes), `#cv.dying` sans `filter`.
+     M7. redimensionnement sur le menu figé : le fond n'est refigé qu'une fois les chunks devenus visibles cuits ;
+     M8. menu figé en ville : pas de façade de tour manquante sur l'image figée (textures absentes du fil principal
+         quand le worker a cuit les chunks : drawTowers n'en prépare qu'une par image).
 
    node test/menus.js              arbre de travail
    node test/menus.js --ref=HEAD   code d'origine (doit ÉCHOUER : c'est le témoin)
    Code de sortie : 0 si tout passe, 1 sinon.
    ========================================================= */
-const VW = 1920, VH = 1080;
+let VW = 1920, VH = 1080;
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
@@ -165,6 +168,34 @@ call(`newRun('bal',false);gsRunStart();gcRunStart();giRunStart();gxRunStart();gt
   for (const m of sh.matchAll(/@keyframes\s+([\w-]+)\s*\{((?:[^{}]*\{[^{}]*\})*[^{}]*)\}/g)) if (/filter\s*:/.test(m[2])) bad.push('@keyframes ' + m[1] + ' anime filter');
   const dy = sh.match(/#cv\.dying\s*\{([^}]*)\}/); if (dy && /filter\s*:/.test(dy[1])) bad.push('#cv.dying : filter');
   check('M6. CSS : ni backdrop-filter, ni filter animé, ni filtre sur le canevas à la mort', bad.length === 0, bad.join(' ; ') || 'aucun');
+}
+
+/* ---------- M7. redimensionnement sur le menu figé ---------- */
+/* `img()` puis `bgPret()` : l'état du monde que montre la dernière image dessinée. Une fenêtre plus basse dézoome le menu :
+   des chunks neufs entrent à l'écran. Le fond ne doit pas se refiger sur la première image redessinée s'ils ne sont pas prêts. */
+/* figé = 8 images de suite sans opération (le menu ne redessine qu'une image sur deux) ; k = images redessinées avant */
+const figeA = () => { let pret = null, k = 0, z = 0; for (let i = 0; i < 400 && z < 8; i++) { if (img().n === 0) z++; else { z = 0; k++; pret = call('bgPret()'); } } return { pret, k }; };
+{
+  call(`G=null;show('ov-menu');`); imgs(400);
+  VW = 1920; VH = 560; call('resize();');
+  const r = figeA();
+  check('M7. redimensionnement sur le menu figé : le fond n\'est refigé qu\'une fois le monde visible prêt', r.pret === true && r.k < 400,
+    `${r.k} image(s) redessinée(s) avant de refiger ; monde prêt sur la dernière : ${r.pret}`);
+  VW = 1920; VH = 1080; call('resize();'); imgs(400);
+}
+/* ---------- M8. façades de la ville sur le menu figé ---------- */
+/* Avec le worker, les chunks de la ville sont cuits ailleurs : les textures de façade (FACS) n'existent pas encore sur le fil
+   principal, et drawTowers en prépare une par image. Ici, monde cuit sur place puis FACS vidé = la situation du worker. */
+{
+  const rt = call(`(function(){for(let r=0;r<2e5;r+=25){const x=Math.cos(r*.0007)*WR*.42,y=Math.sin(r*.00091)*WR*.38;if(biomeAt(x,y)==='urban')return r;}return -1;})()`);
+  call(`(function(){const d=drawTowers;globalThis.__TW=0;drawTowers=function(){__TW=Math.max(__TW,TWL.length);return d.apply(this,arguments);};})()`);
+  call(`MRT=${rt};CVOK=false;BGK='';BGN=0;`); imgs(400);
+  call(`FACS.length=0;CVOK=false;BGK='';BGN=0;`); const r = figeA();
+  const tours = call('__TW'), n0 = call('FACS.filter(Boolean).length');
+  for (let i = 0; i < 20; i++) { call('CVOK=false;'); img(); }
+  const n1 = call('FACS.filter(Boolean).length');
+  check('M8. menu figé sur la ville : aucune façade encore manquante sur l\'image figée', rt >= 0 && tours > 0 && n1 === n0,
+    `caméra du menu en ville : ${rt >= 0} ; ${tours} tour(s) à l'écran ; figé après ${r.k} image(s) avec ${n0} façade(s) prête(s), 20 rendus forcés ensuite en préparent ${n1 - n0} de plus`);
 }
 
 console.log(`test/menus.js — ${REF ? 'code ' + REF : 'arbre de travail'}`);

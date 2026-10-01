@@ -3546,7 +3546,7 @@ let SAFE={t:0,b:0,l:0,r:0};
 function readSafe(){const d=document.getElementById('safeprobe');if(!d)return;const cs=getComputedStyle(d);SAFE={t:parseFloat(cs.paddingTop)||0,b:parseFloat(cs.paddingBottom)||0,l:parseFloat(cs.paddingLeft)||0,r:parseFloat(cs.paddingRight)||0};}
 function fitFont(c,s,maxW,px,wt){c.font=wt+' '+px+'px '+FD;const w=c.measureText(s).width;if(w>maxW){px=Math.max(10,Math.floor(px*maxW/w));c.font=wt+' '+px+'px '+FD;}return px;}
 function resize(){readSafe();const r=cv.parentElement.getBoundingClientRect();W=Math.max(300,r.width);H=Math.max(300,r.height);DPR=Math.min(2,window.devicePixelRatio||1);applyRes();}
-function applyRes(){CVOK=false;PS=Math.min(DPR,QL>=3?(COARSE?1.5:2):QL===2?1.25:1)*RES;cv.width=Math.round(W*PS);cv.height=Math.round(H*PS);
+function applyRes(){CVOK=false;BGK='';BGN=0;PS=Math.min(DPR,QL>=3?(COARSE?1.5:2):QL===2?1.25:1)*RES;cv.width=Math.round(W*PS);cv.height=Math.round(H*PS);
   if(!VIG){VIG=mkCanvas(128,128);const g=VIG.getContext('2d'),gr=g.createRadialGradient(64,64,30,64,64,92);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(2,0,8,.62)');g.fillStyle=gr;g.fillRect(0,0,128,128);}
   if(!CAUSP)buildCaus();}
 const SPR={};
@@ -3674,7 +3674,7 @@ function render(A,dt){
 }
 /* menu principal : tout ce qui est visible est prêt — chunks cuits, et cette image n'a créé ni sprite d'obstacle (SPRB),
    ni décor de chunk (DCB), ni surface de mer (CAUB), ni grappe de lueurs (FLB) faute de budget */
-function bgPret(){if(SPRB!==3||DCB!==1||CAUB!==1||QL>=2&&FLB!==2)return false;
+function bgPret(){if(FACM||SPRB!==3||DCB!==1||CAUB!==1||QL>=2&&FLB!==2)return false;
   for(let cx=Math.floor(VL/CH);cx<=Math.floor(VR/CH);cx++)for(let cy=Math.floor(VT/CH);cy<=Math.floor(VB/CH);cy++){const c=getChunk(cx,cy);if(c&&!c.bake)return false;}return true;}
 function drawGround(){
   const k=256/(2*WR),wl=CAM.x-(W/2+RSX)/RZ,wt=CAM.y-(H/2+RSY)/RZ;
@@ -3984,13 +3984,13 @@ function drawObstacles(){
    hauteur ; chaque façade tournée vers la caméra est un parallélogramme, donc l'image AFFINE d'une texture
    de fenêtres (facTex) : un setTransform et un drawImage. La collision reste l'emprise au sol. Ordre du
    peintre : la plus éloignée d'abord, pour qu'un toit proche recouvre la façade d'une tour plus lointaine. */
-const TWL=[],TWK=.13,TWM=100,PHH=2.6;
+const TWL=[],TWK=.13,TWM=100,PHH=2.6;let FACM=0;/* une façade manquait à la dernière image (texture pas encore prête ici, ex. chunk cuit par le worker) : le menu ne se fige pas dessus */
 /* décalage du sommet d'un objet de hauteur T posé en x,y (borné à m) */
 function twOff(x,y,T,m){const k=T*TWK;return[clamp((x-CAM.x)*k,-m,m),clamp((y-CAM.y)*k,-m,m)];}
 function drawTowers(){
-  if(!TWL.length)return;const c=ctx,s=PS*RZ,tx=PS*(W/2+RSX-CAM.x*RZ),ty=PS*(H/2+RSY-CAM.y*RZ);let nb=1;
+  FACM=0;if(!TWL.length)return;const c=ctx,s=PS*RZ,tx=PS*(W/2+RSX-CAM.x*RZ),ty=PS*(H/2+RSY-CAM.y*RZ);let nb=1;
   TWL.sort((a,b)=>dist2(b.cx,b.cy,CAM.x,CAM.y)-dist2(a.cx,a.cy,CAM.x,CAM.y));
-  const face=(o,x0,y0,x1,y1,dx,dy,dk)=>{let t=FACS[(o.s%FACN)*2+(dk?1:0)];if(!t){if(nb<=0)return;nb--;t=facTex(o.s%FACN,dk);}
+  const face=(o,x0,y0,x1,y1,dx,dy,dk)=>{let t=FACS[(o.s%FACN)*2+(dk?1:0)];if(!t){if(nb<=0){FACM=1;return;}nb--;t=facTex(o.s%FACN,dk);}
     const L=Math.hypot(x1-x0,y1-y0),u0=(o.s>>>4)%(FACW-L|0||1);
     c.setTransform(s*(x1-x0)/L,s*(y1-y0)/L,-s*dx/FACH,-s*dy/FACH,s*(x0+dx)+tx,s*(y0+dy)+ty);c.drawImage(t,u0*2,0,L*2,FACH*2,0,0,L,FACH);};
   for(const o of TWL){
