@@ -49,13 +49,18 @@ function worldTf(){ctx.setTransform(PS*RZ,0,0,PS*RZ,PS*(W/2+RSX-CAM.x*RZ),PS*(H/
 function screenTf(){ctx.setTransform(PS,0,0,PS,0,0);}
 
 /* couche basse résolution (1/4) : décor lointain + grands halos additifs. Dessinée 16× moins de pixels, puis étirée une fois. */
+/* ⚠️ Saccades sur ordinateur (01/10/2026) : cette couche était un <canvas id="low"> du DOM en mix-blend-mode:screen,
+   plein écran. Le navigateur devait alors MÉLANGER deux calques plein écran à chaque image : PC du propriétaire
+   (Firefox, 1680×1050), « hors-JS » 12,0 ms par image avec ce mélange, 2,9 ms sans (même partie, qualité basse) ;
+   en auto, 50 ips et des images à 50 ms. Elle est désormais étirée DANS le canevas principal avec le même
+   opérateur 'screen' (même formule que le CSS) : un drawImage, plus de calque à mélanger. LOWDOM reste faux. */
 let LOWC=null,LOWG=null,LOWN=0,LOWDOM=false;
 function lowBegin(){const w=Math.max(8,Math.ceil(cv.width/4)),h=Math.max(8,Math.ceil(cv.height/4));
-  if(!LOWC){LOWC=$('low')||mkCanvas(w,h);LOWG=LOWC.getContext('2d');LOWDOM=!!$('low');}if(LOWC.width!==w||LOWC.height!==h){LOWC.width=w;LOWC.height=h;}
+  if(!LOWC){LOWC=mkCanvas(w,h);LOWG=LOWC.getContext('2d');}if(LOWC.width!==w||LOWC.height!==h){LOWC.width=w;LOWC.height=h;}
   LOWG.setTransform(1,0,0,1,0,0);LOWG.globalCompositeOperation='source-over';LOWG.globalAlpha=1;LOWG.clearRect(0,0,w,h);LOWN=0;ctx=LOWG;}
 function lowWorld(){ctx.setTransform(PS*RZ/4,0,0,PS*RZ/4,PS*(W/2+RSX-CAM.x*RZ)/4,PS*(H/2+RSY-CAM.y*RZ)/4);}
 function lowScreen(){ctx.setTransform(PS/4,0,0,PS/4,0,0);}
-function lowEnd(){ctx=MAINCTX;if(!LOWN||LOWDOM)return;ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1;ctx.globalCompositeOperation='lighter';ctx.imageSmoothingEnabled=true;ctx.drawImage(LOWC,0,0,cv.width,cv.height);ctx.globalCompositeOperation='source-over';}
+function lowEnd(){ctx=MAINCTX;if(!LOWN||LOWDOM)return;ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=G&&G.p&&G.p.dead?.4:1;ctx.globalCompositeOperation='screen';ctx.imageSmoothingEnabled=true;ctx.drawImage(LOWC,0,0,cv.width,cv.height);ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';}
 /* grands halos du monde (joueur, cœurs, noyau, explosions) : dans la couche basse résolution */
 function drawLowGlows(){
   const c=ctx;c.globalCompositeOperation='lighter';
