@@ -4636,8 +4636,15 @@ function applyQuality(){const q=meta.q||'auto';
      a 15 images d'ecart couvrent deux fenetres DISJOINTES de 120 images : une mediane basse n'abaisse la
      reference que si elle a TENU ~2 s. Il elimine la rafale plausible mais breve (8 ms une seconde sur un
      ecran 60 Hz), que le plancher laisse passer. Le minimum reste l'operateur de fond (un jeu lent ne
-     redefinit pas sa propre reference), mais il s'applique a une valeur SOUTENUE, pas a un echantillon. */
-const DTMIN=4,REFM=[];
+     redefinit pas sa propre reference), mais il s'applique a une valeur SOUTENUE, pas a un echantillon.
+   ⚠️ Chantier R3 (01/10/2026) : 9 medianes = 120+8×15 images, et une phase legere de 240 images (2 s a 120 Hz,
+   debut de partie du S22) les remplissait : la garde avait la longueur du phenomene. La reference montait sur
+   preuve (flT, ~1200 images au plancher), elle descendait sans. REFK=15 : une phase legere doit tenir >=271
+   images (120+14×15, dont 61 dans la 1re fenetre) pour abaisser la reference, et l'etablissement (reference =
+   maximum de tout REFM tant qu'il n'est pas plein) dure 15 evaluations au lieu de 9. Choisi par balayage
+   (oracle-ref + test/regule.js) : K<=13 -> 240 images en debut de partie coutent 64 s degradees ; K>=18 -> une
+   lenteur apres 5 s saines est prise pour la reference (X5, R3b, R3c). 15 est dans [14,17], a 1 cran du bas. */
+const DTMIN=4,REFK=15,REFM=[];
 let REFDT=0,REFN=0,qn=0,flT=0;
 function refReset(){REFDT=0;REFN=0;qn=0;flT=0;slowT=0;upT=0;DTH.length=0;REFM.length=0;}
 function perf(dt){
@@ -4671,8 +4678,8 @@ function perf(dt){
      etre separes de moins d'une periode, et un minimum brut garde a vie la pire fenetre (voir DTMIN).
      Tant que REFM n'est pas plein (etablissement, apres chaque refReset), la reference EST ce maximum :
      sinon la premiere fenetre apres une reprise — la plus exposee aux rafales — se figerait seule. */
-  REFM.push(med);if(REFM.length>9)REFM.shift();
-  const env=Math.max(...REFM);REFDT=REFDT>0&&REFM.length>8?Math.min(REFDT,env):env;
+  REFM.push(med);if(REFM.length>REFK)REFM.shift();
+  const env=Math.max(...REFM);REFDT=REFDT>0&&REFM.length>=REFK?Math.min(REFDT,env):env;
   if(REFN<8){REFN++;return;}   /* ~2 s : etablissement, aucune decision */
   /* ⚠️ Chantier R2 (01/10/2026) : « 60 ips · image 16.6 ms … plafond mid ↓ 1/3 ×0.80 … ref 8.4 ms » sur le S22.
      Le minimum ci-dessus ne fait que DESCENDRE : ~2 s legeres a 8,3 ms (ecran 120 Hz, debut de partie) et 16,6 ms

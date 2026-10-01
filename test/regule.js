@@ -11,6 +11,7 @@
    pause. La reference doit rester plausible et le regulateur ne doit ni tomber ni rester verrouille.
    Bloc R (chantier R2) : la reference doit pouvoir REMONTER — debut leger PUIS 60 ips (l'ordre du S22),
    saccade toujours combattue, jeu uniformement lent (decision ecrite), delai de revision borne des deux cotes.
+   Bloc R4 (chantier R3) : le COUT, image par image — une phase legere breve (120/240 images) ne degrade RIEN.
 
    Fait mesure a l'origine (S22 du proprietaire) : 46 ips / pire 59 ms et 58 ips / pire 25 ms avec
    exactement le meme « effets 2/3 · PS 1.25 · ref 0.0 ms » — perf() sortait des que meta.q!=='auto'.
@@ -365,6 +366,35 @@ for (const [nom, pre, irr] of [
   check(`R3b auto, puis 100 s de plus a 33,3 ms AU PLANCHER : reference revisee a 33,3 ms, qualite rendue (3/1)`,
     J(b2.F) === '3/1' && b2.F.ref > 33 && b2.F.ref < 34, `final ${J(b2.F)}, REFDT=${b2.F.ref.toFixed(2)} ms`
     + (b2.F.ref < 20 ? ` ; CAUSE : reference restee a ${b2.F.ref.toFixed(1)} ms alors que le plancher lui-meme tient 33,3 ms — cliquet, minimum historique` : ''));
+}
+
+/* ================= R4 — le COUT d'une phase legere BREVE (chantier R3, 01/10/2026) =================
+   R2 rendait l'etat final juste, mais une phase legere de 240 images (2 s a 120 Hz) COUTAIT ~64 s de jeu degrade,
+   ou qu'elle tombe : la reference descendait sans preuve (REFM = 9 medianes, 240 images suffisaient a les remplir ;
+   au debut de partie, l'etablissement la SUIVAIT), et seule la valve flT (~1200 images au plancher) la rendait.
+   On compte ici les images degradees, une a une : sous le cran choisi, a n'importe quelle image. */
+const degradees = (q, segs) => {
+  GAME.pose(q, null);
+  const c = CRAN[q === 'auto' ? 'high' : q];
+  let n = 0, deg = 0, refMin = Infinity;
+  for (const [k, f] of segs) GAME.play(k, f, (S) => { n++; if (S.QL < c[0] || S.RES < c[1]) deg++; if (S.ref > 0 && S.ref < refMin) refMin = S.ref; });
+  return { n, deg, refMin, F: GAME.st() };
+};
+const cout = (r) => `${r.deg} images degradees sur ${r.n} (${(r.deg / 60).toFixed(1)} s), pire REFDT=${r.refMin.toFixed(2)} ms, final ${J(r.F)}`
+  + (r.deg && r.refMin < 10 ? ` ; CAUSE : la phase breve a abaisse la reference (REFDT descend sans preuve de tenue : REFM trop court, ou l'etablissement la suit) ; seule une revision tardive (valve flT de R2, ~1200 images au plancher) peut la rendre` : '');
+for (const q of ['mid', 'auto']) {
+  for (const pos of [0, IMG(7), IMG(33), IMG(77)]) {
+    for (const L of [120, 240]) {
+      const r = degradees(q, [[pos, SAIN], [L, R120], [IMG(60), SAIN]].filter(s => s[0]));
+      check(`R4 ${q}, ${L} images a 8,3 ms apres ${(pos / 60).toFixed(0)} s, puis 60 s a 16,7 ms : AUCUNE image degradee`,
+        r.deg === 0 && r.F.ref > 16 && r.F.ref < 17.5, cout(r));
+    }
+  }
+}
+{
+  const segs = []; for (let k = 0; k < 6; k++) segs.push([240, R120], [IMG(45), SAIN]);
+  const r = degradees('mid', segs);
+  check(`R4 mid, 6 phases de 240 images a 8,3 ms, une toutes les 45 s : AUCUNE image degradee`, r.deg === 0 && r.F.ref > 16 && r.F.ref < 17.5, cout(r));
 }
 
 /* ---------- verdict ---------- */
