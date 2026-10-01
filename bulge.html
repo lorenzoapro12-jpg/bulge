@@ -183,7 +183,6 @@ p.sub{color:#c9c3ea;font-size:16px;max-width:52ch;line-height:1.4}
 #ov-duel.on>.dvin{animation:none}#ov-duel.on #dvAct{animation:ovin .5s}#ov-duel.on>.dvin>:not(.dvact){animation:duelin .5s cubic-bezier(.2,.8,.2,1)}@keyframes duelin{from{opacity:0;transform:scale(1.08);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
 #cv{transition:filter 1.2s ease}#cv.dying{filter:grayscale(.85) brightness(.72) contrast(1.1)}
 @media (prefers-reduced-motion:reduce){.ov.on>.in,#ov-duel.on>.dvin>:not(.dvact){animation:none}#cv{transition:none}}
-#low{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;mix-blend-mode:screen;z-index:1}#cv.dying+#low{opacity:.4;transition:opacity 1.2s}
 .shake{animation:shk .35s}@keyframes shk{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
 table{width:100%;border-collapse:collapse;font-size:15px}
 td{padding:9px 6px;border-bottom:1px solid rgba(255,255,255,.07);text-align:left}
@@ -194,7 +193,7 @@ td.num{font-weight:700;color:var(--gd)}
 </head>
 <body>
 <div id="wrap">
-<canvas id="cv"></canvas><canvas id="low"></canvas><div class="fxo" id="vig"></div><div class="fxo" id="hurt"></div><div class="fxo" id="flash"></div><div class="fxo" id="wash"></div><div class="fxo" id="tfrz"></div>
+<canvas id="cv"></canvas><div class="fxo" id="vig"></div><div class="fxo" id="hurt"></div><div class="fxo" id="flash"></div><div class="fxo" id="wash"></div><div class="fxo" id="tfrz"></div>
 <div id="safeprobe"></div><div id="fade"></div><div id="prompt" hidden></div><div id="topbtns"><button class="ico" id="bPause" aria-label="Pause">❚❚</button><button class="ico" id="bMute" aria-label="Couper le son">🔊</button></div>
 
 <div class="ov on" id="ov-menu"><div class="in">
@@ -3602,13 +3601,18 @@ function worldTf(){ctx.setTransform(PS*RZ,0,0,PS*RZ,PS*(W/2+RSX-CAM.x*RZ),PS*(H/
 function screenTf(){ctx.setTransform(PS,0,0,PS,0,0);}
 
 /* couche basse résolution (1/4) : décor lointain + grands halos additifs. Dessinée 16× moins de pixels, puis étirée une fois. */
+/* ⚠️ Saccades sur ordinateur (01/10/2026) : cette couche était un <canvas id="low"> du DOM en mix-blend-mode:screen,
+   plein écran. Le navigateur devait alors MÉLANGER deux calques plein écran à chaque image : PC du propriétaire
+   (Firefox, 1680×1050), « hors-JS » 12,0 ms par image avec ce mélange, 2,9 ms sans (même partie, qualité basse) ;
+   en auto, 50 ips et des images à 50 ms. Elle est désormais étirée DANS le canevas principal avec le même
+   opérateur 'screen' (même formule que le CSS) : un drawImage, plus de calque à mélanger. LOWDOM reste faux. */
 let LOWC=null,LOWG=null,LOWN=0,LOWDOM=false;
 function lowBegin(){const w=Math.max(8,Math.ceil(cv.width/4)),h=Math.max(8,Math.ceil(cv.height/4));
-  if(!LOWC){LOWC=$('low')||mkCanvas(w,h);LOWG=LOWC.getContext('2d');LOWDOM=!!$('low');}if(LOWC.width!==w||LOWC.height!==h){LOWC.width=w;LOWC.height=h;}
+  if(!LOWC){LOWC=mkCanvas(w,h);LOWG=LOWC.getContext('2d');}if(LOWC.width!==w||LOWC.height!==h){LOWC.width=w;LOWC.height=h;}
   LOWG.setTransform(1,0,0,1,0,0);LOWG.globalCompositeOperation='source-over';LOWG.globalAlpha=1;LOWG.clearRect(0,0,w,h);LOWN=0;ctx=LOWG;}
 function lowWorld(){ctx.setTransform(PS*RZ/4,0,0,PS*RZ/4,PS*(W/2+RSX-CAM.x*RZ)/4,PS*(H/2+RSY-CAM.y*RZ)/4);}
 function lowScreen(){ctx.setTransform(PS/4,0,0,PS/4,0,0);}
-function lowEnd(){ctx=MAINCTX;if(!LOWN||LOWDOM)return;ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1;ctx.globalCompositeOperation='lighter';ctx.imageSmoothingEnabled=true;ctx.drawImage(LOWC,0,0,cv.width,cv.height);ctx.globalCompositeOperation='source-over';}
+function lowEnd(){ctx=MAINCTX;if(!LOWN||LOWDOM)return;ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=G&&G.p&&G.p.dead?.4:1;ctx.globalCompositeOperation='screen';ctx.imageSmoothingEnabled=true;ctx.drawImage(LOWC,0,0,cv.width,cv.height);ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';}
 /* grands halos du monde (joueur, cœurs, noyau, explosions) : dans la couche basse résolution */
 function drawLowGlows(){
   const c=ctx;c.globalCompositeOperation='lighter';
