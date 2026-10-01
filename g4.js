@@ -223,7 +223,7 @@ function ltStart(){if(LT_ST)return;const P=globalThis.PerformanceObserver,T=P&&P
   try{new P(l=>{for(const e of l.getEntries())if(e.duration>DIAG_LT[0]){const a=e.attribution&&e.attribution[0];DIAG_LT[0]=e.duration;DIAG_LT[1]=e.name||'?';DIAG_LT[2]=a&&a.name||'?';}}).observe({entryTypes:['longtask']});LT_ST=1;}
   catch(e){LT_ST=-2;}}
 const JSPROF_N=['render','step','streamWorld','bakeStep','genChunk','getChunk','perf',
-  'drawChunks','drawLive','drawDeco','solDraw','drawTowers','drawHUD','gcHUD','gxHUD','gtHUD','drawMinimap',
+  'drawChunks','drawLive','drawDeco','solDraw','drawTowers','chSurf','drawWhaleShadow','drawSeuils','drawAmers','drawDecFX','drawFalls','drawHUD','gcHUD','gxHUD','gtHUD','drawMinimap',
   'drawEdges','drawObstacles','drawEnemies','drawBoss','drawPlayer','drawBullets',
   'drawFX','drawWeather','drawLabels','drawIndicators','drawTexts','drawShadows',
   'drawTrails','drawPickups','drawObjectives','postFX','lowBegin','lowWorld','lowEnd',

@@ -3583,7 +3583,7 @@ function soft(x,y,r,col,a){ctx.globalAlpha=a*LOWA;ctx.drawImage(softSpr(col),x-r
 function buildCaus(){const s=256,c=mkCanvas(s,s),g=c.getContext('2d');g.strokeStyle='rgba(170,240,255,.6)';g.lineWidth=2.2;
   for(let k=0;k<9;k++){g.beginPath();for(let x=0;x<=s;x+=4){const y=k*s/9+Math.sin(x/s*TAU*2+k)*9+Math.sin(x/s*TAU*3+k*2)*5;if(x)g.lineTo(x,y);else g.moveTo(x,y);}g.stroke();}
   for(let k=0;k<9;k++){g.beginPath();for(let y=0;y<=s;y+=4){const x=k*s/9+Math.sin(y/s*TAU*2+k*1.7)*9+Math.sin(y/s*TAU*3+k)*5;if(y)g.lineTo(x,y);else g.moveTo(x,y);}g.stroke();}
-  CAUSP=ctx.createPattern(c,'repeat');}
+  CAUS=c;CAUSP=ctx.createPattern(c,'repeat');}
 
 /* ---------- interpolation entre deux pas de logique ---------- */
 const SW=[];
@@ -3660,7 +3660,6 @@ function render(A,dt){
   /* le sol de secours n'est dessiné que si un chunk visible n'est pas encore prêt */
   if(!chunksCover()){c.fillStyle='#05030c';c.fillRect(0,0,cv.width,cv.height);screenTf();drawGround();}
   worldTf();drawChunks();if(inGame)drawWhaleShadow(mix);
-  for(const m of mix)if(m.b==='sea'&&m.w>.3&&QL>=2)drawCaustics(m.w);
   /* couche basse résolution : ambiance lointaine + halos */
   lowBegin();if(QL>=2){lowScreen();drawFar(mix);drawVista(mix);drawWhale(mix);LOWN++;}lowWorld();if(sk<2)drawLowGlows();lowEnd();
   worldTf();drawEdges();drawObstacles();if(inGame){drawSeuils();drawAmers();}if(inGame){gcDrawWorld();gsDrawWorld();giDrawWorld();gxDrawWorld();gvDrawWorld();}
@@ -3751,8 +3750,8 @@ function solDraw(c0,c1,r0,r1){
   if(full){SOLB.clear();R.length=0;R.push([0,0,w,h]);}
   /* chunks changés : cuisson en cours (toujours), ou surface différente de celle déjà posée dans la toile */
   const V=[];
-  for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy),b=c.bake||c.bk.cv,k=cx+','+cy;V.push(c,b);
-    if(c.bake&&CHV.get(b)!==c){CHV.set(b,c);CHNEW++;}
+  for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy),r=c.bake||c.bk.cv,b=chSurf(c,r),k=cx+','+cy;V.push(c,b);
+    if(c.bake&&CHV.get(r)!==c){CHV.set(r,c);CHNEW++;}
     if(!full&&(!c.bake||SOLB.get(k)!==b)){const x=Math.floor(c.x0*sc+tx)-1,y=Math.floor(c.y0*sc+ty)-1,e=Math.ceil(CH*sc)+3;R.push([x,y,e,e]);}
     SOLB.set(k,b);}
   if(SOLB.size>256)SOLB.clear();
@@ -3773,8 +3772,9 @@ function solDraw(c0,c1,r0,r1){
 function drawChunks(){
   const c0=Math.floor(VL/CH),c1=Math.floor(VR/CH),r0=Math.floor(VT/CH),r1=Math.floor(VB/CH);
   /* un chunk en cours de cuisson (c.bk) s'affiche tel quel : opaque, il part du même sol que drawGround */
+  CAUB=1;
   if(!solDraw(c0,c1,r0,r1)){const t0=performance.now();
-    for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy),b=c&&(c.bake||c.bk&&c.bk.cv);if(b){if(c.bake&&CHV.get(b)!==c){CHV.set(b,c);CHNEW++;}ctx.drawImage(b,c.x0,c.y0,CH,CH);}}
+    for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy),b=c&&(c.bake||c.bk&&c.bk.cv);if(b){if(c.bake&&CHV.get(b)!==c){CHV.set(b,c);CHNEW++;}ctx.drawImage(chSurf(c,b),c.x0,c.y0,CH,CH);}}
     solMeasure(performance.now()-t0);}
   fleeBuild();STB=10;DCB=1;DEC=G&&G.p&&G.dec?G.biome:'';
   for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(c){for(const it of c.live)drawLive(it);if(c.bake||c.bk)drawDeco(c);}}
@@ -3985,14 +3985,18 @@ function drawMarks(){const c=ctx,P=G.p;
       case 'sky':{soft(m.x-ca*6,m.y-sa*6,14+f*12,'#ffffff',.22*a);break;}
       case 'core':{c.globalAlpha=.45*a;c.drawImage(shadowSpr(),m.x-12,m.y-12,24,24);c.globalCompositeOperation='lighter';soft(m.x,m.y,5,'#ff3355',.5*a*a);c.globalCompositeOperation='source-over';break;}}}
   c.globalAlpha=1;}
-function drawCaustics(w){
-  const c=ctx,d=RT*.35;c.save();c.globalCompositeOperation='lighter';c.fillStyle=CAUSP;
-  /* Une seule couche (01/10/2026). La seconde (×1,6, QL 3) repeignait tout l'écran une deuxième fois : Récif abyssal,
-     Chromium 1920×1080 qualité haute, 10 ips avec les deux couches, 15 avec une, 28 sans ; 12 ips chez le propriétaire
-     (Firefox). Choix du propriétaire : garder l'eau animée, une couche. */
-  c.globalAlpha=.1*w;c.translate(d,d*.6);c.fillRect(VL-d,VT-d*.6,VR-VL,VB-VT);
-  c.restore();
-}
+/* Reflets de la mer, FIGÉS dans le sol (01/10/2026, choix du propriétaire). C'était un remplissage plein écran par image
+   (motif répété, 'lighter') : avec Skia — le moteur du canvas de Firefox — 2,2 ms, plus que tout le sol (1,0 ms) ; chez le
+   propriétaire (Firefox 140 ESR) ~20 ms estimés, 17-20 ips au Récif abyssal. Désormais posés UNE fois par chunk de mer
+   terminé, dans une copie de sa surface cuite (la cuisson et son art ne changent pas : test/art.js), ancrés au monde,
+   donc continus d'un chunk à l'autre. Au plus une copie par image (CAUB) : un chunk pas encore orné s'affiche nu. */
+const CAUV=new WeakMap();let CAUB=0,CAUS=null;
+function chSurf(c,b){if(!c.bake||typeof document==='undefined')return b;
+  if(c.sea===undefined){let w=0;for(const m of biomeMix(c.x0+CH/2,c.y0+CH/2))if(m.b==='sea')w=m.w;c.sea=w;}
+  if(c.sea<=.3)return b;let o=CAUV.get(b);if(o)return o;if(CAUB<=0||!CAUS)return b;CAUB--;
+  o=mkCanvas(b.width,b.height);const g=o.getContext('2d'),k=b.width/CH;g.drawImage(b,0,0);
+  g.globalCompositeOperation='lighter';g.globalAlpha=.1*c.sea;g.fillStyle=g.createPattern(CAUS,'repeat');g.setTransform(k,0,0,k,-c.x0*k,-c.y0*k);g.fillRect(c.x0,c.y0,CH,CH);
+  CAUV.set(b,o);return o;}
 function membrane(cx,cy,R,col,t){
   const c=ctx,N=R>2000?220:130;c.beginPath();
   for(let i=0;i<=N;i++){const a=i/N*TAU,r=R+Math.sin(a*7+t*.03)*4+Math.sin(a*3-t*.02)*3;const x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;if(i)c.lineTo(x,y);else c.moveTo(x,y);}
@@ -4653,7 +4657,7 @@ function ltStart(){if(LT_ST)return;const P=globalThis.PerformanceObserver,T=P&&P
   try{new P(l=>{for(const e of l.getEntries())if(e.duration>DIAG_LT[0]){const a=e.attribution&&e.attribution[0];DIAG_LT[0]=e.duration;DIAG_LT[1]=e.name||'?';DIAG_LT[2]=a&&a.name||'?';}}).observe({entryTypes:['longtask']});LT_ST=1;}
   catch(e){LT_ST=-2;}}
 const JSPROF_N=['render','step','streamWorld','bakeStep','genChunk','getChunk','perf',
-  'drawChunks','drawLive','drawDeco','solDraw','drawTowers','drawHUD','gcHUD','gxHUD','gtHUD','drawMinimap',
+  'drawChunks','drawLive','drawDeco','solDraw','drawTowers','chSurf','drawWhaleShadow','drawSeuils','drawAmers','drawDecFX','drawFalls','drawHUD','gcHUD','gxHUD','gtHUD','drawMinimap',
   'drawEdges','drawObstacles','drawEnemies','drawBoss','drawPlayer','drawBullets',
   'drawFX','drawWeather','drawLabels','drawIndicators','drawTexts','drawShadows',
   'drawTrails','drawPickups','drawObjectives','postFX','lowBegin','lowWorld','lowEnd',
