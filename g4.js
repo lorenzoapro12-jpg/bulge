@@ -482,7 +482,7 @@ function boot(){
   $('bReroll').onclick=reroll;
   $('endArts').onclick=e=>{const b=e.target.closest('[data-k]');if(b)pickArt(b.dataset.k,b);};
   $('bAgain').onclick=()=>{if(G.daily)startGame('bal',true);else startGame(G.prof,false);};
-  $('bMenu').onclick=()=>{G=null;setMusic(0);renderMenu();show('ov-menu');};
+  $('bMenu').onclick=()=>{G=null;cv.classList.remove('dying');setMusic(0);renderMenu();show('ov-menu');};
   $('bPause').onclick=()=>togglePause();
   $('bResume').onclick=()=>togglePause();
   $('bQuit').onclick=()=>{if(G&&G.state==='pause'){show(null);endRun(false);}};

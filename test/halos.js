@@ -134,8 +134,11 @@ const frame = () => {
   LOG.length = 0; call('render(0,16.7)');
   const main = call('MAINCTX').__cv, cw = call('cv.width'), ch = call('cv.height');
   const low = LOG.filter(e => e.low), toMain = low.filter(e => e.dst === main);
-  const big = toMain.filter(e => e.src && e.src.width >= cw / 4 - 1 && e.src.height >= ch / 4 - 1 && e.src !== main);
-  return { low, toMain, big, screen: LOG.filter(e => e.gco === 'screen'), other: low.filter(e => e.dst !== main), n: call('LOWN'), lowa: call("typeof LOWA!=='undefined'?LOWA:1"), cw, ch };
+  /* les grands halos posés à l'échelle 1 (natSpr, g3.js, 01/10/2026) ont un sprite de leur taille d'écran : ce n'est pas un
+     calque intermédiaire (rien d'autre n'y est dessiné), mais il doit être posé au pixel entier, sans étirement (2e) */
+  const nat = new Set(call("typeof NAT!=='undefined'?[...NAT.values()]:[]")), natD = toMain.filter(e => nat.has(e.src));
+  const big = toMain.filter(e => e.src && e.src.width >= cw / 4 - 1 && e.src.height >= ch / 4 - 1 && e.src !== main && !nat.has(e.src));
+  return { low, toMain, big, natD, screen: LOG.filter(e => e.gco === 'screen'), other: low.filter(e => e.dst !== main), n: call('LOWN'), lowa: call("typeof LOWA!=='undefined'?LOWA:1"), cw, ch };
 };
 const desc = r => `${r.toMain.length} drawImage dans le canevas principal pendant la passe (ops : ${[...new Set(r.toMain.map(e => e.gco))].join(',') || '-'}) ; ${r.other.length} ailleurs ; ${r.big.length} source(s) plein ecran ; ${r.screen.length} 'screen' ; LOWN=${r.n}`;
 for (let i = 0; i < 3; i++) frame();
@@ -143,6 +146,7 @@ for (let i = 0; i < 3; i++) frame();
   const r = frame();
   check('2a. qualite haute : aucun calque intermediaire compose en plein ecran, aucun screen', r.big.length === 0 && r.screen.length === 0 && r.other.length === 0, desc(r));
   check('2b. les halos sont dessines directement dans le canevas principal, en lighter', r.n > 0 && r.toMain.length > 0 && r.toMain.some(e => e.gco === 'lighter'), desc(r));
+  check('2e. les grands halos (natSpr) sont poses a l\'echelle 1, au pixel entier', r.natD.length > 0 && r.natD.every(e => e.a.length === 2 && e.a.every(Number.isInteger)), `${r.natD.length} pose(s) : ${r.natD.map(e => e.a.join(',')).join(' | ')}`);
 }
 {
   call('QL=1;applyRes();'); frame();
@@ -150,7 +154,9 @@ for (let i = 0; i < 3; i++) frame();
   check('2c. qualite basse : les halos (seuls dessines) arrivent encore a l\'ecran', r.n > 0 && r.toMain.some(e => e.gco === 'lighter') && r.big.length === 0, desc(r));
 }
 {
-  call('QL=3;applyRes();'); const vivant = frame();
+  /* un coeur dans le champ : son halo est present vivant ET mort (celui du joueur ne l'est plus a sa mort, et le decor
+     lointain, qui fournissait les paires avant le 01/10/2026, n'a plus de halo dans ce biome) */
+  call('QL=3;applyRes();const h=G.hearts.find(h=>h.state!=="dead");h.x=G.p.x+140;h.y=G.p.y+20;'); const vivant = frame();
   call('G.p.dead=true;'); frame();
   const r = frame();
   /* meme halo d'un coeur (meme source, meme rectangle) : son alpha mort / vivant doit valoir 0,4 */

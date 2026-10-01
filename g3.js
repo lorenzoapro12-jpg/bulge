@@ -8,7 +8,7 @@ let SAFE={t:0,b:0,l:0,r:0};
 function readSafe(){const d=document.getElementById('safeprobe');if(!d)return;const cs=getComputedStyle(d);SAFE={t:parseFloat(cs.paddingTop)||0,b:parseFloat(cs.paddingBottom)||0,l:parseFloat(cs.paddingLeft)||0,r:parseFloat(cs.paddingRight)||0};}
 function fitFont(c,s,maxW,px,wt){c.font=wt+' '+px+'px '+FD;const w=c.measureText(s).width;if(w>maxW){px=Math.max(10,Math.floor(px*maxW/w));c.font=wt+' '+px+'px '+FD;}return px;}
 function resize(){readSafe();const r=cv.parentElement.getBoundingClientRect();W=Math.max(300,r.width);H=Math.max(300,r.height);DPR=Math.min(2,window.devicePixelRatio||1);applyRes();}
-function applyRes(){PS=Math.min(DPR,QL>=3?(COARSE?1.5:2):QL===2?1.25:1)*RES;cv.width=Math.round(W*PS);cv.height=Math.round(H*PS);
+function applyRes(){CVOK=false;PS=Math.min(DPR,QL>=3?(COARSE?1.5:2):QL===2?1.25:1)*RES;cv.width=Math.round(W*PS);cv.height=Math.round(H*PS);
   if(!VIG){VIG=mkCanvas(128,128);const g=VIG.getContext('2d'),gr=g.createRadialGradient(64,64,30,64,64,92);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(2,0,8,.62)');g.fillStyle=gr;g.fillRect(0,0,128,128);}
   if(!CAUSP)buildCaus();}
 const SPR={};
@@ -28,6 +28,18 @@ function sphSpr(col,big){const S=big?256:96;return spr((big?'B':'b')+col,S,(g,s)
 function sphere(x,y,r,col,flash,alpha){const s=sphSpr(flash?'#ffffff':col,r*RZ*PS>44);if(alpha!=null&&alpha!==1){ctx.globalAlpha=alpha;ctx.drawImage(s,x-r,y-r,r*2,r*2);ctx.globalAlpha=1;}else ctx.drawImage(s,x-r,y-r,r*2,r*2);}
 function glow(x,y,r,col,a){ctx.globalAlpha=a*LOWA;ctx.drawImage(glowSpr(col),x-r,y-r,r*2,r*2);}
 function soft(x,y,r,col,a){ctx.globalAlpha=a*LOWA;ctx.drawImage(softSpr(col),x-r,y-r,r*2,r*2);}
+/* Grand halo à l'échelle 1 : le sprite est agrandi UNE fois à sa taille d'écran (pas de 6 %), puis posé au pixel entier.
+   Canevas logiciel (Firefox du propriétaire, skia), mesuré le 01/10/2026 : un sprite de 64 px étiré coûte ~8,8 ns par pixel,
+   le même à l'échelle 1 et au pixel entier ~1,4 ns ; le halo du joueur (810 px) coûtait ~6 ms par image, à toute qualité.
+   Coordonnées en pixels du canevas ; la transformation est laissée à l'identité (l'appelant la rétablit). */
+const NAT=new Map();
+function natSpr(src,key,n){const k=key+'|'+n;let S=NAT.get(k);if(S){NAT.delete(k);NAT.set(k,S);return S;}
+  S=mkCanvas(n,n);const g=S.getContext('2d');g.imageSmoothingEnabled=true;g.drawImage(src,0,0,n,n);if(NAT.size>=24)NAT.delete(NAT.keys().next().value);NAT.set(k,S);return S;}
+function natD(D){return Math.max(8,Math.round(Math.exp(Math.round(Math.log(D)/.0583)*.0583)));}
+function softPx(X,Y,D,col,a){if(!(D>=8))return;if(D>2048)D=2048;const n=natD(D);ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=a*LOWA;ctx.drawImage(natSpr(softSpr(col),'s'+col,n),Math.round(X-n/2),Math.round(Y-n/2));}
+function glowPx(X,Y,D,col,a){if(!(D>=8))return;if(D>2048)D=2048;const n=natD(D);ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=a*LOWA;ctx.drawImage(natSpr(glowSpr(col),'g'+col,n),Math.round(X-n/2),Math.round(Y-n/2));}
+/* halo en coordonnées du monde (appelant en worldTf) */
+function softW(x,y,r,col,a){const s=PS*RZ;softPx(PS*(W/2+RSX)+(x-CAM.x)*s,PS*(H/2+RSY)+(y-CAM.y)*s,2*r*s,col,a);worldTf();}
 function buildCaus(){const s=256,c=mkCanvas(s,s),g=c.getContext('2d');g.strokeStyle='rgba(170,240,255,.6)';g.lineWidth=2.2;
   for(let k=0;k<9;k++){g.beginPath();for(let x=0;x<=s;x+=4){const y=k*s/9+Math.sin(x/s*TAU*2+k)*9+Math.sin(x/s*TAU*3+k*2)*5;if(x)g.lineTo(x,y);else g.moveTo(x,y);}g.stroke();}
   for(let k=0;k<9;k++){g.beginPath();for(let y=0;y<=s;y+=4){const x=k*s/9+Math.sin(y/s*TAU*2+k*1.7)*9+Math.sin(y/s*TAU*3+k)*5;if(y)g.lineTo(x,y);else g.moveTo(x,y);}g.stroke();}
@@ -68,9 +80,9 @@ function lowEnd(){ctx=MAINCTX;LOWA=1;ctx.globalAlpha=1;ctx.globalCompositeOperat
 function drawLowGlows(){
   const c=ctx;c.globalCompositeOperation='lighter';
   if(G&&G.p){const P=G.p;
-    if(!P.dead){soft(P.x,P.y,250,P.col,.08+P.glow*.06);LOWN++;}
-    for(const h of G.hearts){if(h.state==='dead'||!vis(h.x,h.y,h.r*3.2))continue;soft(h.x,h.y,h.r*3.2,HCOL[h.i],.35+(h.flash>0?.3:0));LOWN++;}
-    const L=WD.core;if(!G.boss&&vis(L.x,L.y,300)){const open=G.lair.open;soft(L.x,L.y,open?280:180,COL.rd,open?.35+.15*Math.sin(RT*.08):.15);LOWN++;}
+    if(!P.dead){softW(P.x,P.y,180,P.col,.1+P.glow*.07);LOWN++;}   /* rayon 250 -> 180 (01/10/2026) : surface /2, le centre garde son éclat */
+    for(const h of G.hearts){if(h.state==='dead'||!vis(h.x,h.y,h.r*3.2))continue;softW(h.x,h.y,h.r*3.2,HCOL[h.i],.35+(h.flash>0?.3:0));LOWN++;}
+    const L=WD.core;if(!G.boss&&vis(L.x,L.y,300)){const open=G.lair.open;softW(L.x,L.y,open?280:180,COL.rd,open?.35+.15*Math.sin(RT*.08):.15);LOWN++;}
     for(const f of G.fx){if(f.ty!==4||!vis(f.x,f.y,f.r))continue;const a=f.life/f.max;soft(f.x,f.y,f.r*(1.2-a*.2),f.col,a*.45);LOWN++;}}
   c.globalAlpha=1;c.globalCompositeOperation='source-over';
 }
@@ -83,24 +95,26 @@ function chunksCover(){const c0=Math.floor(VL/CH),c1=Math.floor(VR/CH),r0=Math.f
    Le test typeof est volontaire : si la boucle n'expose pas SKIPD, on dessine tout (aucune
    dependance dure entre les deux modules). */
 function skLev(){return typeof SKIPD==='number'?SKIPD:0;}
-/* Fond gelé. En pause le monde ne change plus : le redessiner entier coûte le prix du jeu pour un
-   résultat identique — et comme le fond n'est rendu qu'une image sur quatre dans cet état, ça donne
-   une image lourde sur quatre (mesuré ×10 : 41 ms par appel, dont 16 ms de cuisson inutile), donc
-   des à-coups de menu. On capture le fond une fois, puis on ne recompose qu'une image. */
-let BGF=null;
+/* Fond gelé, derrière TOUT écran d'interface (pause, évolution, duel, fin, menu principal et ses sous-écrans).
+   Avant le 01/10/2026 le fond était redessiné (menu : le monde entier une image sur deux ; pause : une recopie plein écran
+   une image sur quatre). Chaque retouche du canevas obligeait le navigateur à refaire le flou et la composition des
+   calques d'interface par-dessus : 15 à 18 ips dans les menus au canevas logiciel (mesure Chromium logiciel, 1920x1080).
+   Désormais le canevas n'est plus TOUCHÉ : en jeu, la dernière image reste ; au menu principal, le monde est rendu à une
+   place fixe jusqu'à ce que tout ce qui est visible soit prêt (chunks cuits, sprites et décors calculés), puis plus rien.
+   CVOK : le canevas contient une image valide (faux après applyRes, qui le vide). BGK : '' (vivant), 'g' (figé en jeu), 'm'. */
+let CVOK=false,BGK='',MRT=-1,BGN=0;
 function render(A,dt){
   FRAME++;RDT=dt||16.7;SPRB=3;ctx=MAINCTX;const c=ctx;const sk=skLev();
+  const fige=!G||G.state!=='play'&&G.state!=='dying'&&G.state!=='victory',fk=G?'g':'m';
+  if(!fige){BGK='';MRT=-1;}
+  else if(CVOK&&WD&&(BGK===fk||G&&!BGK)){BGK=fk;return;}
   c.setTransform(1,0,0,1,0,0);c.globalAlpha=1;c.globalCompositeOperation='source-over';
-  if(!WD){c.fillStyle='#05030c';c.fillRect(0,0,cv.width,cv.height);return;}
-  const fige=!!G&&G.state==='pause';
-  if(!fige)BGF=null;
-  else if(BGF&&BGF.width===cv.width&&BGF.height===cv.height){c.drawImage(BGF,0,0);return;}
-  else BGF=null;
+  if(!WD){c.fillStyle='#05030c';c.fillRect(0,0,cv.width,cv.height);CVOK=false;return;}
   const inGame=!!(G&&G.p);
   if(inGame){RT=G.t+A;
     CAM.x=G.pcx==null?G.cx:G.pcx+(G.cx-G.pcx)*A;CAM.y=G.pcy==null?G.cy:G.pcy+(G.cy-G.pcy)*A;CAM.z=(G.pzoom==null?G.zoom:G.pzoom+(G.zoom-G.pzoom)*A)*(1+G.kick);
     RSX=RSY=0;if(G.trauma>0){const s=G.trauma*G.trauma*16;RSX=fr(-s,s);RSY=fr(-s,s);}}
-  else{RT=performance.now()/16.67;CAM.x=Math.cos(RT*.0007)*WR*.42;CAM.y=Math.sin(RT*.00091)*WR*.38;CAM.z=Math.min(W,H)/640;RSX=RSY=0;}
+  else{if(MRT<0){MRT=performance.now()/16.67;BGN=0;}RT=MRT;CAM.x=Math.cos(RT*.0007)*WR*.42;CAM.y=Math.sin(RT*.00091)*WR*.38;CAM.z=Math.min(W,H)/640;RSX=RSY=0;}
   RZ=CAM.z;if(inGame){lerpIn(A);markStep();}
   VL=CAM.x-(W/2+60)/RZ;VR=CAM.x+(W/2+60)/RZ;VT=CAM.y-(H/2+60)/RZ;VB=CAM.y+(H/2+60)/RZ;
   const mix=biomeMix(CAM.x,CAM.y);
@@ -118,8 +132,12 @@ function render(A,dt){
   if(inGame){screenTf();ctx.translate(SAFE.l,SAFE.t);const w0=W,h0=H;W-=SAFE.l+SAFE.r;H-=SAFE.t+SAFE.b;try{if(!gvHideHUD()){drawHUD();gcHUD();gxHUD();gtHUD();}gvDrawScreen();drawSubs();}finally{W=w0;H=h0;}lerpOut();}
   /* capture du fond, une seule fois par entrée en pause : les images suivantes n'auront qu'un
      composite à faire au lieu du rendu complet */
-  if(fige&&!BGF){BGF=mkCanvas(cv.width,cv.height);BGF.getContext('2d').drawImage(cv,0,0);}
+  CVOK=true;if(fige){if(G)BGK=fk;else if(++BGN>=120||bgPret()&&BGN>=3)BGK=fk;}
 }
+/* menu principal : tout ce qui est visible est prêt — chunks cuits, et cette image n'a créé ni sprite d'obstacle (SPRB),
+   ni décor de chunk (DCB), ni surface de mer (CAUB), ni grappe de lueurs (FLB) faute de budget */
+function bgPret(){if(SPRB!==3||DCB!==1||CAUB!==1||QL>=2&&FLB!==2)return false;
+  for(let cx=Math.floor(VL/CH);cx<=Math.floor(VR/CH);cx++)for(let cy=Math.floor(VT/CH);cy<=Math.floor(VB/CH);cy++){const c=getChunk(cx,cy);if(c&&!c.bake)return false;}return true;}
 function drawGround(){
   const k=256/(2*WR),wl=CAM.x-(W/2+RSX)/RZ,wt=CAM.y-(H/2+RSY)/RZ;
   let sx=(wl+WR)*k,sy=(wt+WR)*k,sw=W/RZ*k,sh=H/RZ*k,dx=0,dy=0,dw=W,dh=H;
@@ -130,28 +148,24 @@ function drawGround(){
   ctx.imageSmoothingEnabled=true;if(sw>0&&sh>0&&dw>0&&dh>0)ctx.drawImage(WD.map,sx,sy,sw,sh,dx,dy,dw,dh);
 }
 /* couche lointaine en parallaxe (sous le sol) */
+/* Allégé le 01/10/2026 (fluidité d'abord, demande du propriétaire) : la brume des Plaines (alpha .035, ~12 ms par image au
+   canevas logiciel), les traînées du Récif (~10 ms), les aurores du Glacier (~8 ms), les lueurs du Jardin (~6 ms) et les pulsations
+   du Cœur (~5 ms) sont retirées. Les nuages de l'Archipel deviennent un seul halo par cellule, trois tailles, posé à l'échelle 1. */
 const FAR={
-  clouds(x,y,s,sc,w){ctx.globalCompositeOperation='source-over';const r=(110+s*150)*sc;soft(x,y,r,'#e8f0ff',.2*w);soft(x+r*.5,y+r*.2,r*.7,'#ffffff',.16*w);soft(x-r*.45,y+r*.25,r*.6,'#dfe8ff',.14*w);},
-  /* aurores du Glacier : rubans étirés qui ondulent, vert d'eau et mauve */
-  aurora(x,y,s,sc,w){ctx.globalCompositeOperation='lighter';const r=(90+s*80)*sc,sw=Math.sin(RT*.012+s*9);ctx.save();ctx.translate(x+sw*24*sc,y);ctx.rotate(-.3+s*.6+sw*.1);ctx.scale(3,.3);
-    soft(0,0,r,s<.5?'#7dffc4':'#a98cff',.2*w);soft(r*.3,-r*1.2,r*.8,s<.5?'#b5f3ff':'#7dffc4',.12*w);ctx.restore();},
-  mist(x,y,s,sc,w){ctx.globalCompositeOperation='lighter';soft(x,y,(120+s*140)*sc,'#cffff0',.035*w);},
-  rays(x,y,s,sc,w){ctx.globalCompositeOperation='lighter';ctx.save();ctx.translate(x,y);ctx.rotate(-.5);ctx.scale(.35,2.6);soft(0,0,(90+s*80)*sc,'#8fe9ff',.08*w);ctx.restore();},
-  blooms(x,y,s,sc,w){ctx.globalCompositeOperation='lighter';soft(x,y,(80+s*110)*sc,s<.5?'#ff5ad8':'#b44dff',.1*w);},
+  clouds(x,y,s,sc,w){if(s<.45)return;ctx.globalCompositeOperation='source-over';softPx(PS*x,PS*y,PS*2*(130+(s<.7?0:s<.85?50:100))*sc,'#eef4ff',.22*w);},
   grid(x,y,s,sc,w,cell){ctx.globalCompositeOperation='lighter';ctx.globalAlpha=.07*w;ctx.strokeStyle='#2de2ff';ctx.lineWidth=1;const d=cell*sc;ctx.strokeRect(x-d/2,y-d/2,d,d);if(s>.6){ctx.globalAlpha=.25*w;ctx.fillStyle='#ff2d95';ctx.fillRect(x-2,y-2,4,4);}},
-  /* grappe de 5 lueurs : 16 variantes composées une fois (1 drawImage par cellule au lieu de 5) */
+  /* grappe de 5 lueurs : 16 variantes composées une fois, agrandies une fois à l'échelle de l'écran */
   lights(x,y,s,sc,w){ctx.globalCompositeOperation='lighter';const q=(s*16)|0;if(!SPR['fl'+q]){if(FLB<=0)return;FLB--;}const S=spr('fl'+q,144,g=>{g.globalCompositeOperation='lighter';for(let k=0;k<5;k++){const a=(q+.5)/16*50+k*1.3,r=5;
       g.drawImage(glowSpr(k%2?'#ffc93c':'#ff2d95'),72+Math.cos(a)*16*k-r,72+Math.sin(a)*16*k-r,r*2,r*2);}});
-    ctx.globalAlpha=.35*w;ctx.drawImage(S,x-72*sc,y-72*sc,144*sc,144*sc);},
-  pulse(x,y,s,sc,w){ctx.globalCompositeOperation='lighter';soft(x,y,(100+s*90)*sc,'#ff3355',(.06+.05*Math.sin(RT*.05+s*6))*w);},
+    const n=natD(144*sc*PS);ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=.35*w;ctx.drawImage(natSpr(S,'fl'+q,n),Math.round(PS*x-n/2),Math.round(PS*y-n/2));},
 };
 let FLB=0;
 function drawFar(mix){
   FLB=2;const f=.55,sc=RZ*.72,cell=QL<3||COARSE?760:560,fx=CAM.x*f,fy=CAM.y*f,hw=W/2/sc+cell,hh=H/2/sc+cell;
   const i0=Math.floor((fx-hw)/cell),i1=Math.floor((fx+hw)/cell),j0=Math.floor((fy-hh)/cell),j1=Math.floor((fy+hh)/cell);
-  for(const m of mix){const t=BIO[m.b].far;if(!t||m.w<.3)continue;const fn=FAR[t];
+  for(const m of mix){const t=BIO[m.b].far,fn=t&&FAR[t];if(!fn||m.w<.3)continue;
     for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++){const h=hash2(i,j,WD.seed^77),u=(h&1023)/1024,v=((h>>>10)&1023)/1024,s=((h>>>20)&255)/255;
-      const x=((i+u)*cell-fx)*sc+W/2+RSX*.5,y=((j+v)*cell-fy)*sc+H/2+RSY*.5;fn(x,y,s,sc,m.w,cell);}}
+      const x=((i+u)*cell-fx)*sc+W/2+RSX*.5,y=((j+v)*cell-fy)*sc+H/2+RSY*.5;fn(x,y,s,sc,m.w,cell);screenTf();}}
   ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
 }
 /* Chantier J0 — « collé pour la première fois » : le premier drawImage d'une cuisson TERMINÉE (c.bake ;
@@ -234,7 +248,7 @@ function drawChunks(){
   if(!solDraw(c0,c1,r0,r1)){const t0=performance.now();
     for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy),b=c&&(c.bake||c.bk&&c.bk.cv);if(b){if(c.bake&&CHV.get(b)!==c){CHV.set(b,c);CHNEW++;}ctx.drawImage(chSurf(c,b),c.x0,c.y0,CH,CH);}}
     solMeasure(performance.now()-t0);if(SOLM===1||SOLON)solStat(2,1);}
-  fleeBuild();STB=10;DCB=1;DEC=G&&G.p&&G.dec?G.biome:'';
+  STB=10;DCB=1;DEC=G&&G.p&&G.dec?G.biome:'';
   for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(c){for(const it of c.live)drawLive(it);if(c.bake||c.bk)drawDeco(c);}}
   ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
 }
@@ -259,39 +273,9 @@ function drawLive(it){
        reseau s'intensifie a l'approche de WD.core (coreK, monotone). */
       if(!vis(it.x,it.y,150))return;const k=coreK(it.x,it.y),p=beatP(it.ph),V=veinsOf(it);
       c.lineCap='round';c.globalCompositeOperation='lighter';c.strokeStyle='#ff3355';
-      for(let w=0;w<2;w++){c.globalAlpha=(w?.55:.16)*k*(.6+.4*p);c.lineWidth=w?2:6;c.beginPath();for(const v of V){c.moveTo(it.x,it.y);for(let j=0;j<v.length;j+=2)c.lineTo(v[j],v[j+1]);}c.stroke();}
+      c.globalAlpha=.6*k*(.6+.4*p);c.lineWidth=2.5;c.beginPath();for(const v of V){c.moveTo(it.x,it.y);for(let j=0;j<v.length;j+=2)c.lineTo(v[j],v[j+1]);}c.stroke();
       soft(it.x,it.y,(22+p*20)*(.8+.4*k),'#ff3355',(.18+.5*p)*k);soft(it.x,it.y,7,'#ffd0c0',.5*k);
       c.globalCompositeOperation='source-over';c.globalAlpha=1;c.lineCap='butt';break;}
-    case 'moth':{ /* Phalenes des plaines. Elles s'ecartent du joueur puis reviennent SANS AUCUN
-       ETAT : le decalage est une fonction pure de la distance, donc la position reste
-       reproductible et le retour est automatique des qu'on s'eloigne.
-       Lisibilite : le sol des plaines est vert, donc un halo vert-jaune s'y noie (mesure du
-       27/09 : +0 pixel visible). Coeur blanc chaud et ailes claires pour contraster. */
-      if(!vis(it.x,it.y,110))return;
-      let x=it.x,y=it.y;
-      if(G&&G.p){const dx=x-G.p.x,dy=y-G.p.y,d=Math.hypot(dx,dy)||1,R=175;
-        if(d<R){const k=(1-d/R)*(1-d/R)*52;x+=dx/d*k;y+=dy/d*k;}}
-      const fq=fleeOff(it.x,it.y);x+=fq[0];y+=fq[1];
-      if(!vis(x,y,34))return;
-      const bf=.5+.5*Math.sin(RT*(fq[2]>.15?.6:.22)+it.ph*3);
-      c.globalCompositeOperation='lighter';
-      soft(x,y,14*it.s*(.8+.3*bf),'#fff4c2',.3+.18*bf);      /* halo serre : un insecte, pas une tache */
-      soft(x,y,5*it.s,'#ffffff',.6);
-      c.globalCompositeOperation='source-over';c.globalAlpha=1;
-      c.fillStyle='rgba(255,255,255,.95)';                   /* ailes : deux traits clairs */
-      c.beginPath();c.moveTo(x-5*it.s,y-1.6*it.s);c.quadraticCurveTo(x,y-1.2*it.s*(1+bf),x+5*it.s,y-1.6*it.s);
-      c.moveTo(x-5*it.s,y+1.6*it.s);c.quadraticCurveTo(x,y+1.2*it.s*(1+bf),x+5*it.s,y+1.6*it.s);
-      c.lineWidth=1*it.s;c.strokeStyle='rgba(255,255,255,.85)';c.stroke();
-      c.beginPath();c.arc(x,y,1.5*it.s,0,TAU);c.fill();break;}
-    case 'bird':{ /* Vols de l'archipel : une bande traverse le ciel, ombre portee sur la mer de
-       nuages. Trajectoire pure fonction du temps et de la phase : aucune memoire. */
-      const sp=RT*.05+it.ph,bx0=it.x+((sp*170)%760)-380,by0=it.y+Math.sin(sp*.8+it.ph)*34,fq=fleeOff(bx0,by0),bx=bx0+fq[0]*1.6,by=by0+fq[1]*1.6;
-      if(!vis(bx,by,70))return;
-      const f=.5+.5*Math.sin(RT*(fq[2]>.15?.7:.22)+it.ph*5);
-      c.strokeStyle='rgba(16,20,46,.30)';c.lineWidth=2;c.lineCap='round';   /* ombre */
-      c.beginPath();c.moveTo(bx-6*it.s+30,by+34);c.lineTo(bx+30,by+34-3*it.s);c.lineTo(bx+6*it.s+30,by+34);c.stroke();
-      c.strokeStyle='rgba(242,248,255,.92)';c.lineWidth=1.7;
-      c.beginPath();c.moveTo(bx-8*it.s,by);c.quadraticCurveTo(bx,by-7*it.s*(.55+f),bx+8*it.s,by);c.stroke();break;}
   }
 }
 /* =========================================================
@@ -315,14 +299,6 @@ const VEIN=new WeakMap();
 function veinsOf(it){let V=VEIN.get(it);if(V)return V;V=[];const r=mkRng(hash2(it.x|0,it.y|0,WD.seed^0x7e1));
   for(let k=0;k<3;k++){let a=it.ph+k*2.1+r()*.6,x=it.x,y=it.y;const v=[];for(let j=0;j<5;j++){a+=(r()-.5)*.9;x+=Math.cos(a)*(14+r()*8);y+=Math.sin(a)*(14+r()*8);v.push(x,y);}V.push(v);}
   VEIN.set(it,V);return V;}
-/* N2 — la faune fuit le danger. Liste des ennemis en aggro, refaite une fois par image et bornée ;
-   le décalage est une fonction pure des positions : aucune mémoire, retour automatique. L'ennemi
-   peut être hors de l'écran : seule la bête doit être visible. */
-const FLEE=[],FLR=320,FO=[0,0,0];
-function fleeBuild(){FLEE.length=0;if(!G||!G.en)return;for(const e of G.en)if(e.aggro&&!e.dead&&e.spawn<=0){FLEE.push(e);if(FLEE.length>=40)break;}}
-function fleeOff(x,y){let dx=0,dy=0,m=0;
-  for(const e of FLEE){const ex=x-e.x,ey=y-e.y;if(ex>FLR||ex<-FLR||ey>FLR||ey<-FLR)continue;const d=Math.hypot(ex,ey)||1;if(d>=FLR)continue;const k=(1-d/FLR)*(1-d/FLR);dx+=ex/d*k;dy+=ey/d*k;if(k>m)m=k;}
-  const L=Math.hypot(dx,dy);if(L>1){dx/=L;dy/=L;}FO[0]=dx*120;FO[1]=dy*120;FO[2]=m;return FO;}
 /* décor par chunk, calculé une fois au premier affichage */
 const DECV=new WeakMap();
 function decoOf(c){let d=DECV.get(c);if(d)return d;d={v:[],pk:[],st:[]};DECV.set(c,d);
@@ -409,7 +385,7 @@ function beamSpr(col){let s=SPR['bm'+col];if(s)return s;s=mkCanvas(32,256);const
 const BEAMH=2400;
 function drawAmers(){const out=[];if(!G||!G.visited||!WD||!WD.lms)return out;const c=ctx;c.globalCompositeOperation='lighter';
   for(const L of WD.lms){if(G.visited[L.t])continue;if(L.x+60<VL||L.x-60>VR||L.y-BEAMH>VB||L.y+160<VT)continue;out.push(L);
-    const col=BIO[L.t].a,p=.85+.15*Math.sin(RT*.04+(L.s&255));c.globalAlpha=.7*p;c.drawImage(beamSpr(col),L.x-40,L.y-BEAMH,80,BEAMH);soft(L.x,L.y,160,col,.4*p);}
+    const col=BIO[L.t].a,p=.85+.15*Math.sin(RT*.04+(L.s&255));c.globalAlpha=.7*p;c.drawImage(beamSpr(col),L.x-40,L.y-BEAMH,80,BEAMH);softW(L.x,L.y,160,col,.4*p);}
   c.globalCompositeOperation='source-over';c.globalAlpha=1;return out;}
 /* 8. N3 — trace du joueur, propre au biome. G.trails (g2.js) n'est rempli qu'en fantôme et g2.js est
    hors périmètre : pool FIXE de MKN marques, anneau réécrit sur place (sa taille ne croît jamais). */
@@ -664,13 +640,13 @@ function drawWeather(mix){
       case 'pollen':p.x+=Math.sin(RT*.02+p.a)*.35*k;p.y-=.18*k;break;
       case 'petals':p.x+=.9*k;p.y+=.6*k;p.a+=.03*k;break;
       case 'bubbles':p.y-=(.5+p.s)*k;p.x+=Math.sin(RT*.05+p.a)*.4*k;break;
-      case 'wind':p.x+=(p.s>.9?.7:6+p.s*6)*k;break;
+      case 'wind':p.x+=(6+p.s*6)*k;break;
       case 'data':p.y+=(4+p.s*5)*k;break;
       case 'rain':p.x-=2*k;p.y+=(11+p.s*6)*k;break;
       case 'snow':p.y+=(.6+p.s*.8)*k;p.x+=Math.sin(RT*.02+p.a)*.5*k;break;
       case 'embers':p.y-=(.8+p.s)*k;p.x+=Math.sin(RT*.04+p.a)*.6*k;break;
     }
-    const m=p.t==='wind'&&p.s>.9?140:40;
+    const m=40;
     if(p.x<-m||p.x>W+m||p.y<-m||p.y>H+m){p.t=weaType(mix);p.s=Math.random();
       if(p.x<-m)p.x+=W+2*m;else if(p.x>W+m)p.x-=W+2*m;if(p.y<-m)p.y+=H+2*m;else if(p.y>H+m)p.y-=H+2*m;
       if(p.x<-m||p.x>W+m||p.y<-m||p.y>H+m){p.x=Math.random()*W;p.y=Math.random()*H;}}
@@ -678,7 +654,7 @@ function drawWeather(mix){
       case 'pollen':c.globalCompositeOperation='lighter';glow(p.x,p.y,2+p.s*3,'#d6ff7a',.25+.4*Math.pow(Math.sin(RT*.05+p.a),2));break;
       case 'petals':c.globalCompositeOperation='source-over';c.globalAlpha=.6;c.fillStyle=p.s<.5?'#ff8fe0':'#ffd166';c.beginPath();c.ellipse(p.x,p.y,4+p.s*3,2,p.a,0,TAU);c.fill();break;
       case 'bubbles':c.globalCompositeOperation='source-over';c.globalAlpha=.35;c.strokeStyle='#cffcff';c.lineWidth=1;c.beginPath();c.arc(p.x,p.y,2+p.s*4,0,TAU);c.stroke();break;
-      case 'wind':c.globalCompositeOperation='source-over';if(p.s>.9){soft(p.x,p.y,130,'#ffffff',.07);}else{c.globalAlpha=.12;c.strokeStyle='#fff';c.lineWidth=1.2;c.beginPath();c.moveTo(p.x,p.y);c.lineTo(p.x-40-p.s*60,p.y);c.stroke();}break;
+      case 'wind':c.globalCompositeOperation='source-over';c.globalAlpha=.12;c.strokeStyle='#fff';c.lineWidth=1.2;c.beginPath();c.moveTo(p.x,p.y);c.lineTo(p.x-40-p.s*60,p.y);c.stroke();break;
       case 'data':c.globalCompositeOperation='lighter';c.globalAlpha=.45;c.strokeStyle=p.s<.8?'#2de2ff':'#ff2d95';c.lineWidth=1.5;c.beginPath();c.moveTo(p.x,p.y);c.lineTo(p.x,p.y-8-p.s*14);c.stroke();break;
       case 'rain':c.globalCompositeOperation='source-over';c.globalAlpha=.28;c.strokeStyle='#bcd8ff';c.lineWidth=1;c.beginPath();c.moveTo(p.x,p.y);c.lineTo(p.x+3,p.y-17);c.stroke();break;
       case 'snow':c.globalCompositeOperation='source-over';c.globalAlpha=.75;c.fillStyle='#fff';c.beginPath();c.arc(p.x,p.y,1+p.s*2,0,TAU);c.fill();break;
