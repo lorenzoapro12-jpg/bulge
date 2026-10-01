@@ -229,7 +229,7 @@ function mesure(q, bouge) {
   const B = build(), call = B.call, err = [];
   call(`meta.q=${JSON.stringify(q)};${PROLO ? '' : 'meta.tuto=TUTO.length;'}resize();applyQuality();refReset();`);
   call(`newRun('bal',false);gsRunStart();gcRunStart();giRunStart();gxRunStart();gtRunStart();gvRunStart();inp.L=inp.R=null;`);
-  const etat = () => JSON.parse(call(`JSON.stringify({QL,RES,PS,RZ,DPR,cw:cv.width,ch:cv.height,lw:LOWC?LOWC.width:0,lh:LOWC?LOWC.height:0,lowdom:LOWDOM,W,H,CH,st:G.state,x:G.p.x,y:G.p.y,en:G.en.length,fx:G.fx.length,wk:!!WK})`));
+  const etat = () => JSON.parse(call(`JSON.stringify({QL,RES,PS,RZ,DPR,cw:cv.width,ch:cv.height,lw:typeof LOWC!=='undefined'&&LOWC?LOWC.width:0,lh:typeof LOWC!=='undefined'&&LOWC?LOWC.height:0,lowdom:typeof LOWDOM!=='undefined'&&LOWDOM,W,H,CH,st:G.state,x:G.p.x,y:G.p.y,en:G.en.length,fx:G.fx.length,wk:!!WK})`));
   const e0 = etat(), ch = neuf();
   let nch = 0, calme = 0; B.compte(true);
   while (nch < CHMAX && (nch < NCH || calme < 60)) { const r = B.image(); ajoute(ch, r); nch++; calme = r.bk ? 0 : calme + 1; }

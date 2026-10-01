@@ -4,11 +4,11 @@
    belvédères où l'on s'arrête pour regarder, caméra qui respire
    ========================================================= */
 const VIEWL={
-  plains:['Le vent couche l’herbe lumineuse en vagues lentes. Rien ne presse, ici.','Au loin, des lucioles tracent des chemins que personne n’a jamais pris.'],
+  plains:['Le vent couche l’herbe lumineuse en vagues lentes. Rien ne presse, ici.','Au loin, la lumière tombe en rais lents sur l’herbe qui ondule.'],
   floral:['Les pétales tombent sans jamais toucher le sol. Le jardin retient son souffle.','Une odeur de pluie ancienne flotte entre les corolles géantes.'],
-  sea:['Des méduses montent vers une surface qui n’existe pas. Elles montent quand même.','La lumière froide danse sur le sable. Le récif se souvient de chaque nageur.'],
+  sea:['Des rais de lumière descendent vers un fond que personne n’a jamais touché.','La lumière froide danse sur le sable. Le récif se souvient de chaque nageur.'],
   sky:['Une baleine de nuages passe, lentement, comme une pensée qui s’en va.','Sous tes pieds, l’archipel dérive sur un océan de ciel.'],
-  cyber:['Des anneaux de données tournent dans le vide, gardiens d’un calcul sans fin.','La grille bourdonne doucement, comme une ville qui rêve de nombres.'],
+  cyber:['Des paquets de données filent le long des lignes, gardiens d’un calcul sans fin.','La grille bourdonne doucement, comme une ville qui rêve de nombres.'],
   urban:['Les projecteurs cherchent quelque chose dans le ciel. Ils cherchent depuis des siècles.','La pluie de néon lave les rues d’une fête qui ne finit jamais.'],
   ice:['L’aurore ondule au-dessus du glacier, verte, puis violette, puis verte encore.','Le silence ici est si parfait qu’on entend le givre pousser.'],
   core:['Le Noyau respire. Chaque battement fait trembler la lumière rouge.','Même ici, au cœur de la faim, des braises dansent comme des étoiles.']};
@@ -55,29 +55,23 @@ function vcells(f,S,fn){const ox=CAM.x*f,oy=CAM.y*f,x0=Math.floor((ox-W/2-S)/S),
   for(let cx=x0;cx<=x1;cx++)for(let cy=y0;cy<=y1;cy++)fn(cx*S-ox+W/2,cy*S-oy+H/2,vhash(cx,cy),vhash(cy+7,cx-3),cx,cy);}
 function rays(a,col){const c=ctx;c.fillStyle=col;for(let i=0;i<5;i++){const x=((i*W/4.2+RT*.25+i*97)%(W*1.4))-W*.2,w=50+30*Math.sin(i*2.1+RT*.004),sw=Math.sin(RT*.003+i)*40;
   c.globalAlpha=a*(.5+.5*Math.sin(RT*.006+i*1.7));c.beginPath();c.moveTo(x,-10);c.lineTo(x+w,-10);c.lineTo(x+w+H*.55+sw,H+10);c.lineTo(x+H*.55+sw,H+10);c.closePath();c.fill();}c.globalAlpha=1;}
+/* Allégé le 01/10/2026 (fluidité d'abord, demande du propriétaire) : lucioles, anneaux de pétales, méduses, poissons du ciel,
+   anneaux de données, dirigeables et braises retirés (même famille que les méduses, et 2 à 9 ms par image au canevas logiciel).
+   Restent les rais de lumière, les projecteurs et le phare (faisceau étroit seul), une aurore par ruban, les lueurs du Cœur
+   posées à l'échelle 1. */
 const VISTA={
-  plains:w=>{rays(.05*w,'#fff6c8');vcells(.35,520,(x,y,r1,r2)=>{if(r1>.55)return;for(let k=0;k<8;k++){const a=RT*.01+k*.8+r2*9,px=x+Math.cos(a*1.3)*60*r1+Math.sin(RT*.02+k)*30,py=y+Math.sin(a)*40;glow(px,py,14,'#d9ff9a',.5*w*(.5+.5*Math.sin(RT*.08+k*2)));}});},
-  floral:w=>{rays(.04*w,'#ffd6f4');vcells(.3,600,(x,y,r1,r2)=>{if(r1>.6)return;for(let k=0;k<10;k++){const t=RT*.006+k/10*TAU,rr2=40+k*9;glow(x+Math.cos(t+r2*6)*rr2,y+Math.sin(t+r2*6)*rr2*.6+Math.sin(RT*.01+k)*8,12,k%2?'#ff9be6':'#fff0a8',.45*w);}});},
-  sea:w=>{rays(.06*w,'#9fe8ff');const c=ctx;vcells(.25,520,(x,y,r1,r2)=>{if(r1>.7)return;const yy=y-((RT*.25+r2*700)%900)+450,px=x+Math.sin(RT*.01+r2*9)*40,s=26+r1*40,pu=1+.12*Math.sin(RT*.05+r2*20);
-    glow(px,yy,s*2.4,'#7fd8ff',.35*w);c.globalAlpha=.5*w;c.fillStyle='#c9f4ff';c.beginPath();c.ellipse(px,yy,s*pu,s*.7/pu,0,Math.PI,TAU);c.fill();
-    c.strokeStyle='#9fe8ff';c.lineWidth=3;for(let k=-2;k<=2;k++){c.beginPath();c.moveTo(px+k*s*.3,yy);for(let j=1;j<=5;j++)c.lineTo(px+k*s*.3+Math.sin(RT*.05+j+k)*6,yy+j*s*.35);c.stroke();}c.globalAlpha=1;});},
-  sky:w=>{const c=ctx;vcells(.18,850,(x,y,r1,r2)=>{if(r1>.75)return;const dir=r2>.5?1:-1,px=x+(((RT*.35*dir+r2*2000)%1600)+1600)%1600-800,py=y+Math.sin(RT*.004+r2*7)*30,L=220+r1*160;
-    c.save();c.translate(px,py);c.scale(dir,1);c.globalAlpha=.3*w;c.fillStyle='#b8d6ff';c.beginPath();c.ellipse(0,0,L*.5,L*.14,0,0,TAU);c.fill();
-    c.beginPath();c.moveTo(-L*.45,0);c.lineTo(-L*.7,-L*.12+Math.sin(RT*.03)*10);c.lineTo(-L*.62,0);c.lineTo(-L*.7,L*.1+Math.sin(RT*.03)*10);c.closePath();c.fill();
-    c.beginPath();c.moveTo(0,L*.1);c.lineTo(-L*.12,L*.28+Math.sin(RT*.02)*8);c.lineTo(L*.08,L*.12);c.closePath();c.fill();
-    c.strokeStyle='#e6f2ff';c.lineWidth=4;c.globalAlpha=.35*w;c.beginPath();c.ellipse(0,0,L*.5,L*.14,0,Math.PI*1.05,TAU*.98);c.stroke();c.globalAlpha=.6*w;for(let k=0;k<7;k++)glow(-L*.3+k*L*.1,L*.04,7,'#dff0ff',.9);c.restore();c.globalAlpha=1;});},
-  cyber:w=>{const c=ctx;vcells(.22,700,(x,y,r1,r2)=>{if(r1>.65)return;c.save();c.translate(x,y);c.globalAlpha=.3*w;c.strokeStyle=r2>.5?'#2de2ff':'#ff2d95';c.lineWidth=3;
-    for(let k=0;k<3;k++){c.save();c.rotate(RT*.004*(k+1)*(r2>.5?1:-1));c.scale(1,.35+k*.2);c.beginPath();c.arc(0,0,60+k*34+r1*40,0,TAU);c.stroke();c.restore();}c.restore();c.globalAlpha=1;});},
-  urban:w=>{const c=ctx,beam=(bx,by,a,L,al)=>{for(const [s,k] of [[.06,.35],[.02,1]]){c.globalAlpha=al*k;c.beginPath();c.moveTo(bx,by);c.lineTo(bx+Math.cos(a-s)*L,by+Math.sin(a-s)*L);c.lineTo(bx+Math.cos(a+s)*L,by+Math.sin(a+s)*L);c.closePath();c.fill();}};
+  plains:w=>{rays(.05*w,'#fff6c8');},
+  floral:w=>{rays(.04*w,'#ffd6f4');},
+  sea:w=>{rays(.06*w,'#9fe8ff');},
+  urban:w=>{const c=ctx,beam=(bx,by,a,L,al)=>{const s=.02;c.globalAlpha=al;c.beginPath();c.moveTo(bx,by);c.lineTo(bx+Math.cos(a-s)*L,by+Math.sin(a-s)*L);c.lineTo(bx+Math.cos(a+s)*L,by+Math.sin(a+s)*L);c.closePath();c.fill();};
     c.fillStyle='#fff3c4';for(let i=0;i<2;i++)beam(W*(.25+.5*i),H+10,-Math.PI/2+Math.sin(RT*.004+i*2)*.5,H*1.4,.06*w);
     /* le phare : la tour du monument de la ville le plus proche, même hors écran, balaie le ciel de deux faisceaux */
     let M=null,md=3200*3200;for(const L of WD.lms)if(L.t==='urban'){const d=dist2(L.x,L.y,CAM.x,CAM.y);if(d<md){md=d;M=L;}}
-    if(M){const d=twOff(M.x,M.y,PHH,TWM*2),sx=(M.x+d[0]-CAM.x)*RZ+W/2,sy=(M.y+d[1]-CAM.y)*RZ+H/2,L=Math.hypot(sx-W/2,sy-H/2)+Math.max(W,H);
-      c.fillStyle='#fff6dc';for(let j=0;j<2;j++)beam(sx,sy,RT*.01+j*Math.PI,L,.12*w);glow(sx,sy,46,'#fff3c4',.6*w);}
-    c.globalAlpha=1;
-    vcells(.15,1300,(x,y,r1,r2)=>{if(r1>.3)return;const px=x+((RT*.2+r2*1500)%1500)-750;c.globalAlpha=.14*w;c.fillStyle='#c7a0ff';c.beginPath();c.ellipse(px,y,120,34,0,0,TAU);c.fill();glow(px+60,y+20,10,'#ff2d95',.9);glow(px-60,y+20,10,'#2de2ff',.9);c.globalAlpha=1;});},
-  ice:w=>{const c=ctx;c.globalCompositeOperation='lighter';for(let k=0;k<3;k++){const col=['#6dffb4','#6fd8ff','#b58cff'][k];
-    for(const [lw,al] of [[70,.05],[34,.07],[10,.1]]){c.strokeStyle=col;c.globalAlpha=al*w;c.lineWidth=lw;c.beginPath();for(let j=0;j<=12;j++){const x=j/12*W*1.2-W*.1-CAM.x*.03%200,y=H*(.12+k*.09)+Math.sin(j*.7+RT*.01+k*2)*H*.05+Math.sin(j*1.9+RT*.017)*H*.02;j?c.lineTo(x,y):c.moveTo(x,y);}c.stroke();}}
+    if(M){const d=twOff(M.x,M.y,PHH,TWM*2),sx=(M.x+d[0]-CAM.x)*RZ+W/2,sy=(M.y+d[1]-CAM.y)*RZ+H/2,L=Math.min(Math.hypot(sx-W/2,sy-H/2)+Math.max(W,H),3*Math.max(W,H));
+      c.fillStyle='#fff6dc';for(let j=0;j<2;j++)beam(sx,sy,RT*.01+j*Math.PI,L,.12*w);glowPx(PS*sx,PS*sy,PS*92,'#fff3c4',.6*w);screenTf();}
+    c.globalAlpha=1;},
+  ice:w=>{const c=ctx;c.globalCompositeOperation='lighter';c.lineWidth=26;for(let k=0;k<3;k++){c.strokeStyle=['#6dffb4','#6fd8ff','#b58cff'][k];c.globalAlpha=.08*w;c.beginPath();
+    for(let j=0;j<=12;j++){const x=j/12*W*1.2-W*.1-CAM.x*.03%200,y=H*(.12+k*.09)+Math.sin(j*.7+RT*.01+k*2)*H*.05+Math.sin(j*1.9+RT*.017)*H*.02;j?c.lineTo(x,y):c.moveTo(x,y);}c.stroke();}
     c.globalAlpha=1;rays(.03*w,'#e8f6ff');},
-  core:w=>{vcells(.3,650,(x,y,r1,r2)=>{if(r1>.6)return;const p=.5+.5*Math.sin(RT*.03+r2*10);glow(x,y,160+80*p,'#ff3355',.12*w*p);for(let k=0;k<6;k++){const yy=y-((RT*.6+k*60+r2*300)%360);glow(x+Math.sin(RT*.02+k)*30,yy,8,'#ff8a2d',.6*w);}});}};
+  core:w=>{vcells(.3,650,(x,y,r1,r2)=>{if(r1>.6)return;const p=.5+.5*Math.sin(RT*.03+r2*10);glowPx(PS*x,PS*y,PS*400,'#ff3355',.12*w*(.4+.6*p));});screenTf();}};
 function drawVista(mix){ctx.globalCompositeOperation='lighter';for(const m of mix){const f=VISTA[m.b];if(f&&m.w>.15)f(m.w);}ctx.globalCompositeOperation='source-over';ctx.globalAlpha=1;}

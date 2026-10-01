@@ -34,8 +34,8 @@ button{font-family:inherit;color:inherit}
 #bPause{display:none}
 body.ingame #bPause{display:block}
 
-.ov{position:absolute;inset:0;z-index:10;display:none;overflow-y:auto;padding:28px 18px;background:radial-gradient(ellipse at 50% 40%,rgba(30,14,58,.78),rgba(8,4,16,.94));-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
-.ov.clear{background:radial-gradient(ellipse at 50% 50%,rgba(20,10,40,.55),rgba(8,4,16,.82))}
+.ov{position:absolute;inset:0;z-index:10;display:none;overflow-y:auto;padding:28px 18px;background:radial-gradient(ellipse at 50% 40%,rgba(30,14,58,.8),rgba(8,4,16,.94))}
+.ov.clear{background:radial-gradient(ellipse at 50% 50%,rgba(20,10,40,.66),rgba(8,4,16,.88))}
 .ov.on{display:flex;animation:ovin .2s ease-out}
 @keyframes ovin{from{opacity:0}to{opacity:1}}
 .in{margin:auto;width:100%;max-width:680px;display:flex;flex-direction:column;align-items:center;gap:18px;text-align:center}
@@ -44,7 +44,7 @@ h3{font-weight:700;font-size:18px;color:var(--dim);margin-top:6px}
 .muted{color:var(--dim);font-weight:500}
 p.sub{color:#c9c3ea;font-size:16px;max-width:52ch;line-height:1.4}
 
-.logo{position:relative;font-weight:700;font-size:clamp(64px,19vw,132px);letter-spacing:.04em;line-height:.9;color:#fff;
+.logo{position:relative;isolation:isolate;font-weight:700;font-size:clamp(64px,19vw,132px);letter-spacing:.04em;line-height:.9;color:#fff;
   text-shadow:0 0 16px rgba(45,226,255,.85),0 0 60px rgba(164,92,255,.6)}
 .logo::before,.logo::after{content:attr(data-t);position:absolute;inset:0;mix-blend-mode:screen;text-shadow:none}
 .logo::before{color:var(--mg);clip-path:inset(0 0 58% 0);animation:gl1 3.2s infinite steps(1)}
@@ -114,7 +114,7 @@ p.sub{color:#c9c3ea;font-size:16px;max-width:52ch;line-height:1.4}
 .stl{display:flex;flex-direction:column;gap:14px;max-width:560px}
 .stl p,.stb{opacity:0;animation:stin .9s ease-out forwards;font-size:18px;line-height:1.55;color:#ece8ff}
 .ov.story.fast .stl p,.ov.story.fast .stb{animation-delay:0s!important;animation-duration:.2s}
-@keyframes stin{from{opacity:0;transform:translateY(8px);filter:blur(4px)}to{opacity:1;transform:none;filter:none}}
+@keyframes stin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .tabs{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}.tabs button{padding:8px 16px;border-radius:18px;border:1px solid rgba(45,226,255,.35);background:transparent;cursor:pointer;font-weight:700}
 .tabs button.on{background:var(--cy);color:#07030f}
 .card .price{margin-top:4px;font-size:14px;color:#b9f3ff}.card.locked{opacity:.55}.card.locked:not(:disabled){opacity:.8}
@@ -180,8 +180,8 @@ p.sub{color:#c9c3ea;font-size:16px;max-width:52ch;line-height:1.4}
 #fade{position:absolute;inset:0;z-index:30;pointer-events:none;opacity:0}#fade.go{animation:fadeout var(--d,.8s) ease-out}
 @keyframes fadeout{from{opacity:1}to{opacity:0}}
 .ov.on>.in{animation:inrise .38s cubic-bezier(.2,.8,.2,1)}@keyframes inrise{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:none}}
-#ov-duel.on>.dvin{animation:none}#ov-duel.on #dvAct{animation:ovin .5s}#ov-duel.on>.dvin>:not(.dvact){animation:duelin .5s cubic-bezier(.2,.8,.2,1)}@keyframes duelin{from{opacity:0;transform:scale(1.08);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
-#cv{transition:filter 1.2s ease}#cv.dying{filter:grayscale(.85) brightness(.72) contrast(1.1)}
+#ov-duel.on>.dvin{animation:none}#ov-duel.on #dvAct{animation:ovin .5s}#ov-duel.on>.dvin>:not(.dvact){animation:duelin .5s cubic-bezier(.2,.8,.2,1)}@keyframes duelin{from{opacity:0;transform:scale(1.08)}to{opacity:1;transform:none}}
+#cv{transition:opacity 1.2s ease}#cv.dying{opacity:.62}
 @media (prefers-reduced-motion:reduce){.ov.on>.in,#ov-duel.on>.dvin>:not(.dvact){animation:none}#cv{transition:none}}
 .shake{animation:shk .35s}@keyframes shk{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
 table{width:100%;border-collapse:collapse;font-size:15px}

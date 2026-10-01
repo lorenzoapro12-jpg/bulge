@@ -11,10 +11,10 @@
    Ce que ce test defend :
      1. STATIQUE : shell_head.html n'a plus de canvas #low, et aucun `mix-blend-mode` hors du logo du menu
         (un melange CSS sur un calque plein ecran de jeu, c'est exactement le cout qu'on retire) ;
-     2. EXECUTION (vrais modules, DOM stube) : la couche est etiree DANS le canevas principal, avec
-        l'operateur 'screen' (meme formule que le CSS d'avant, donc meme rendu), sur toute la surface ;
-        y compris en qualite basse quand seuls les halos sont dessines ; attenuee a 0,4 a la mort, comme
-        le faisait `#cv.dying+#low{opacity:.4}` ; et elle n'est pas un element du document.
+     2. EXECUTION (vrais modules, DOM stube) : plus AUCUN calque intermediaire compose en plein ecran (voir
+        l'en-tete de la section 2 : la composition 'screen' dans le canevas a coute 9,38 ms par image chez le
+        proprietaire) ; halos et decor lointain sont dessines directement en 'lighter', y compris en qualite
+        basse ; attenues a 0,4 a la mort, comme le faisait `#cv.dying+#low{opacity:.4}`.
 
    node test/halos.js              arbre de travail
    node test/halos.js --ref=HEAD   code d'origine (doit ECHOUER : c'est le temoin)
@@ -118,27 +118,53 @@ const check = (name, ok, detail) => checks.push({ name, ok, detail });
 }
 
 /* ================= 2. execution ================= */
+/* Deuxieme temps (meme jour) : etiree DANS le canevas principal en 'screen', la couche a coute 9,38 ms (lowEnd, un seul
+   drawImage plein ecran) sur le meme PC, auto 3/3, JS 23 ms. Ce qui est defendu desormais :
+     2a. aucun canevas intermediaire n'est compose en plein ecran : pas de drawImage d'une source de la taille de
+         l'ecran (ou de son quart) dans le canevas principal pendant la passe basse, et aucun 'screen' ;
+     2b. les halos arrivent pourtant a l'ecran, directement dans le canevas principal, en 'lighter' ;
+     2c. en qualite basse aussi (seuls les halos sont dessines) ;
+     2d. a la mort, ils sont attenues a 0,4 (comme #cv.dying+#low), et l'attenuation ne fuit pas hors de la passe. */
 call(`newRun('bal',false);gsRunStart();gcRunStart();giRunStart();gxRunStart();gtRunStart();gvRunStart();G.state='play';meta.q='auto';QL=3;RES=1;DPR=1;applyRes();`);
-const LOWSRC = call('(function(){return LOWC;})');
-const lowDraws = () => { const main = call('MAINCTX').__cv, low = call('LOWC'); return LOG.filter(e => e.dst === main && e.src === low && low); };
-const frame = () => { LOG.length = 0; call('render(0,16.7)'); return { d: lowDraws(), cw: call('cv.width'), ch: call('cv.height'), n: call('LOWN'), dom: call('LOWC') === doc.getElementById('low') }; };
-const desc = r => r.d.length ? r.d.map(e => `drawImage(LOWC, ${e.a.join(',')}) gco=${e.gco} alpha=${e.ga}`).join(' ; ') : `aucun drawImage de la couche dans le canevas principal (LOWN=${r.n}, LOWC ${r.dom ? 'EST le canvas #low du document' : 'hors document'})`;
+/* les appels de la passe basse : entre lowBegin et lowEnd (enveloppes posees ici, sans toucher au code) */
+call(`(function(){const b=lowBegin,e=lowEnd;globalThis.__INLOW=false;lowBegin=function(){b();__INLOW=true;};lowEnd=function(){__INLOW=false;e();};})()`);
+const realDraw = LOG.push.bind(LOG);
+LOG.push = (e) => realDraw(Object.assign(e, { low: call('__INLOW') }));
+const frame = () => {
+  LOG.length = 0; call('render(0,16.7)');
+  const main = call('MAINCTX').__cv, cw = call('cv.width'), ch = call('cv.height');
+  const low = LOG.filter(e => e.low), toMain = low.filter(e => e.dst === main);
+  /* les grands halos posés à l'échelle 1 (natSpr, g3.js, 01/10/2026) ont un sprite de leur taille d'écran : ce n'est pas un
+     calque intermédiaire (rien d'autre n'y est dessiné), mais il doit être posé au pixel entier, sans étirement (2e) */
+  const nat = new Set(call("typeof NAT!=='undefined'?[...NAT.values()]:[]")), natD = toMain.filter(e => nat.has(e.src));
+  const big = toMain.filter(e => e.src && e.src.width >= cw / 4 - 1 && e.src.height >= ch / 4 - 1 && e.src !== main && !nat.has(e.src));
+  return { low, toMain, big, natD, screen: LOG.filter(e => e.gco === 'screen'), other: low.filter(e => e.dst !== main), n: call('LOWN'), lowa: call("typeof LOWA!=='undefined'?LOWA:1"), cw, ch };
+};
+const desc = r => `${r.toMain.length} drawImage dans le canevas principal pendant la passe (ops : ${[...new Set(r.toMain.map(e => e.gco))].join(',') || '-'}) ; ${r.other.length} ailleurs ; ${r.big.length} source(s) plein ecran ; ${r.screen.length} 'screen' ; LOWN=${r.n}`;
 for (let i = 0; i < 3; i++) frame();
 {
   const r = frame();
-  const ok = r.d.length === 1 && r.d[0].gco === 'screen' && r.d[0].ga === 1 && r.d[0].a.join(',') === `0,0,${r.cw},${r.ch}`;
-  check('2a. qualite haute : la couche est etiree DANS le canevas principal, en screen, sur toute la surface', ok, desc(r));
-  check('2b. la couche n\'est pas un element du document', !r.dom, r.dom ? 'LOWC === getElementById("low")' : 'canevas hors document');
+  check('2a. qualite haute : aucun calque intermediaire compose en plein ecran, aucun screen', r.big.length === 0 && r.screen.length === 0 && r.other.length === 0, desc(r));
+  check('2b. les halos sont dessines directement dans le canevas principal, en lighter', r.n > 0 && r.toMain.length > 0 && r.toMain.some(e => e.gco === 'lighter'), desc(r));
+  check('2e. les grands halos (natSpr) sont poses a l\'echelle 1, au pixel entier', r.natD.length > 0 && r.natD.every(e => e.a.length === 2 && e.a.every(Number.isInteger)), `${r.natD.length} pose(s) : ${r.natD.map(e => e.a.join(',')).join(' | ')}`);
 }
 {
   call('QL=1;applyRes();'); frame();
   const r = frame();
-  check('2c. qualite basse : les halos (seuls dessines) arrivent encore a l\'ecran', r.n > 0 && r.d.length === 1 && r.d[0].gco === 'screen', `LOWN=${r.n} ; ` + desc(r));
+  check('2c. qualite basse : les halos (seuls dessines) arrivent encore a l\'ecran', r.n > 0 && r.toMain.some(e => e.gco === 'lighter') && r.big.length === 0, desc(r));
 }
 {
-  call('QL=3;applyRes();G.p.dead=true;'); frame();
+  /* un coeur dans le champ : son halo est present vivant ET mort (celui du joueur ne l'est plus a sa mort, et le decor
+     lointain, qui fournissait les paires avant le 01/10/2026, n'a plus de halo dans ce biome) */
+  call('QL=3;applyRes();const h=G.hearts.find(h=>h.state!=="dead");h.x=G.p.x+140;h.y=G.p.y+20;'); const vivant = frame();
+  call('G.p.dead=true;'); frame();
   const r = frame();
-  check('2d. a la mort : couche attenuee a 0,4 (comme #cv.dying+#low)', r.d.length === 1 && Math.abs(r.d[0].ga - .4) < 1e-9, desc(r));
+  /* meme halo d'un coeur (meme source, meme rectangle) : son alpha mort / vivant doit valoir 0,4 */
+  const key = e => e.src && e.src.width + ':' + e.a.map(v => Math.round(v)).join(',');
+  const vk = new Map(vivant.toMain.filter(e => e.gco === 'lighter').map(e => [key(e), e.ga]));
+  const paires = r.toMain.filter(e => e.gco === 'lighter' && vk.has(key(e)) && vk.get(key(e)) > 0).map(e => e.ga / vk.get(key(e)));
+  const ok = paires.length > 0 && paires.every(x => Math.abs(x - .4) < 1e-9) && r.lowa === 1;
+  check('2d. a la mort : halos attenues a 0,4 (comme #cv.dying+#low), sans fuite apres la passe', ok, `${paires.length} halo(s) apparies, rapports ${[...new Set(paires.map(x => x.toFixed(3)))].join(',') || '-'} ; LOWA apres la passe = ${r.lowa}`);
   call('G.p.dead=false;');
 }
 

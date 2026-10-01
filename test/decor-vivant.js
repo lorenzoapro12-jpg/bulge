@@ -9,7 +9,7 @@
    On n'interroge pas des variables internes : on DESSINE (drawLive, drawAmers) dans un contexte
    canvas enregistreur et on lit ce qui a été émis. Le même test tourne donc sur l'ancien code,
    et le témoin doit y échouer en nommant la cause.
-     N2        une phalène, un oiseau, une méduse s'écartent d'un ennemi en aggro situé HORS DU CHAMP ;
+     N2        (retiré le 01/10/2026 avec la faune : méduses, phalènes, oiseaux)
                un ennemi calme (aggro:false) ne les dérange pas.
      N4        pour chaque monument de 3 mondes : la colonne de lumière est dessinée SI ET SEULEMENT SI
                son biome est absent de G.visited.
@@ -65,28 +65,8 @@ const check = (nom, fn) => { let err; try { err = fn(); } catch (e) { err = 'exc
 
 call(`genWorld(1);G={p:{x:-99999,y:-99999,r:10,dead:false,col:'#ffffff',vx:0,vy:0},en:[],visited:{plains:1},state:'play',t:0,biome:'plains'};RT=500;RZ=1;`);
 
-/* ---------- N2 ---------- */
-check('N2 : la faune (phalène, oiseau, méduse) fuit un ennemi en aggro hors du champ', () => {
-  const errs = [];
-  for (const t of ['moth', 'bird', 'jelly']) {
-    const it = `{t:'${t}',x:2000,y:2000,s:1,ph:1.3}`;
-    call('G.en=[]'); view(-1e6, 1e6, -1e6, 1e6);
-    const c0 = centroid(draw(`drawLive(${it})`));
-    if (!c0) { errs.push(`${t} : rien n'est dessiné (type absent de drawLive)`); continue; }
-    const ex = c0.x + 150, ey = c0.y;
-    view(c0.x - 260, c0.x + 110, c0.y - 200, c0.y + 200);   /* l'ennemi (x+150) est HORS du champ */
-    call(`G.en=[{x:${ex},y:${ey},aggro:false,dead:false,spawn:0,r:12}]`);
-    const cc = centroid(draw(`drawLive(${it})`));
-    if (!cc || Math.hypot(cc.x - c0.x, cc.y - c0.y) > .5) errs.push(`${t} : dérangé par un ennemi CALME (aggro:false)`);
-    call(`G.en[0].aggro=true`);
-    const c1 = centroid(draw(`drawLive(${it})`));
-    if (!c1) { errs.push(`${t} : disparaît du champ devant la menace`); continue; }
-    const dx = c1.x - c0.x;
-    if (dx > -15) errs.push(`${t} : ne s'écarte pas de l'ennemi en aggro (déplacement ${dx.toFixed(1)} px vers lui, attendu < -15)`);
-  }
-  call('G.en=[]');
-  return errs.join(' ; ') || null;
-});
+/* N2 (la faune fuit le danger) : retiré le 01/10/2026 avec la faune elle-même (méduses, phalènes, oiseaux), à la demande
+   du propriétaire — plus rien à défendre. */
 
 /* ---------- N4 ---------- */
 check('N4 : colonne de lumière sur un monument SI ET SEULEMENT SI son biome n\'est pas visité', () => {
@@ -150,10 +130,10 @@ if (!REF && !ARG('sans-temoin')) {
   console.log('--- TÉMOIN : le même test sur ' + BASE + ' (avant le chantier) doit échouer ---');
   const r = cp.spawnSync(process.execPath, [__filename, '--ref=' + BASE], { encoding: 'utf8' });
   process.stdout.write(r.stdout.split('\n').map(l => l && '   | ' + l).join('\n') + '\n');
-  const need = ['N2', 'N4', 'gradient'];
+  const need = ['N4', 'gradient'];
   for (const k of need) if (!new RegExp('^ECHEC ' + k, 'm').test(r.stdout)) { temoin = false; console.log(`TÉMOIN INVALIDE : « ${k} » passe déjà sur ${BASE}`); }
   if (r.status !== 1) { temoin = false; console.log('TÉMOIN INVALIDE : code de sortie ' + r.status + ' sur ' + BASE); }
-  if (temoin) console.log('témoin : ' + BASE + ' échoue sur N2, N4 et le gradient, avec leur cause');
+  if (temoin) console.log('témoin : ' + BASE + ' échoue sur N4 et le gradient, avec leur cause');
 }
 console.log('-----------------------------------------');
 console.log(bad.length || !temoin ? 'ECHEC' : 'TOUT PASSE');
