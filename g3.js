@@ -170,7 +170,7 @@ const CHV=new WeakMap();let CHNEW=0;
    Sur un canevas dessiné par la CARTE GRAPHIQUE, la copie des chunks ne coûte presque rien au JS (0,4 ms mesuré dans
    Chromium) et ce chemin doublerait la surface remplie : il ne s'enclenche donc que si la copie directe coûte
    (moyenne glissante SOLE > 3 ms sur au moins 30 images), et le reste ensuite. ?sol=1 le force, ?sol=0 l'interdit. */
-let SOLC=null,SOLK=null,SOLZ=0,SOLE=0,SOLN=0,SOLON=false;const SOLB=new Map();
+let SOLC=null,SOLK=null,SOLZ=0,SOLZI=0,SOLE=0,SOLN=0,SOLON=false;const SOLB=new Map(),SOLZH=new Float64Array(8);
 const SOLM=(()=>{const m=typeof location!=='undefined'&&/[?&]sol=([01])\b/.exec(location.search||'');return m?+m[1]:-1;})();
 function solMeasure(ms){SOLK=null;if(SOLM>=0)return;SOLE=SOLN?SOLE*.9+ms*.1:ms;if(++SOLN>=30&&SOLE>3)SOLON=true;}
 /* La toile est TORIQUE : le pixel d'écran X (translation tx) vit au pixel ((X-tx) mod w) de la toile, donc un déplacement
@@ -188,8 +188,11 @@ function solDraw(c0,c1,r0,r1){
   /* zoom en mouvement (début de partie, approche d'un cœur, coup de zoom) : la toile serait à refaire ENTIÈRE à chaque
      image, soit le chemin direct PLUS une recopie (Récif abyssal chez le propriétaire : solDraw 14,8 ms, 17 ips).
      On dessine alors en direct, et la toile n'est refaite qu'une fois le zoom posé (deux images de suite à 0,05 % près). */
-  const zs=SOLZ;SOLZ=s;if(!(zs>0)||Math.abs(s/zs-1)>.0005){SOLK=null;return false;}
-  let K=SOLK;if(K&&Math.abs(s/K.s-1)>.001)K=null;
+  const zs=SOLZ;SOLZ=s;const zh=SOLZH[SOLZI&7];SOLZH[SOLZI++&7]=s;if(!(zs>0)||Math.abs(s/zs-1)>.0005){SOLK=null;return false;}
+  /* zoom qui GLISSE lentement (fin du lerp de G.zoom à 3 % par image, joueur qui grossit) : sous le seuil par image, mais
+     l'écart à la toile dépasse 0,1 % toutes les 2 à 4 images => toile refaite ENTIÈRE autant de fois (Mégapole chez le
+     propriétaire : solDraw 15,7 ms en moyenne, 42 ms au pire). On ne refait la toile que si le zoom est posé sur 8 images. */
+  let K=SOLK;if(K&&Math.abs(s/K.s-1)>.001)K=null;if(!K&&!(zh>0&&Math.abs(s/zh-1)<=.0005)){SOLK=null;return false;}
   const sc=K?K.s:s,tx=Math.round(PS*(W/2+RSX)-CAM.x*sc),ty=Math.round(PS*(H/2+RSY)-CAM.y*sc),R=[];
   let full=!K;
   if(K){const dx=tx-K.tx,dy=ty-K.ty;if(Math.abs(dx)>=w||Math.abs(dy)>=h)full=true;

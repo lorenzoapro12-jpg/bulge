@@ -16,6 +16,8 @@
      3. un chunk dont la surface change pendant le trajet (cuisson refaite) est redessine : le cache ne garde
         pas l'ancienne image ;
      5. ZOOM EN MOUVEMENT : pas de toile refaite a chaque image (chemin direct), le cache reprend ensuite ;
+     6. ZOOM QUI GLISSE (fin du lerp, sous le seuil par image) : la toile n'est pas refaite toutes les 3 images
+        (Megapole chez le proprietaire : solDraw 15,7 ms en moyenne, 42 ms au pire) ;
      4. PAR DEFAUT, dans ce Chromium (copie des chunks presque gratuite pour le JS), le cache ne s'enclenche PAS :
         sur un canevas dessine par la carte graphique, il doublerait la surface remplie.
    ========================================================= */
@@ -76,7 +78,7 @@ const SETTLE = `(async()=>{for(let i=0;i<400;i++){render(0,16.7);await new Promi
     check('2. le cache a servi, et a DECALE la toile au lieu de la redessiner', used >= 40 && deca >= 20, `cache pris ${used} fois (dont ${full} redessins complets), ${deca}/40 images par decalage, sol stabilise en ${s0} images`);
     check('1+3. meme sol que le chemin direct apres 40 pas (et un chunk recuit au 20e)', r.n === 0, `${r.n}/${r.tot} pixels differents de plus de 2/255 (ecart max ${r.mx}) ; chunk recuit ${rebake}`);
     /* temoin : sans redessin des chunks changes, l'ecart DOIT apparaitre (sinon 3 ne prouverait rien) */
-    await B.ev(SHOT);
+    for (let i = 0; i < 10; i++) await B.ev(SHOT); /* le cache ne reprend qu'apres 8 images de zoom pose */
     await B.ev(`(()=>{const c=getChunk(Math.floor(CAM.x/CH),Math.floor(CAM.y/CH));const o=c.bake,n=mkCanvas(o.width,o.height);n.getContext('2d').drawImage(o,0,0);n.getContext('2d').fillStyle='#ff00ff';n.getContext('2d').fillRect(0,0,64,64);c.bake=n;SOLB.set(Math.floor(CAM.x/CH)+','+Math.floor(CAM.y/CH),n);return true;})()`);
     await B.ev(SHOT); await B.ev(`__S.a=__S.snap;true`);
     await B.ev(`(()=>{const f=solDraw;solDraw=function(){return false;};__S.want=true;render(0,16.7);solDraw=f;return true;})()`);
@@ -86,13 +88,18 @@ const SETTLE = `(async()=>{for(let i=0;i<400;i++){render(0,16.7);await new Promi
     await B.ev(`(()=>{__S.hit=0;__S.full=0;return true;})()`);
     for (let i = 0; i < 20; i++) { await B.ev(`(()=>{G.zoom*=1.003;return true;})()`); await B.ev(PLACE(nx, ny)); await B.ev(SHOT); }
     const zm = JSON.parse(await B.ev(`JSON.stringify({h:__S.hit,f:__S.full})`));
-    for (let i = 0; i < 3; i++) { await B.ev(PLACE(nx, ny)); await B.ev(SHOT); }
+    for (let i = 0; i < 10; i++) { await B.ev(PLACE(nx, ny)); await B.ev(SHOT); }
     const zp = JSON.parse(await B.ev(`JSON.stringify({h:__S.hit,f:__S.full})`));
     await B.ev(`__S.a=__S.snap;true`);
     await B.ev(`(()=>{const f=solDraw;solDraw=function(){return false;};__S.want=true;render(0,16.7);solDraw=f;return true;})()`);
     const z = await B.ev(DIFF);
     check('5. zoom en mouvement (20 images a +0,3 %) : aucune toile refaite, puis le cache reprend et le sol reste juste', zm.f === 0 && zp.h >= 1 && z.n <= z.tot * 1e-4,
       `pendant : ${zm.h} images par le cache, ${zm.f} redessins complets ; apres : ${zp.h - zm.h} images par le cache ; ${z.n}/${z.tot} pixels differents (tolere : 0,01 %, les joints antialiases entre chunks a une echelle non entiere)`);
+    /* ---- 6. zoom qui GLISSE (0,03 % par image, sous le seuil par image) : pas de toile refaite toutes les 3 images ---- */
+    await B.ev(`(()=>{__S.hit=0;__S.full=0;return true;})()`);
+    for (let i = 0; i < 40; i++) { await B.ev(`(()=>{G.zoom*=1.0003;return true;})()`); await B.ev(PLACE(nx, ny)); await B.ev(SHOT); }
+    const zg = JSON.parse(await B.ev(`JSON.stringify({h:__S.hit,f:__S.full})`));
+    check('6. zoom qui glisse lentement (40 images a +0,03 %) : au plus 2 toiles refaites', zg.f <= 2, `${zg.h} images par le cache, ${zg.f} redessins complets`);
   } finally { B.close(); }
   console.log(ok ? 'TOUT PASSE' : 'ECHEC PARTIEL');
   process.exit(ok ? 0 : 1);
