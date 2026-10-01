@@ -171,23 +171,28 @@ const CHV=new WeakMap();let CHNEW=0;
    Sur un canevas dessiné par la CARTE GRAPHIQUE, la copie des chunks ne coûte presque rien au JS (0,4 ms mesuré dans
    Chromium) et ce chemin doublerait la surface remplie : il ne s'enclenche donc que si la copie directe coûte
    (moyenne glissante SOLE > 3 ms sur au moins 30 images), et le reste ensuite. ?sol=1 le force, ?sol=0 l'interdit. */
-let SOLC=null,SOLI=0,SOLK=null,SOLE=0,SOLN=0,SOLON=false;const SOLB=new Map();
+let SOLC=null,SOLK=null,SOLE=0,SOLN=0,SOLON=false;const SOLB=new Map();
 const SOLM=(()=>{const m=typeof location!=='undefined'&&/[?&]sol=([01])\b/.exec(location.search||'');return m?+m[1]:-1;})();
 function solMeasure(ms){SOLK=null;if(SOLM>=0)return;SOLE=SOLN?SOLE*.9+ms*.1:ms;if(++SOLN>=30&&SOLE>3)SOLON=true;}
+/* La toile est TORIQUE : le pixel d'écran X (translation tx) vit au pixel ((X-tx) mod w) de la toile, donc un déplacement
+   ne recopie rien. Une image coûte UNE recopie plein écran sans redimensionnement (en 1 à 4 morceaux) + les bandes neuves.
+   (Première version : deux toiles alternées, décalées par une recopie — deux plein écran par image : drawChunks
+   6,95 ms chez le propriétaire, contre 12,4 sans cache.) */
+const solMod=(a,n)=>(a%n+n)%n;
+/* découpe [a,b) de l'écran en morceaux qui ne passent pas le bord de la toile : [écran début, écran fin, toile début] */
+function solCut(a,b,t,n){const o=solMod(a-t,n),k=Math.min(b-a,n-o);return k<b-a?[[a,a+k,o],[a+k,b,0]]:[[a,b,o]];}
 function solDraw(c0,c1,r0,r1){
   if(!(SOLM===1||SOLM<0&&SOLON)||typeof document==='undefined')return false;
   const w=cv.width,h=cv.height,s=PS*RZ;
   for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(!c||!c.bake&&!(c.bk&&c.bk.cv))return false;}
-  if(!SOLC||SOLC[0].width!==w||SOLC[0].height!==h){SOLC=[mkCanvas(w,h),mkCanvas(w,h)];SOLK=null;}
+  if(!SOLC||SOLC.width!==w||SOLC.height!==h){SOLC=mkCanvas(w,h);SOLK=null;}
   let K=SOLK;if(K&&Math.abs(s/K.s-1)>.001)K=null;
   const sc=K?K.s:s,tx=Math.round(PS*(W/2+RSX)-CAM.x*sc),ty=Math.round(PS*(H/2+RSY)-CAM.y*sc),R=[];
-  let full=!K,dx=0,dy=0;
-  if(K){dx=tx-K.tx;dy=ty-K.ty;if(Math.abs(dx)>=w||Math.abs(dy)>=h)full=true;}
-  let T=SOLC[SOLI];
-  if(full){SOLB.clear();R.push([0,0,w,h]);}
-  else if(dx||dy){const D=SOLC[SOLI^1],g=D.getContext('2d');g.setTransform(1,0,0,1,0,0);g.globalAlpha=1;g.globalCompositeOperation='source-over';g.drawImage(T,dx,dy);T=D;SOLI^=1;
-    if(dx>0)R.push([0,0,dx,h]);else if(dx<0)R.push([w+dx,0,-dx,h]);
-    if(dy>0)R.push([0,0,w,dy]);else if(dy<0)R.push([0,h+dy,w,-dy]);}
+  let full=!K;
+  if(K){const dx=tx-K.tx,dy=ty-K.ty;if(Math.abs(dx)>=w||Math.abs(dy)>=h)full=true;
+    else{if(dx>0)R.push([0,0,dx,h]);else if(dx<0)R.push([w+dx,0,-dx,h]);
+      if(dy>0)R.push([0,0,w,dy]);else if(dy<0)R.push([0,h+dy,w,-dy]);}}
+  if(full){SOLB.clear();R.length=0;R.push([0,0,w,h]);}
   /* chunks changés : cuisson en cours (toujours), ou surface différente de celle déjà posée dans la toile */
   const V=[];
   for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy),b=c.bake||c.bk.cv,k=cx+','+cy;V.push(c,b);
@@ -195,14 +200,18 @@ function solDraw(c0,c1,r0,r1){
     if(!full&&(!c.bake||SOLB.get(k)!==b)){const x=Math.floor(c.x0*sc+tx)-1,y=Math.floor(c.y0*sc+ty)-1,e=Math.ceil(CH*sc)+3;R.push([x,y,e,e]);}
     SOLB.set(k,b);}
   if(SOLB.size>256)SOLB.clear();
-  const g=T.getContext('2d');g.globalAlpha=1;g.globalCompositeOperation='source-over';g.imageSmoothingEnabled=true;
+  const g=SOLC.getContext('2d');g.globalAlpha=1;g.globalCompositeOperation='source-over';g.imageSmoothingEnabled=true;
   for(const r of R){const x0=Math.max(0,r[0]),y0=Math.max(0,r[1]),x1=Math.min(w,r[0]+r[2]),y1=Math.min(h,r[1]+r[3]);if(x1<=x0||y1<=y0)continue;
-    g.save();g.setTransform(1,0,0,1,0,0);g.beginPath();g.rect(x0,y0,x1-x0,y1-y0);g.clip();g.fillStyle='#05030c';g.fillRect(x0,y0,x1-x0,y1-y0);
-    g.setTransform(sc,0,0,sc,tx,ty);
-    for(let i=0;i<V.length;i+=2){const c=V[i],X=c.x0*sc+tx,Y=c.y0*sc+ty,E=CH*sc;if(X+E<x0||X>x1||Y+E<y0||Y>y1)continue;g.drawImage(V[i+1],c.x0,c.y0,CH,CH);}
-    g.restore();}
+    for(const X of solCut(x0,x1,tx,w))for(const Y of solCut(y0,y1,ty,h)){
+      const ox=X[2]-X[0],oy=Y[2]-Y[0],a0=X[2],b0=Y[2],a1=a0+X[1]-X[0],b1=b0+Y[1]-Y[0];
+      g.save();g.setTransform(1,0,0,1,0,0);g.beginPath();g.rect(a0,b0,a1-a0,b1-b0);g.clip();g.fillStyle='#05030c';g.fillRect(a0,b0,a1-a0,b1-b0);
+      g.setTransform(sc,0,0,sc,tx+ox,ty+oy);
+      for(let i=0;i<V.length;i+=2){const c=V[i],P=c.x0*sc+tx,Q=c.y0*sc+ty,E=CH*sc;if(P+E<X[0]||P>X[1]||Q+E<Y[0]||Q>Y[1])continue;g.drawImage(V[i+1],c.x0,c.y0,CH,CH);}
+      g.restore();}}
   SOLK={s:sc,tx,ty};
-  ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(T,0,0);worldTf();
+  ctx.setTransform(1,0,0,1,0,0);
+  for(const X of solCut(0,w,tx,w))for(const Y of solCut(0,h,ty,h))ctx.drawImage(SOLC,X[2],Y[2],X[1]-X[0],Y[1]-Y[0],X[0],Y[0],X[1]-X[0],Y[1]-Y[0]);
+  worldTf();
   return true;
 }
 function drawChunks(){
