@@ -376,8 +376,10 @@ function drawMarks(){const c=ctx,P=G.p;
   c.globalAlpha=1;}
 function drawCaustics(w){
   const c=ctx,d=RT*.35;c.save();c.globalCompositeOperation='lighter';c.fillStyle=CAUSP;
+  /* Une seule couche (01/10/2026). La seconde (×1,6, QL 3) repeignait tout l'écran une deuxième fois : Récif abyssal,
+     Chromium 1920×1080 qualité haute, 10 ips avec les deux couches, 15 avec une, 28 sans ; 12 ips chez le propriétaire
+     (Firefox). Choix du propriétaire : garder l'eau animée, une couche. */
   c.globalAlpha=.1*w;c.translate(d,d*.6);c.fillRect(VL-d,VT-d*.6,VR-VL,VB-VT);
-  if(QL>=3){c.translate(-d*2.1,d*.3);c.scale(1.6,1.6);c.globalAlpha=.06*w;c.fillRect((VL+d*1.1)/1.6,(VT-d*.9)/1.6,(VR-VL)/1.6,(VB-VT)/1.6);}
   c.restore();
 }
 function membrane(cx,cy,R,col,t){
