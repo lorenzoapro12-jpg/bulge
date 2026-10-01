@@ -4277,8 +4277,11 @@ function drawHUD(){
        meme jour : en manuel, perf() descend desormais. « FIGÉE » serait donc devenu un mensonge —
        exactement le defaut que ce compteur existe pour empecher (un reglage qui n'adapte plus sans
        que rien ne le dise). Ne pas y revenir. Le cran est lu dans QPRE (g4.js, globale du bundle). */
+    /* « saut N/2 P x ms W y s » (chantier FLUIDITE 2) : le filet de budget de g4.js — SKIPD (0 tout dessine, 1 sans
+       decoratif, 2 sans halos), SKP la periode d'ecran qu'il croit voir (a comparer a « ref »), SKW l'attente avant
+       de redescendre. Sans lui, un saut engage a vie ne se distinguait pas d'une scene pauvre. */
     const rq=meta.q||'auto',capq=rq==='auto'?[3,1]:QPRE[rq],dsc=QL<capq[0]||RES<capq[1];
-    const seg3=['régul '+(rq==='auto'?'auto':'plafond '+rq+(dsc?' ↓':''))+' '+QL+'/3 ×'+RES.toFixed(2),'PS '+PS.toFixed(2),'canvas '+cv.width+'×'+cv.height,'DPR '+DPR,'ref '+REFDT.toFixed(1)+' ms','cuisson '+cuis];
+    const seg3=['régul '+(rq==='auto'?'auto':'plafond '+rq+(dsc?' ↓':''))+' '+QL+'/3 ×'+RES.toFixed(2),'PS '+PS.toFixed(2),'canvas '+cv.width+'×'+cv.height,'DPR '+DPR,'ref '+REFDT.toFixed(1)+' ms'].concat(typeof SKIPD==='number'?['saut '+SKIPD+'/2 P '+SKP.toFixed(1)+' ms W '+(SKW/1e3).toFixed(0)+' s']:[],['cuisson '+cuis]);
     if(DIAG_MARGIN>=0)seg3.push('marge audio '+DIAG_MARGIN.toFixed(2)+' s');
     /* jointure : « · » entre morceaux, mais un simple espace apres un morceau qui finit par « : »
        — sinon la ligne s'ecrit « ou : · render 6.06/12 » au lieu de « ou : render 6.06/12 ». */
@@ -4731,19 +4734,37 @@ function perf(dt){
    SKP = période d'écran RÉELLE, enveloppe basse des intervalles : elle descend vite vers un intervalle
    court, et ne remonte (constante ~50 images) que sur des images où le JS n'explique pas la durée (écran
    30 Hz, mode économie) — sinon un jeu lent redéfinirait sa propre référence et le filet ne jouerait jamais.
+   ⚠️ « le JS » s'entend HORS travail délibéré : la cuisson budgétée (BKMS, gw2.js) est retirée du calcul,
+   sans quoi elle interdisait la remontée pendant tout streaming (chantier FLUIDITE 2, mesures ci-dessous).
    Hystérésis : montée d'un cran après 400 ms d'images hors budget (des images saines en effacent la
    moitié de leur durée : un raté isolé ne compte pas) ; descente d'un cran après SKW ms d'images TOUTES
    saines. Si le cran revient moins de 2 s après une descente, la descente était prématurée : SKW double
-   (3 s -> 60 s max), et ne revient à 3 s qu'après 30 s saines au cran 0. Sans ce recul, 1 -> 0 -> 1
+   (3 s -> 60 s max), et ne revient à 3 s que par deux voies : 30 s saines au cran 0, ou une descente
+   CONFIRMÉE (tenue 2 s sans rebond) qui le divise par 2 (plancher 3 s) — ajouté par FLUIDITE 2.
+   Sans ce recul, 1 -> 0 -> 1
    battrait toutes les 3 s, puisqu'au cran 1 les images redeviennent justement saines.
    Tourne aussi sans partie (G nul) : ne dépend que de l'horloge. */
+/* ⚠️ Chantier FLUIDITE 2 (01/10/2026) : trois verrous MESURES (test/saut.js, horloge virtuelle), chacun corrige a la regle :
+   - SKP sans plancher : 4 rappels rAF a 0,4 ms l'amenaient de 16,7 a 11,8 ms (< 16,7/1,4) ; ensuite TOUTE image
+     normale etait hors budget. Meme plancher physique que perf() : dt < DTMIN n'est pas une image, rien ne bouge.
+   - remontee de SKP bloquee par notre travail DELIBERE : w = FWK+BKMS, et la cuisson remplit 0,6×REFDT (bakeBudget,
+     gw2.js), donc w >= dt/2 pendant tout streaming. 30 images a 8 ms en mouvement -> SKIPD=2 pour le reste de la
+     partie (59,6 s sur 60 mesurees). La remontee juge donc w-b (b = BKMS, cuisson budgetee) : le JS NON delibere.
+     Comme b <= 0,6×REFDT, elle ne peut porter SKP qu'a ~1,2×REFDT au plus ; aux longues images b est au plancher.
+   - SKW doublait sans sortie : apres une charge qui repond au saut (60 s atteint en ~96 s), un seul rate isole
+     (GC, 50 ms) toutes les 20 s remettait SKO a 0 et SKIPD restait a 1 a vie. Obligation de preuve des DEUX cotes :
+     une descente refutee (remontee < 2 s) double SKW, une descente CONFIRMEE (tenue 2 s) le divise par 2 ; et un
+     rate ISOLE (SKS a 0 : aucune dette recente) ne remet plus SKO a 0 — il ne compte pas pour monter, il ne compte
+     pas non plus pour redescendre. Une montee clot le jugement de la descente (SKT=1e9) : une seule preuve par descente. */
 let SKIPD=0,SKBAD=false,SKP=1000/60,SKS=0,SKO=0,SKW=3000,SKT=1e9;
-function skipCtl(w,dt){
-  if(dt<SKP)SKP+=(dt-SKP)*.1;else if(w<dt*.5)SKP+=(Math.min(dt,50)-SKP)*.02;
+function skipCtl(w,dt,b=BKMS){
+  if(dt<DTMIN)return;   /* rappel en double, pas une image (voir DTMIN) */
+  if(dt<SKP)SKP+=(dt-SKP)*.1;else if(w-b<dt*.5)SKP+=(Math.min(dt,50)-SKP)*.02;
   SKT+=dt;SKBAD=dt>SKP*1.4||w>SKP;
-  if(SKBAD){SKO=0;if((SKS+=dt)>=400&&SKIPD<2){SKIPD++;SKS=0;if(SKT<2000)SKW=Math.min(60000,SKW*2);}}
+  if(SKBAD){if(SKS>0)SKO=0;if((SKS+=dt)>=400&&SKIPD<2){SKIPD++;SKS=0;if(SKT<2000)SKW=Math.min(60000,SKW*2);SKT=1e9;}}
   else{SKS=Math.max(0,SKS-dt*.5);SKO+=dt;
     if(SKIPD>0){if(SKO>=SKW){SKIPD--;SKO=0;SKT=0;}}else if(SKO>=30000)SKW=3000;}
+  if(SKT>=2000&&SKT-dt<2000)SKW=Math.max(3000,SKW/2);
 }
 let FRN=0;
 function frame(ts){

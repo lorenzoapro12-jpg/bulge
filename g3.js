@@ -724,8 +724,11 @@ function drawHUD(){
        meme jour : en manuel, perf() descend desormais. « FIGÉE » serait donc devenu un mensonge —
        exactement le defaut que ce compteur existe pour empecher (un reglage qui n'adapte plus sans
        que rien ne le dise). Ne pas y revenir. Le cran est lu dans QPRE (g4.js, globale du bundle). */
+    /* « saut N/2 P x ms W y s » (chantier FLUIDITE 2) : le filet de budget de g4.js — SKIPD (0 tout dessine, 1 sans
+       decoratif, 2 sans halos), SKP la periode d'ecran qu'il croit voir (a comparer a « ref »), SKW l'attente avant
+       de redescendre. Sans lui, un saut engage a vie ne se distinguait pas d'une scene pauvre. */
     const rq=meta.q||'auto',capq=rq==='auto'?[3,1]:QPRE[rq],dsc=QL<capq[0]||RES<capq[1];
-    const seg3=['régul '+(rq==='auto'?'auto':'plafond '+rq+(dsc?' ↓':''))+' '+QL+'/3 ×'+RES.toFixed(2),'PS '+PS.toFixed(2),'canvas '+cv.width+'×'+cv.height,'DPR '+DPR,'ref '+REFDT.toFixed(1)+' ms','cuisson '+cuis];
+    const seg3=['régul '+(rq==='auto'?'auto':'plafond '+rq+(dsc?' ↓':''))+' '+QL+'/3 ×'+RES.toFixed(2),'PS '+PS.toFixed(2),'canvas '+cv.width+'×'+cv.height,'DPR '+DPR,'ref '+REFDT.toFixed(1)+' ms'].concat(typeof SKIPD==='number'?['saut '+SKIPD+'/2 P '+SKP.toFixed(1)+' ms W '+(SKW/1e3).toFixed(0)+' s']:[],['cuisson '+cuis]);
     if(DIAG_MARGIN>=0)seg3.push('marge audio '+DIAG_MARGIN.toFixed(2)+' s');
     /* jointure : « · » entre morceaux, mais un simple espace apres un morceau qui finit par « : »
        — sinon la ligne s'ecrit « ou : · render 6.06/12 » au lieu de « ou : render 6.06/12 ». */
