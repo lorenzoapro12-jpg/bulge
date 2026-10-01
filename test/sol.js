@@ -18,6 +18,8 @@
      5. ZOOM EN MOUVEMENT : pas de toile refaite a chaque image (chemin direct), le cache reprend ensuite ;
      6. ZOOM QUI GLISSE (fin du lerp, sous le seuil par image) : la toile n'est pas refaite toutes les 3 images
         (Megapole chez le proprietaire : solDraw 15,7 ms en moyenne, 42 ms au pire) ;
+     7. CHUNK PAS ENCORE CUIT (voyage rapide, worker en route) : le cache le pose sur le sol de secours au lieu de passer
+        au chemin direct et de jeter la toile (Recif chez le proprietaire : solDraw 9,2 ms, 20 ms au pire) ;
      4. PAR DEFAUT, dans ce Chromium (copie des chunks presque gratuite pour le JS), le cache ne s'enclenche PAS :
         sur un canevas dessine par la carte graphique, il doublerait la surface remplie.
    ========================================================= */
@@ -36,7 +38,7 @@ const SETUP = `(()=>{meta.q='high';applyQuality();refReset();newRun('bal',false)
 /* place la camera pour que la translation soit ENTIERE : PS*W/2 - CAM.x*s = n */
 const PLACE = (nx, ny) => `(()=>{G.kick=0;G.trauma=0;G.pcx=G.pcy=G.pzoom=null;G.state="play";const s=PS*G.zoom;G.cx=(PS*W/2-(${nx}))/s;G.cy=(PS*H/2-(${ny}))/s;return true;})()`;
 const SHOT = `(()=>{__S.want=true;render(0,16.7);return true;})()`;
-const DIFF = `(()=>{const a=__S.a,b=__S.snap;let n=0,mx=0;for(let i=0;i<a.length;i+=4){const d=Math.max(Math.abs(a[i]-b[i]),Math.abs(a[i+1]-b[i+1]),Math.abs(a[i+2]-b[i+2]));if(d>2)n++;if(d>mx)mx=d;}return {n,mx,tot:a.length/4};})()`;
+const DIFF = `(()=>{const a=__S.a,b=__S.snap;let n=0,n16=0,mx=0,bb=null;for(let i=0;i<a.length;i+=4){const d=Math.max(Math.abs(a[i]-b[i]),Math.abs(a[i+1]-b[i+1]),Math.abs(a[i+2]-b[i+2]));if(d>2){n++;const p=i/4,x=p%cv.width,y=(p-x)/cv.width;if(!bb)bb=[x,y,x,y];bb[0]=Math.min(bb[0],x);bb[1]=Math.min(bb[1],y);bb[2]=Math.max(bb[2],x);bb[3]=Math.max(bb[3],y);}if(d>16)n16++;if(d>mx)mx=d;}return {n,n16,mx,tot:a.length/4,bb,K:SOLK,s:PS*RZ,cx:CAM.x,cy:CAM.y};})()`;
 const SETTLE = `(async()=>{for(let i=0;i<400;i++){render(0,16.7);await new Promise(r=>setTimeout(r,16));let busy=false;const c0=Math.floor(VL/CH),c1=Math.floor(VR/CH),r0=Math.floor(VT/CH),r1=Math.floor(VB/CH);
   for(let cx=c0-1;cx<=c1+1;cx++)for(let cy=r0-1;cy<=r1+1;cy++){const c=getChunk(cx,cy);if(!c||!c.bake)busy=true;}if(!busy)return i;}return -1;})()`;
 
@@ -69,17 +71,20 @@ const SETTLE = `(async()=>{for(let i=0;i<400;i++){render(0,16.7);await new Promi
       await B.ev(SHOT);
       if (process.env.DBG) console.log(nx, ny, await B.ev(marks), await B.ev("JSON.stringify({h:__S.hit,f:__S.full,d:__S.dec,st:G.state,cx:G.cx,CX:CAM.x,z:G.zoom})"));
     }
+    /* reflets de la mer : au plus un chunk decore par image (chSurf, CAUB) ; sans ces images, le rendu direct de controle
+       decorerait le dernier chunk entre et l'ecart viendrait du banc, pas du cache */
+    for (let i = 0; i < 8; i++) await B.ev(SHOT);
     const S = await B.ev(`JSON.stringify(__S,(k,v)=>k==="snap"||k==="a"?undefined:v)`), used = JSON.parse(S).hit, full = JSON.parse(S).full; deca = JSON.parse(S).dec || 0; if (process.env.DBG) console.log(S);
     await B.ev(`__S.a=__S.snap;true`);
     /* meme etat, chemin direct */
     await B.ev(`(()=>{SOLON=false;window.__SM=1;return true;})()`);
     await B.ev(`(()=>{const f=solDraw;solDraw=function(){return false;};__S.want=true;render(0,16.7);solDraw=f;return true;})()`);
-    const r = await B.ev(DIFF);
+    const r = await B.ev(DIFF); if (process.env.DBG) console.log('diff', JSON.stringify(r)); if (process.env.DBG && r.n) { const col = r.bb[0] + 5; console.log(await B.ev('(()=>{const a=__S.a,b=__S.snap,W2=cv.width;let o=[];for(let y=770;y<800;y++){const i=(y*W2+' + col + ')*4;o.push(y+":"+a[i]+","+a[i+1]+","+a[i+2]+"/"+b[i]+","+b[i+1]+","+b[i+2]);}return o.join(" ");})()')); }if (process.env.DBG && r.n) console.log(await B.ev(`(()=>{const o=[],s=PS*RZ,ty=Math.round(PS*(H/2+RSY)-CAM.y*s);for(let cx=Math.floor(VL/CH);cx<=Math.floor(VR/CH);cx++)for(let cy=Math.floor(VT/CH);cy<=Math.floor(VB/CH);cy++){const c=getChunk(cx,cy),k=cx+','+cy,b=c.bake,d=CAUV.get(b);o.push(k+' y='+(c.y0*s+ty).toFixed(1)+' sea='+(c.sea===undefined?'?':c.sea.toFixed(2))+' posed='+(SOLB.get(k)===b?'raw':SOLB.get(k)===d?'deco':SOLB.has(k)?'other':'none')+' deco='+!!d);}return o.join(' | ');})()`)); if (process.env.DBG) console.log("manquants", await B.ev(`(()=>{let n=0;for(let cx=Math.floor(VL/CH);cx<=Math.floor(VR/CH);cx++)for(let cy=Math.floor(VT/CH);cy<=Math.floor(VB/CH);cy++){const c=getChunk(cx,cy);if(!c||!c.bake)n++;}return n;})()`));
     check('2. le cache a servi, et a DECALE la toile au lieu de la redessiner', used >= 40 && deca >= 20, `cache pris ${used} fois (dont ${full} redessins complets), ${deca}/40 images par decalage, sol stabilise en ${s0} images`);
-    check('1+3. meme sol que le chemin direct apres 40 pas (et un chunk recuit au 20e)', r.n === 0, `${r.n}/${r.tot} pixels differents de plus de 2/255 (ecart max ${r.mx}) ; chunk recuit ${rebake}`);
+    check('1+3. meme sol que le chemin direct apres 40 pas (et un chunk recuit au 20e)', r.n16 === 0 && r.n <= r.tot * 1e-3, `${r.n}/${r.tot} pixels differents de plus de 2/255, ${r.n16} de plus de 16/255 (ecart max ${r.mx}) ; chunk recuit ${rebake}. Tolere : 0,1 % d'ecarts FAIBLES — quand la translation tombe sur un entier, la partie de l'ecran sous le raccord de la toile torique est filtree a quelques 1/255 pres (vu jusqu'a 13/255, deja sur 8a45978) ; un chunk perime donne des ecarts francs`);
     /* temoin : sans redessin des chunks changes, l'ecart DOIT apparaitre (sinon 3 ne prouverait rien) */
     for (let i = 0; i < 10; i++) await B.ev(SHOT); /* le cache ne reprend qu'apres 8 images de zoom pose */
-    await B.ev(`(()=>{const c=getChunk(Math.floor(CAM.x/CH),Math.floor(CAM.y/CH));const o=c.bake,n=mkCanvas(o.width,o.height);n.getContext('2d').drawImage(o,0,0);n.getContext('2d').fillStyle='#ff00ff';n.getContext('2d').fillRect(0,0,64,64);c.bake=n;SOLB.set(Math.floor(CAM.x/CH)+','+Math.floor(CAM.y/CH),n);return true;})()`);
+    await B.ev(`(()=>{const c=getChunk(Math.floor(CAM.x/CH),Math.floor(CAM.y/CH));const o=c.bake,n=mkCanvas(o.width,o.height);n.getContext('2d').drawImage(o,0,0);n.getContext('2d').fillStyle='#ff00ff';n.getContext('2d').fillRect(0,0,64,64);c.bake=n;CAUB=1;SOLB.set(Math.floor(CAM.x/CH)+','+Math.floor(CAM.y/CH),chSurf(c,n));return true;})()`);
     await B.ev(SHOT); await B.ev(`__S.a=__S.snap;true`);
     await B.ev(`(()=>{const f=solDraw;solDraw=function(){return false;};__S.want=true;render(0,16.7);solDraw=f;return true;})()`);
     const t = await B.ev(DIFF);
@@ -100,6 +105,20 @@ const SETTLE = `(async()=>{for(let i=0;i<400;i++){render(0,16.7);await new Promi
     for (let i = 0; i < 40; i++) { await B.ev(`(()=>{G.zoom*=1.0003;return true;})()`); await B.ev(PLACE(nx, ny)); await B.ev(SHOT); }
     const zg = JSON.parse(await B.ev(`JSON.stringify({h:__S.hit,f:__S.full})`));
     check('6. zoom qui glisse lentement (40 images a +0,03 %) : au plus 2 toiles refaites', zg.f <= 2, `${zg.h} images par le cache, ${zg.f} redessins complets`);
+    /* ---- 7. chunk pas encore cuit (worker en route) : le cache le pose sur le sol de secours, sans chemin direct ni toile
+       refaite ; une fois cuit, il est redessine et le sol redevient celui du chemin direct ---- */
+    for (let i = 0; i < 10; i++) { await B.ev(PLACE(nx, ny)); await B.ev(SHOT); }
+    await B.ev(`(()=>{__S.hit=0;__S.full=0;const c=getChunk(Math.floor(CAM.x/CH),Math.floor(CAM.y/CH));__S.cb=c.bake;c.bake=null;c.bk=null;c.wk=1;return true;})()`);
+    for (let i = 0; i < 5; i++) { nx += 3; await B.ev(PLACE(nx, ny)); await B.ev(SHOT); }
+    const mq = JSON.parse(await B.ev(`JSON.stringify({h:__S.hit,f:__S.full})`));
+    await B.ev(`(()=>{const c=getChunk(Math.floor(CAM.x/CH),Math.floor(CAM.y/CH));c.bake=__S.cb;c.wk=0;return true;})()`);
+    for (let i = 0; i < 2; i++) { nx += 3; await B.ev(PLACE(nx, ny)); await B.ev(SHOT); }
+    const mq2 = JSON.parse(await B.ev(`JSON.stringify({h:__S.hit,f:__S.full})`));
+    await B.ev(`__S.a=__S.snap;true`);
+    await B.ev(`(()=>{const f=solDraw;solDraw=function(){return false;};__S.want=true;render(0,16.7);solDraw=f;return true;})()`);
+    const mz = await B.ev(DIFF); if (process.env.DBG) console.log("mz", JSON.stringify(mz), await B.ev(`(()=>{const c=getChunk(Math.floor(CAM.x/CH),Math.floor(CAM.y/CH));const s=PS*RZ;return [c.x0*s+Math.round(PS*(W/2+RSX)-CAM.x*s),c.y0*s+Math.round(PS*(H/2+RSY)-CAM.y*s),CH*s];})()`));
+    check('7. chunk pas encore cuit : le cache tient (pas de chemin direct ni de toile refaite), puis le chunk cuit est pose juste', mq.h === 5 && mq2.f === 0 && mz.n <= mz.tot * 1e-4,
+      `manquant : ${mq.h}/5 images par le cache ; ${mq2.f} redessins complets ; apres cuisson ${mz.n} pixels differents (tolere : 0,01 %, l'echelle laissee non entiere par 5 et 6 : joints antialiases au raccord de la toile torique)`);
   } finally { B.close(); }
   console.log(ok ? 'TOUT PASSE' : 'ECHEC PARTIEL');
   process.exit(ok ? 0 : 1);

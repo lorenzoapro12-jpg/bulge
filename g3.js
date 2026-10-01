@@ -171,6 +171,9 @@ const CHV=new WeakMap();let CHNEW=0;
    Chromium) et ce chemin doublerait la surface remplie : il ne s'enclenche donc que si la copie directe coûte
    (moyenne glissante SOLE > 3 ms sur au moins 30 images), et le reste ensuite. ?sol=1 le force, ?sol=0 l'interdit. */
 let SOLC=null,SOLK=null,SOLZ=0,SOLZI=0,SOLE=0,SOLN=0,SOLON=false;const SOLB=new Map(),SOLZH=new Float64Array(8);
+/* compteur de diagnostic (meta.fps) : par seconde, toiles refaites entières, chunks redessinés, images en chemin direct */
+const SOLST=[0,0,0,0];let SOLD=null;
+function solStat(i,n){SOLST[i]+=n;const t=performance.now();if(!SOLST[3])SOLST[3]=t;else if(t-SOLST[3]>=1000){const k=1000/(t-SOLST[3]);SOLD=['sol : toile '+(SOLST[0]*k).toFixed(1)+'/s','chunks '+(SOLST[1]*k).toFixed(1)+'/s','direct '+(SOLST[2]*k).toFixed(0)+'/s'];SOLST[0]=SOLST[1]=SOLST[2]=0;SOLST[3]=t;}}
 const SOLM=(()=>{const m=typeof location!=='undefined'&&/[?&]sol=([01])\b/.exec(location.search||'');return m?+m[1]:-1;})();
 function solMeasure(ms){SOLK=null;if(SOLM>=0)return;SOLE=SOLN?SOLE*.9+ms*.1:ms;if(++SOLN>=30&&SOLE>3)SOLON=true;}
 /* La toile est TORIQUE : le pixel d'écran X (translation tx) vit au pixel ((X-tx) mod w) de la toile, donc un déplacement
@@ -183,7 +186,6 @@ function solCut(a,b,t,n){const o=solMod(a-t,n),k=Math.min(b-a,n-o);return k<b-a?
 function solDraw(c0,c1,r0,r1){
   if(!(SOLM===1||SOLM<0&&SOLON)||typeof document==='undefined')return false;
   const w=cv.width,h=cv.height,s=PS*RZ;
-  for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(!c||!c.bake&&!(c.bk&&c.bk.cv))return false;}
   if(!SOLC||SOLC.width!==w||SOLC.height!==h){SOLC=mkCanvas(w,h);SOLK=null;}
   /* zoom en mouvement (début de partie, approche d'un cœur, coup de zoom) : la toile serait à refaire ENTIÈRE à chaque
      image, soit le chemin direct PLUS une recopie (Récif abyssal chez le propriétaire : solDraw 14,8 ms, 17 ips).
@@ -199,12 +201,16 @@ function solDraw(c0,c1,r0,r1){
     else{if(dx>0)R.push([0,0,dx,h]);else if(dx<0)R.push([w+dx,0,-dx,h]);
       if(dy>0)R.push([0,0,w,dy]);else if(dy<0)R.push([0,h+dy,w,-dy]);}}
   if(full){SOLB.clear();R.length=0;R.push([0,0,w,h]);}
-  /* chunks changés : cuisson en cours (toujours), ou surface différente de celle déjà posée dans la toile */
+  /* chunks changés : cuisson sur place en cours (toujours), ou surface différente de celle déjà posée dans la toile.
+     Chunk pas encore cuit (worker en route, voyage rapide vers l'inconnu) : posé UNE fois sur le sol de secours (WD.map, comme
+     drawGround), puis redessiné à sa cuisson. Avant, un seul chunk manquant renvoyait au chemin direct ET
+     jetait la toile : à chaque chunk reçu, toile refaite ENTIÈRE (Récif chez le propriétaire : solDraw 9,2 ms, 20 ms au pire). */
   const V=[];
-  for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy),r=c.bake||c.bk.cv,b=chSurf(c,r),k=cx+','+cy;V.push(c,b);
+  for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy)||{x0:cx*CH,y0:cy*CH},r=c.bake||c.bk&&c.bk.cv,b=r?chSurf(c,r):null,k=cx+','+cy;V.push(c,b);
     if(c.bake&&CHV.get(r)!==c){CHV.set(r,c);CHNEW++;}
-    if(!full&&(!c.bake||SOLB.get(k)!==b)){const x=Math.floor(c.x0*sc+tx)-1,y=Math.floor(c.y0*sc+ty)-1,e=Math.ceil(CH*sc)+3;R.push([x,y,e,e]);}
-    SOLB.set(k,b);}
+    const id=c.bake?b:b?null:WD.map;
+    if(!full&&(!id||SOLB.get(k)!==id)){const x=Math.floor(c.x0*sc+tx)-1,y=Math.floor(c.y0*sc+ty)-1,e=Math.ceil(CH*sc)+3;R.push([x,y,e,e]);}
+    SOLB.set(k,id);}
   if(SOLB.size>256)SOLB.clear();
   const g=SOLC.getContext('2d');g.globalAlpha=1;g.globalCompositeOperation='source-over';g.imageSmoothingEnabled=true;
   for(const r of R){const x0=Math.max(0,r[0]),y0=Math.max(0,r[1]),x1=Math.min(w,r[0]+r[2]),y1=Math.min(h,r[1]+r[3]);if(x1<=x0||y1<=y0)continue;
@@ -212,9 +218,10 @@ function solDraw(c0,c1,r0,r1){
       const ox=X[2]-X[0],oy=Y[2]-Y[0],a0=X[2],b0=Y[2],a1=a0+X[1]-X[0],b1=b0+Y[1]-Y[0];
       g.save();g.setTransform(1,0,0,1,0,0);g.beginPath();g.rect(a0,b0,a1-a0,b1-b0);g.clip();g.fillStyle='#05030c';g.fillRect(a0,b0,a1-a0,b1-b0);
       g.setTransform(sc,0,0,sc,tx+ox,ty+oy);
-      for(let i=0;i<V.length;i+=2){const c=V[i],P=c.x0*sc+tx,Q=c.y0*sc+ty,E=CH*sc;if(P+E<X[0]||P>X[1]||Q+E<Y[0]||Q>Y[1])continue;g.drawImage(V[i+1],c.x0,c.y0,CH,CH);}
+      for(let i=0;i<V.length;i+=2){const c=V[i],P=c.x0*sc+tx,Q=c.y0*sc+ty,E=CH*sc;if(P+E<X[0]||P>X[1]||Q+E<Y[0]||Q>Y[1])continue;
+        if(V[i+1])g.drawImage(V[i+1],c.x0,c.y0,CH,CH);else{const k=256/(2*WR),u=(c.x0+WR)*k,v=(c.y0+WR)*k;if(u>=0&&v>=0&&u+CH*k<=256&&v+CH*k<=256)g.drawImage(WD.map,u,v,CH*k,CH*k,c.x0,c.y0,CH,CH);}}
       g.restore();}}
-  SOLK={s:sc,tx,ty};
+  solStat(0,full?1:0);solStat(1,full?0:R.length-(K&&(tx!==K.tx)?1:0)-(K&&(ty!==K.ty)?1:0));SOLK={s:sc,tx,ty};
   ctx.setTransform(1,0,0,1,0,0);
   for(const X of solCut(0,w,tx,w))for(const Y of solCut(0,h,ty,h))ctx.drawImage(SOLC,X[2],Y[2],X[1]-X[0],Y[1]-Y[0],X[0],Y[0],X[1]-X[0],Y[1]-Y[0]);
   worldTf();
@@ -226,7 +233,7 @@ function drawChunks(){
   CAUB=1;
   if(!solDraw(c0,c1,r0,r1)){const t0=performance.now();
     for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy),b=c&&(c.bake||c.bk&&c.bk.cv);if(b){if(c.bake&&CHV.get(b)!==c){CHV.set(b,c);CHNEW++;}ctx.drawImage(chSurf(c,b),c.x0,c.y0,CH,CH);}}
-    solMeasure(performance.now()-t0);}
+    solMeasure(performance.now()-t0);if(SOLM===1||SOLON)solStat(2,1);}
   fleeBuild();STB=10;DCB=1;DEC=G&&G.p&&G.dec?G.biome:'';
   for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(c){for(const it of c.live)drawLive(it);if(c.bake||c.bk)drawDeco(c);}}
   ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
@@ -847,7 +854,7 @@ function drawHUD(){
       const out=[];c.font='500 '+PX0+'px '+FD;
       const g0=[FPSV+' ips','image '+DIAG_DT.toFixed(1)+' ms'],g1=segW?g0.concat(segW):null,un=!!g1&&MWj(g1)<=MW;
       for(const g of [un?g1:g0.concat([pk]),
-                      ['JS '+DIAG_JS.toFixed(1)+' ms','hors-JS '+Math.max(0,DIAG_DT-DIAG_JS).toFixed(1)+' ms','effets '+QL+'/3','resol '+Math.round(RES*100)+' %'],seg3].concat(segW&&!un?[segW]:[])){
+                      ['JS '+DIAG_JS.toFixed(1)+' ms','hors-JS '+Math.max(0,DIAG_DT-DIAG_JS).toFixed(1)+' ms','effets '+QL+'/3','resol '+Math.round(RES*100)+' %'],seg3].concat(SOLD&&(SOLM===1||SOLON)?[SOLD]:[]).concat(segW&&!un?[segW]:[])){
         let cu=[];for(const s of g){if(cu.length&&MWj(cu.concat([s]))>MW){out.push(cu);cu=[];}cu.push(s);}
         if(cu.length)out.push(cu);}
       if(typeof JSPROFTOP!=='undefined'&&JSPROFTOP.length)out.push(['où :'].concat(JSPROFTOP.map(q=>q[0]+' '+q[1].toFixed(2)+'/'+q[2].toFixed(0))));
