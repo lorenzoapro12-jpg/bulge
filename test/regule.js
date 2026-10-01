@@ -344,10 +344,18 @@ for (const [nom, pre, irr] of [
       remonte au cran : tout retirer n'a rien rendu, la lenteur ne vient pas des pixels — les garder bas ne coute
       que de la qualite. C'est exactement la situation du S22 (60 ips au plancher comme au cran). */
 {
+  /* R3a REECRIT (chantier R4, 01/10/2026) : « ref 66.7 ms · P 16.7 ms » chez le proprietaire, auto fige a 3/3 sur un
+     debut lent. La reference est desormais bornee a 1,5×SKP (periode d'ecran de skipCtl, 16,7 ms ici : le banc
+     n'appelle pas skipCtl) tant que la lenteur n'est pas acceptee : la descente a lieu, puis la valve flT (au
+     plancher, rien rendu) accepte 33,3 ms et rend la qualite — exactement R3b, sans les 5 s saines. */
   GAME.pose('auto', null);
   const a = suivi(GAME, [[IMG(60), LENT]]);
-  check(`R3a auto, 33,3 ms des la premiere image (60 s) : reference etablie a 33,3 ms, aucune descente (aveugle, comme avant R2)`,
-    a.qMin === '3/1' && a.F.ref > 33 && a.F.ref < 34, `pire cran ${a.qMin}, final ${J(a.F)}, REFDT=${a.F.ref.toFixed(2)} ms`);
+  check(`R3a auto, 33,3 ms des la premiere image (60 s) : la lenteur est COMBATTUE (descente au plancher, reference 16,7 ms)`,
+    a.qMin === '1/0.8' && a.F.ref > 16 && a.F.ref < 17.5, `pire cran ${a.qMin}, final ${J(a.F)}, REFDT=${a.F.ref.toFixed(2)} ms`
+    + (a.F.ref > 30 ? ` ; CAUSE : la reference s'est etablie sur la lenteur du debut — aveugle (ancien comportement)` : ''));
+  const a2 = suivi(GAME, [[IMG(100), LENT]]);
+  check(`R3a auto, puis 100 s de plus a 33,3 ms : lenteur ACCEPTEE (reference 33,3 ms), qualite rendue (3/1)`,
+    J(a2.F) === '3/1' && a2.F.ref > 33 && a2.F.ref < 34, `final ${J(a2.F)}, REFDT=${a2.F.ref.toFixed(2)} ms`);
   GAME.pose('auto', null);
   const b1 = suivi(GAME, [[IMG(5), SAIN], [IMG(20), LENT]]);
   check(`R3b auto, 5 s saines puis 20 s a 33,3 ms : DESCENTE au plancher, reference toujours 16,7 ms`,

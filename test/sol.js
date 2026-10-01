@@ -15,6 +15,7 @@
      2. le cache a bien servi (sinon 1 ne prouverait rien) et il a DECALE la toile au lieu de tout redessiner ;
      3. un chunk dont la surface change pendant le trajet (cuisson refaite) est redessine : le cache ne garde
         pas l'ancienne image ;
+     5. ZOOM EN MOUVEMENT : pas de toile refaite a chaque image (chemin direct), le cache reprend ensuite ;
      4. PAR DEFAUT, dans ce Chromium (copie des chunks presque gratuite pour le JS), le cache ne s'enclenche PAS :
         sur un canevas dessine par la carte graphique, il doublerait la surface remplie.
    ========================================================= */
@@ -81,6 +82,17 @@ const SETTLE = `(async()=>{for(let i=0;i<400;i++){render(0,16.7);await new Promi
     await B.ev(`(()=>{const f=solDraw;solDraw=function(){return false;};__S.want=true;render(0,16.7);solDraw=f;return true;})()`);
     const t = await B.ev(DIFF);
     check('temoin : un chunk change MAIS marque comme deja pose => le banc voit l\'ecart', t.n > 0, `${t.n} pixels differents`);
+    /* ---- 5. zoom en mouvement : chemin direct, PAS de toile refaite a chaque image ---- */
+    await B.ev(`(()=>{__S.hit=0;__S.full=0;return true;})()`);
+    for (let i = 0; i < 20; i++) { await B.ev(`(()=>{G.zoom*=1.003;return true;})()`); await B.ev(PLACE(nx, ny)); await B.ev(SHOT); }
+    const zm = JSON.parse(await B.ev(`JSON.stringify({h:__S.hit,f:__S.full})`));
+    for (let i = 0; i < 3; i++) { await B.ev(PLACE(nx, ny)); await B.ev(SHOT); }
+    const zp = JSON.parse(await B.ev(`JSON.stringify({h:__S.hit,f:__S.full})`));
+    await B.ev(`__S.a=__S.snap;true`);
+    await B.ev(`(()=>{const f=solDraw;solDraw=function(){return false;};__S.want=true;render(0,16.7);solDraw=f;return true;})()`);
+    const z = await B.ev(DIFF);
+    check('5. zoom en mouvement (20 images a +0,3 %) : aucune toile refaite, puis le cache reprend et le sol reste juste', zm.f === 0 && zp.h >= 1 && z.n <= z.tot * 1e-4,
+      `pendant : ${zm.h} images par le cache, ${zm.f} redessins complets ; apres : ${zp.h - zm.h} images par le cache ; ${z.n}/${z.tot} pixels differents (tolere : 0,01 %, les joints antialiases entre chunks a une echelle non entiere)`);
   } finally { B.close(); }
   console.log(ok ? 'TOUT PASSE' : 'ECHEC PARTIEL');
   process.exit(ok ? 0 : 1);

@@ -3723,7 +3723,7 @@ const CHV=new WeakMap();let CHNEW=0;
    Sur un canevas dessiné par la CARTE GRAPHIQUE, la copie des chunks ne coûte presque rien au JS (0,4 ms mesuré dans
    Chromium) et ce chemin doublerait la surface remplie : il ne s'enclenche donc que si la copie directe coûte
    (moyenne glissante SOLE > 3 ms sur au moins 30 images), et le reste ensuite. ?sol=1 le force, ?sol=0 l'interdit. */
-let SOLC=null,SOLK=null,SOLE=0,SOLN=0,SOLON=false;const SOLB=new Map();
+let SOLC=null,SOLK=null,SOLZ=0,SOLE=0,SOLN=0,SOLON=false;const SOLB=new Map();
 const SOLM=(()=>{const m=typeof location!=='undefined'&&/[?&]sol=([01])\b/.exec(location.search||'');return m?+m[1]:-1;})();
 function solMeasure(ms){SOLK=null;if(SOLM>=0)return;SOLE=SOLN?SOLE*.9+ms*.1:ms;if(++SOLN>=30&&SOLE>3)SOLON=true;}
 /* La toile est TORIQUE : le pixel d'écran X (translation tx) vit au pixel ((X-tx) mod w) de la toile, donc un déplacement
@@ -3738,6 +3738,10 @@ function solDraw(c0,c1,r0,r1){
   const w=cv.width,h=cv.height,s=PS*RZ;
   for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(!c||!c.bake&&!(c.bk&&c.bk.cv))return false;}
   if(!SOLC||SOLC.width!==w||SOLC.height!==h){SOLC=mkCanvas(w,h);SOLK=null;}
+  /* zoom en mouvement (début de partie, approche d'un cœur, coup de zoom) : la toile serait à refaire ENTIÈRE à chaque
+     image, soit le chemin direct PLUS une recopie (Récif abyssal chez le propriétaire : solDraw 14,8 ms, 17 ips).
+     On dessine alors en direct, et la toile n'est refaite qu'une fois le zoom posé (deux images de suite à 0,05 % près). */
+  const zs=SOLZ;SOLZ=s;if(!(zs>0)||Math.abs(s/zs-1)>.0005){SOLK=null;return false;}
   let K=SOLK;if(K&&Math.abs(s/K.s-1)>.001)K=null;
   const sc=K?K.s:s,tx=Math.round(PS*(W/2+RSX)-CAM.x*sc),ty=Math.round(PS*(H/2+RSY)-CAM.y*sc),R=[];
   let full=!K;
@@ -4712,8 +4716,8 @@ function applyQuality(){const q=meta.q||'auto';
    (oracle-ref + test/regule.js) : K<=13 -> 240 images en debut de partie coutent 64 s degradees ; K>=18 -> une
    lenteur apres 5 s saines est prise pour la reference (X5, R3b, R3c). 15 est dans [14,17], a 1 cran du bas. */
 const DTMIN=4,REFK=15,REFM=[];
-let REFDT=0,REFN=0,qn=0,flT=0;
-function refReset(){REFDT=0;REFN=0;qn=0;flT=0;slowT=0;upT=0;DTH.length=0;REFM.length=0;}
+let REFDT=0,REFN=0,qn=0,flT=0,REFOK=false;
+function refReset(){REFDT=0;REFN=0;qn=0;flT=0;REFOK=false;slowT=0;upT=0;DTH.length=0;REFM.length=0;}
 function perf(dt){
   /* Les ips ne se calculent plus ici. Un compteur de 500 ms qui avancait sur TOUTES les images
      (menu, pause, ecran de fin compris, bien moins cheres) pouvait afficher 84 ips quand le jeu en
@@ -4747,6 +4751,13 @@ function perf(dt){
      sinon la premiere fenetre apres une reprise — la plus exposee aux rafales — se figerait seule. */
   REFM.push(med);if(REFM.length>REFK)REFM.shift();
   const env=Math.max(...REFM);REFDT=REFDT>0&&REFM.length>=REFK?Math.min(REFDT,env):env;
+  /* ⚠️ Chantier R4 (01/10/2026) : « ref 66.7 ms · saut 2/2 P 16.7 ms » chez le proprietaire (Firefox, Recif abyssal,
+     17 ips des la premiere image) : la reference s'etablissait sur la lenteur meme qu'elle devait combattre, et l'auto
+     restait a 3/3 (R3a l'ecrivait : « aveugle par construction »). Or skipCtl connait la periode d'ecran : SKP ne
+     remonte que sur des images que le JS N'EXPLIQUE PAS (ecran 30 Hz, economie d'energie). Tant que la lenteur
+     n'a pas ete ACCEPTEE (valve flT ci-dessous : tout retirer n'a rien rendu), la reference ne depasse donc pas
+     1,5×SKP. Un ecran reellement lent fait monter SKP, et la borne avec lui. */
+  if(!REFOK&&SKP>=DTMIN&&REFDT>SKP*1.5)REFDT=SKP;
   if(REFN<8){REFN++;return;}   /* ~2 s : etablissement, aucune decision */
   /* ⚠️ Chantier R2 (01/10/2026) : « 60 ips · image 16.6 ms … plafond mid ↓ 1/3 ×0.80 … ref 8.4 ms » sur le S22.
      Le minimum ci-dessus ne fait que DESCENDRE : ~2 s legeres a 8,3 ms (ecran 120 Hz, debut de partie) et 16,6 ms
@@ -4759,7 +4770,7 @@ function perf(dt){
      Refuse : estimer la periode sur les images HORS partie (menus). La boucle y tourne bien, mais elle y mesure
      la DALLE — 8,3 ms sur ce S22 — c'est-a-dire precisement la valeur qui l'a verrouille. */
   flT=p90>REFDT*1.35&&med>=REFDT*1.10&&QL<=1&&RES<=.8?flT+15:0;
-  if(flT>1200){flT=0;slowT=0;upT=0;REFDT=env;}
+  if(flT>1200){flT=0;slowT=0;upT=0;REFDT=env;REFOK=true;}
   /* Descente rapide (~1 s au-dessus de 1,35x), remontée LENTE et plus exigeante (~5 s sous 1,10x).
      L'asymétrie est voulue : une oscillation entre deux crans saccaderait plus que le défaut, et
      une remontée est indolore (au pire on redescend au cran suivant). Sans elle, la qualité était

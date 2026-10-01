@@ -286,8 +286,8 @@ function applyQuality(){const q=meta.q||'auto';
    (oracle-ref + test/regule.js) : K<=13 -> 240 images en debut de partie coutent 64 s degradees ; K>=18 -> une
    lenteur apres 5 s saines est prise pour la reference (X5, R3b, R3c). 15 est dans [14,17], a 1 cran du bas. */
 const DTMIN=4,REFK=15,REFM=[];
-let REFDT=0,REFN=0,qn=0,flT=0;
-function refReset(){REFDT=0;REFN=0;qn=0;flT=0;slowT=0;upT=0;DTH.length=0;REFM.length=0;}
+let REFDT=0,REFN=0,qn=0,flT=0,REFOK=false;
+function refReset(){REFDT=0;REFN=0;qn=0;flT=0;REFOK=false;slowT=0;upT=0;DTH.length=0;REFM.length=0;}
 function perf(dt){
   /* Les ips ne se calculent plus ici. Un compteur de 500 ms qui avancait sur TOUTES les images
      (menu, pause, ecran de fin compris, bien moins cheres) pouvait afficher 84 ips quand le jeu en
@@ -321,6 +321,13 @@ function perf(dt){
      sinon la premiere fenetre apres une reprise — la plus exposee aux rafales — se figerait seule. */
   REFM.push(med);if(REFM.length>REFK)REFM.shift();
   const env=Math.max(...REFM);REFDT=REFDT>0&&REFM.length>=REFK?Math.min(REFDT,env):env;
+  /* ⚠️ Chantier R4 (01/10/2026) : « ref 66.7 ms · saut 2/2 P 16.7 ms » chez le proprietaire (Firefox, Recif abyssal,
+     17 ips des la premiere image) : la reference s'etablissait sur la lenteur meme qu'elle devait combattre, et l'auto
+     restait a 3/3 (R3a l'ecrivait : « aveugle par construction »). Or skipCtl connait la periode d'ecran : SKP ne
+     remonte que sur des images que le JS N'EXPLIQUE PAS (ecran 30 Hz, economie d'energie). Tant que la lenteur
+     n'a pas ete ACCEPTEE (valve flT ci-dessous : tout retirer n'a rien rendu), la reference ne depasse donc pas
+     1,5×SKP. Un ecran reellement lent fait monter SKP, et la borne avec lui. */
+  if(!REFOK&&SKP>=DTMIN&&REFDT>SKP*1.5)REFDT=SKP;
   if(REFN<8){REFN++;return;}   /* ~2 s : etablissement, aucune decision */
   /* ⚠️ Chantier R2 (01/10/2026) : « 60 ips · image 16.6 ms … plafond mid ↓ 1/3 ×0.80 … ref 8.4 ms » sur le S22.
      Le minimum ci-dessus ne fait que DESCENDRE : ~2 s legeres a 8,3 ms (ecran 120 Hz, debut de partie) et 16,6 ms
@@ -333,7 +340,7 @@ function perf(dt){
      Refuse : estimer la periode sur les images HORS partie (menus). La boucle y tourne bien, mais elle y mesure
      la DALLE — 8,3 ms sur ce S22 — c'est-a-dire precisement la valeur qui l'a verrouille. */
   flT=p90>REFDT*1.35&&med>=REFDT*1.10&&QL<=1&&RES<=.8?flT+15:0;
-  if(flT>1200){flT=0;slowT=0;upT=0;REFDT=env;}
+  if(flT>1200){flT=0;slowT=0;upT=0;REFDT=env;REFOK=true;}
   /* Descente rapide (~1 s au-dessus de 1,35x), remontée LENTE et plus exigeante (~5 s sous 1,10x).
      L'asymétrie est voulue : une oscillation entre deux crans saccaderait plus que le défaut, et
      une remontée est indolore (au pire on redescend au cran suivant). Sans elle, la qualité était
