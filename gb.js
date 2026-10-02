@@ -4,21 +4,21 @@
    (G.tele, dessinés par g3.js drawTele). Deux phases (trois pour l'Hypernoyau), à 50 % de vie.
    ========================================================= */
 const BOSS=[
-  {n:'Essaim-Mère',sub:'Elle charge en ligne droite : écarte-toi de la bande',t:'mite',r:52,hp:140},
-  {n:'Grande Épine',sub:'Ses charges rebondissent sur le bord',t:'spike',r:56,hp:210},
-  {n:'Batterie',sub:'Des éventails qui tournent : glisse entre les branches',t:'spread',r:58,hp:300},
-  {n:'L’Œil',sub:'Un trait fin, puis le rayon : sors de la ligne',t:'sniper',r:54,hp:400},
-  {n:'Satellite',sub:'Il tourne autour de l’arène',t:'orbit',r:50,hp:520},
-  {n:'Mitrailleuse',sub:'Des rafales qui balaient : reste derrière elles',t:'gatling',r:62,hp:660},
-  {n:'Pulsar Majeur',sub:'Chaque anneau a une brèche : trouve-la',t:'ring',r:64,hp:820},
-  {n:'L’Hypernoyau',sub:'Brise ses nœuds : ils le protègent',t:'core',r:68,hp:1050},
+  {n:'Essaim-Mère',sub:'Elle charge en ligne droite : écarte-toi de la bande',t:'mite',r:52,hp:110},
+  {n:'Grande Épine',sub:'Ses charges rebondissent sur le bord',t:'spike',r:56,hp:125},
+  {n:'Batterie',sub:'Des éventails qui tournent : glisse entre les branches',t:'spread',r:58,hp:135},
+  {n:'L’Œil',sub:'Un trait fin, puis le rayon : sors de la ligne',t:'sniper',r:54,hp:145},
+  {n:'Satellite',sub:'Il tourne autour de l’arène',t:'orbit',r:50,hp:150},
+  {n:'Mitrailleuse',sub:'Des rafales qui balaient : reste derrière elles',t:'gatling',r:62,hp:155},
+  {n:'Pulsar Majeur',sub:'Chaque anneau a une brèche : trouve-la',t:'ring',r:64,hp:160},
+  {n:'L’Hypernoyau',sub:'Brise ses nœuds : ils le protègent',t:'core',r:68,hp:180},
 ];
 const BOSSCOL='#ff3355';
 function bossCol(B){return B.k===8?BOSSCOL:ET[B.D.t].col;}
 function spawnBoss(){
-  const k=G.isl,D=BOSS[k-1],hp=Math.round(D.hp*(1+.12*(k-1)));
+  const k=G.isl,D=BOSS[k-1],hp=Math.round(D.hp*Math.pow(GROWD,k-1)*(1+.1*(k-1)));
   const B={k,D,x:0,y:0,vx:0,vy:0,r:D.r,hp,mhp:hp,phase:1,t:0,st:0,st2:0,ca:0,cn:0,trans:0,spawn:110,flash:0,ang:0,dead:false,gone:false,dieT:0,nodes:[],dir:1,wob:0};
-  if(k===8)for(let i=0;i<6;i++){const nh=Math.round(30*(1+.12*(k-1)));B.nodes.push({x:0,y:0,r:15,hp:nh,mhp:nh,dead:false,cd:rr(60,160),flash:0});}
+  if(k===8)for(let i=0;i<6;i++){const nh=Math.round(18*Math.pow(GROWD,k-1));B.nodes.push({x:0,y:0,r:15,hp:nh,mhp:nh,dead:false,cd:rr(60,160),flash:0});}
   G.boss=B;G.ph='boss';
   banner(D.n,D.sub,bossCol(B),170);setMusic(2);SFX.bossIn();shake(.5);G.glitch=25;
 }

@@ -5,9 +5,10 @@
    c'est l'écart avec les anciens ennemis, qui rapetissent d'îlot en îlot (mkEnemy).
    ========================================================= */
 let G=null;
-/* PRAD : rayon de la bulle ; SEG0 : segments de membrane au départ ; GROW : croissance par îlot ;
+/* PRAD : rayon de la bulle ; SEG0 : segments de membrane au départ ; GROW : croissance par îlot (taille), GROWD (puissance :
+   les dégâts de la bulle suivent la vie des ennemis, HPM, pour que les bonus restent un vrai gain) ;
    PREYA : écart d'îlots à partir duquel un type devient proie ; GONEA : écart où il quitte le jeu */
-const PRAD=18,SEG0=5,NWAVE=3,GROW=1.4,PREYA=2,GONEA=4,EBC='#ff5a2d';
+const PRAD=18,SEG0=5,NWAVE=3,GROW=1.4,GROWD=1.2,PREYA=2,GONEA=4,EBC='#ff5a2d';
 /* vie des ennemis selon l'îlot (le joueur, lui, progresse par ses bonus) */
 const HPM=()=>Math.pow(1.24,G.isl-1);
 function decor0(){return{bite:[],car:[],fall:[],givre:[],glisseT:-1,sw:null,swO:{},vu:false,vuT:-1,relais:[]};}
@@ -20,7 +21,7 @@ function mkGame(seed){return{state:'play',t:0,time:0,seed,isl:1,ph:'arrive',phT:
   inX:0,inY:0,aimMan:false,aimA:0,tut:{},tutOn:false,biome:'plains',wbn:null,
   dec:decor0(),courant:null,tr:null};}
 function mkPlayer(){return{x:0,y:0,vx:0,vy:0,r:PRAD,baseR:PRAD,ang:-Math.PI/2,col:COL.cy,
-  seg:SEG0,segMax:SEG0,spd:3.3,fireI:13,dmg:1,bspd:9.5,blife:60,bsize:4.5,pierce:0,turrets:1,spreadW:.16,homing:0,rico:0,split:0,crit:.03,critM:2.5,
+  seg:SEG0,segMax:SEG0,spd:3.3,fireI:13,dmg:1,bspd:9.5,blife:72,bsize:4.5,pierce:0,turrets:1,spreadW:.16,homing:0,rico:0,split:0,crit:.03,critM:2.5,
   aura:0,auraR:0,orbs:0,drones:0,dronesHome:false,missile:0,missileT:0,nova:0,novaT:0,mines:0,
   dashMax:84,dashT:0,dashing:0,dvx:0,dvy:0,dashDmg:0,dashHit:[],ghost:false,
   inv:0,fireT:0,flash:0,recoil:0,glow:0,shots:0,
@@ -121,7 +122,7 @@ function transStart(){G.state='trans';G.tr={t:0,z0:G.zoom,cx0:G.cx,cy0:G.cy,x0:G
 function updTrans(){
   const T=G.tr,P=G.p;T.t++;P.vx=P.vy=0;P.dashing=0;G.trauma=0;
   if(T.t<=TR_SNAP){const f=T.t/TR_SNAP,e=f*f*(3-2*f);P.x=T.x0*(1-e);P.y=T.y0*(1-e);P.r=lerp(P.r,P.baseR*GROW,.08);P.ang+=.05;}
-  if(T.t===TR_SNAP){if(typeof trSnap==='function')trSnap();genIslet(G.seed,G.isl+1);G.isl++;islStart();P.r=P.baseR*GROW;G.cx=G.cy=0;}
+  if(T.t===TR_SNAP){if(typeof trSnap==='function')trSnap();genIslet(G.seed,G.isl+1);G.isl++;islStart();P.r=P.baseR*GROW;P.dmg*=GROWD;G.cx=G.cy=0;}
   if(T.t>TR_SNAP)P.r=lerp(P.r,P.baseR,.05);
   if(T.t>=TR_END){G.tr=null;G.state='play';G.ph='arrive';G.phT=0;P.r=P.baseR;}
 }
@@ -133,7 +134,7 @@ function zoomFull(){return Math.min(W,H)/(2*(WR+40));}
 /* age = îlots écoulés depuis l'arrivée du type : taille ÷1,4 par îlot ; à PREYA, proie */
 function mkEnemy(t,x,y,o){const d=ET[t],age=o&&o.age!=null?o.age:G.isl-d.isl,prey=age>=PREYA;
   const e={t,d,age,prey,col:d.col,x,y,vx:0,vy:0,r:d.r*Math.pow(GROW,-age),hp:d.hp*HPM()*(prey?.6:1),mhp:0,spawn:24,cd:rr(60,130),st:0,st2:0,ca:0,ta:0,tele:0,flash:0,
-    wob:R()*TAU,wa:R()*TAU,dead:false,kids:0,made:0,parent:null,elite:0,sl:0,sn:null,frostT:0,alarmT:0,ivT:0,orbCd:0,dir:0};
+    wob:R()*TAU,wa:R()*TAU,nk:(R()*15)|0,nav:null,dead:false,kids:0,made:0,parent:null,elite:0,sl:0,sn:null,frostT:0,alarmT:0,ivT:0,orbCd:0,dir:0};
   if(o)Object.assign(e,o);
   if(e.elite){e.hp*=3.2;e.r*=1.3;}
   e.mhp=e.hp;G.en.push(e);return e;}
@@ -184,7 +185,9 @@ function updEnemy(e){
   if(e.flash>0)e.flash--;
   const tf=G.slowF*(e.frostT>G.t?.45:1);
   if(e.prey){preyMove(e,tf);return;}
-  const P=G.p,d=e.d,dx=P.x-e.x,dy=P.y-e.y,dd=Math.hypot(dx,dy)||1,ax=dx/dd,ay=dy/dd,aP=Math.atan2(dy,dx);
+  const P=G.p,d=e.d,dx=P.x-e.x,dy=P.y-e.y,dd=Math.hypot(dx,dy)||1,aP=Math.atan2(dy,dx);let ax=dx/dd,ay=dy/dd;
+  /* un massif entre lui et toi : il suit la carte des distances (flowDir) au lieu de foncer dans la falaise */
+  if(G.t%15===e.nk)e.nav=losWall(e.x,e.y,P.x,P.y)?flowDir(e.x,e.y):null;if(e.nav){ax=e.nav[0];ay=e.nav[1];}
   let tx=0,ty=0,sp=d.spd*(e.alarmT>G.t?SW_SP:1);
   e.wob+=.03*tf;
   const fire=()=>(e.cd-=tf)<=0;
@@ -219,8 +222,23 @@ function updEnemy(e){
   if(oh){const vn=e.vx*oh[0]+e.vy*oh[1];if(vn<0){e.vx-=vn*oh[0];e.vy-=vn*oh[1];}e.sl=20;e.sn=oh;if(e.t==='spike'&&e.st===2){e.st=0;e.cd=60;}}
   if(confine(e,e.r)&&e.t==='spike'&&e.st===2){e.st=0;e.cd=60;}
 }
+/* ---------- navigation : carte des distances au joueur sur la grille des falaises (WC), refaite toutes les 20 images.
+   Les massifs intérieurs de l'îlot sont des couverts ; sans elle, un ennemi né derrière l'un d'eux y restait collé. ---------- */
+let FLOW=null,FLOQ=null;const D8=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+function flowUpd(){const N=NG,P=G.p;if(!FLOW||FLOW.length!==N*N){FLOW=new Int16Array(N*N);FLOQ=new Int32Array(N*N);}FLOW.fill(-1);
+  const i0=Math.floor((P.x-G0)/WC),j0=Math.floor((P.y-G0)/WC);if(i0<0||j0<0||i0>=N||j0>=N)return;
+  let h=0,n=0;const s=j0*N+i0;FLOW[s]=0;FLOQ[n++]=s;
+  while(h<n){const k=FLOQ[h++],i=k%N,j=(k/N)|0,d=FLOW[k]+1;
+    for(let q=0;q<4;q++){const a=i+D8[q][0],b=j+D8[q][1];if(a<0||b<0||a>=N||b>=N)continue;const m=b*N+a;if(FLOW[m]>=0||WD.wall[m])continue;FLOW[m]=d;FLOQ[n++]=m;}}}
+function flowDir(x,y){if(!FLOW)return null;const N=NG,i=Math.floor((x-G0)/WC),j=Math.floor((y-G0)/WC);if(i<0||j<0||i>=N||j>=N)return null;
+  let bd=FLOW[j*N+i],best=null;if(bd<0)bd=1e4;
+  for(const [di,dj] of D8){const a=i+di,b=j+dj;if(a<0||b<0||a>=N||b>=N)continue;const v=FLOW[b*N+a];if(v<0||v>=bd)continue;
+    if(di&&dj&&(WD.wall[j*N+a]||WD.wall[b*N+i]))continue;bd=v;best=[di,dj];}
+  if(!best)return null;const l=Math.hypot(best[0],best[1]);return[best[0]/l,best[1]/l];}
+function losWall(x0,y0,x1,y1){const n=Math.ceil(Math.hypot(x1-x0,y1-y0)/40);for(let k=1;k<n;k++){const t=k/n;if(wallAt(Math.floor((x0+(x1-x0)*t-G0)/WC),Math.floor((y0+(y1-y0)*t-G0)/WC)))return true;}return false;}
 function updEnemies(){
   const P=G.p,D=G.dec;
+  if(G.t%20===0||!FLOW)flowUpd();
   for(let i=0;i<G.en.length;i++){const e=G.en[i];if(e.dead)continue;updEnemy(e);}
   const n=G.en.length;
   for(let i=0;i<n;i++){const a=G.en[i];if(a.dead)continue;for(let j=i+1;j<n;j++){const b=G.en[j];if(b.dead)continue;const dx=b.x-a.x,dy=b.y-a.y,rs=a.r+b.r,d2=dx*dx+dy*dy;

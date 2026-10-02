@@ -10,13 +10,13 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-ORDER=(g1.js gw.js gw2.js g2.js gs.js gc.js gi.js gx.js gt.js gv.js g3.js g4.js)
+ORDER=(g1.js gw.js gw2.js g2.js gp.js gb.js g3.js g4.js)
 EXPECTED_FILE=".build-sha256"
 
 # Worker de cuisson (socle, gk.js) : texte d'un second bloc <script type="text/js-worker" id="wk-src">,
 # place apres le script principal (shell_tail.html commence par </script>). Les modules du monde, les
 # trois sprites de g3.js que la cuisson dessine (g3.js ne se charge pas sans DOM), puis l'entree gk.js.
-WORKER=(g1.js gw.js gw2.js gc.js gx.js gv.js)
+WORKER=(g1.js gw.js gw2.js)
 G3_SPR='^(const SPR=\{\};|function (spr|softSpr|shadowSpr)\()'
 if [[ $(grep -cE "$G3_SPR" g3.js) != 4 ]]; then echo "build: g3.js — SPR/spr/softSpr/shadowSpr introuvables pour le worker" >&2; exit 1; fi
 
