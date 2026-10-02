@@ -2,13 +2,13 @@
    RENDU (interpolé, sprites pré-calculés)
    ========================================================= */
 const cv=$('cv');let ctx=cv.getContext('2d',{alpha:false});const MAINCTX=ctx;
-let QL=3,W=800,H=600,DPR=1,RES=1,PS=1,RZ=1,RSX=0,RSY=0,VL=0,VT=0,VR=0,VB=0,RT=0,FRAME=0,VIG=null,CAUSP=null,SPRB=0,RDT=16.7;
+let QL=3,W=800,H=600,DPR=1,RES=1,PS=1,RZ=1,ONE=false,TF1=false,TRQ=1,TRX=false,TRF=false,RSX=0,RSY=0,VL=0,VT=0,VR=0,VB=0,RT=0,FRAME=0,VIG=null,CAUSP=null,SPRB=0,RDT=16.7;
 const CAM={x:0,y:0,z:1};
 let SAFE={t:0,b:0,l:0,r:0};
 function readSafe(){const d=document.getElementById('safeprobe');if(!d)return;const cs=getComputedStyle(d);SAFE={t:parseFloat(cs.paddingTop)||0,b:parseFloat(cs.paddingBottom)||0,l:parseFloat(cs.paddingLeft)||0,r:parseFloat(cs.paddingRight)||0};}
 function fitFont(c,s,maxW,px,wt){c.font=wt+' '+px+'px '+FD;const w=c.measureText(s).width;if(w>maxW){px=Math.max(10,Math.floor(px*maxW/w));c.font=wt+' '+px+'px '+FD;}return px;}
 function resize(){readSafe();const r=cv.parentElement.getBoundingClientRect();W=Math.max(300,r.width);H=Math.max(300,r.height);DPR=Math.min(2,window.devicePixelRatio||1);applyRes();}
-function applyRes(){CVOK=false;BGK='';BGN=0;PS=Math.min(DPR,QL>=3?(COARSE?1.5:2):QL===2?1.25:1)*RES;cv.width=Math.round(W*PS);cv.height=Math.round(H*PS);
+function applyRes(){CVOK=false;BGK='';BGN=0;PS=(W<H?560:720)/Math.min(W,H)*RES*TRQ;cv.width=Math.round(W*PS);cv.height=Math.round(H*PS);
   if(!VIG){VIG=mkCanvas(128,128);const g=VIG.getContext('2d'),gr=g.createRadialGradient(64,64,30,64,64,92);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(2,0,8,.62)');g.fillStyle=gr;g.fillRect(0,0,128,128);}
   if(!CAUSP)buildCaus();}
 const SPR={};
@@ -25,9 +25,18 @@ function sphSpr(col,big){const S=big?256:96;return spr((big?'B':'b')+col,S,(g,s)
   g.lineWidth=Math.max(1.5,s*.04);g.strokeStyle=col;g.beginPath();g.arc(r,r,r-g.lineWidth/2,0,TAU);g.stroke();
   g.fillStyle='rgba(255,255,255,.82)';g.beginPath();g.ellipse(r*.62,r*.55,r*.22,r*.1,-.7,0,TAU);g.fill();
   g.fillStyle='#fff';g.beginPath();g.arc(r*.92,r*.42,r*.045,0,TAU);g.fill();});}
-function sphere(x,y,r,col,flash,alpha){const s=sphSpr(flash?'#ffffff':col,r*RZ*PS>44);if(alpha!=null&&alpha!==1){ctx.globalAlpha=alpha;ctx.drawImage(s,x-r,y-r,r*2,r*2);ctx.globalAlpha=1;}else ctx.drawImage(s,x-r,y-r,r*2,r*2);}
-function glow(x,y,r,col,a){ctx.globalAlpha=a*LOWA;ctx.drawImage(glowSpr(col),x-r,y-r,r*2,r*2);}
-function soft(x,y,r,col,a){ctx.globalAlpha=a*LOWA;ctx.drawImage(softSpr(col),x-r,y-r,r*2,r*2);}
+/* Monde à l'échelle 1 (TF1 : worldTf avec PS*RZ=1, translation entière) : un sprite étiré à chaque image passe par le
+   filtrage (~8,8 ns/px en canevas logiciel, Firefox du propriétaire), le même posé à sa taille naturelle au pixel entier
+   ~1,4 ns/px. Halos, sphères et tirs ennemis sont donc agrandis UNE fois à leur taille (pas de 6 %, entier sous 16 px) et
+   gardés (natS, borné en pixels) ; hors échelle 1 (menu, passage d'îlot), l'ancien chemin étiré. */
+const NS=new Map();let NSPX=0;
+function natQ(D){return D<16?Math.max(2,Math.round(D)):natD(D);}
+function natS(src,key,n){const k=key+'|'+n;let S=NS.get(k);if(S)return S;S=mkCanvas(n,n);const g=S.getContext('2d');g.imageSmoothingEnabled=true;g.drawImage(src,0,0,n,n);
+  NSPX+=n*n;while(NSPX>4e6&&NS.size){const [k0,v]=NS.entries().next().value;NS.delete(k0);NSPX-=v.width*v.height;}NS.set(k,S);return S;}
+function img1(src,key,x,y,r){const n=natQ(2*r);if(n>1024){ctx.drawImage(src,x-r,y-r,r*2,r*2);return;}ctx.drawImage(natS(src,key,n),Math.round(x-n/2),Math.round(y-n/2));}
+function sphere(x,y,r,col,flash,alpha){const c0=flash?'#ffffff':col,s=sphSpr(c0,r*RZ*PS>44);if(alpha!=null&&alpha!==1)ctx.globalAlpha=alpha;if(TF1)img1(s,(r*RZ*PS>44?'B':'b')+c0,x,y,r);else ctx.drawImage(s,x-r,y-r,r*2,r*2);if(alpha!=null&&alpha!==1)ctx.globalAlpha=1;}
+function glow(x,y,r,col,a){ctx.globalAlpha=a*LOWA;if(TF1)img1(glowSpr(col),'g'+col,x,y,r);else ctx.drawImage(glowSpr(col),x-r,y-r,r*2,r*2);}
+function soft(x,y,r,col,a){ctx.globalAlpha=a*LOWA;if(TF1)img1(softSpr(col),'s'+col,x,y,r);else ctx.drawImage(softSpr(col),x-r,y-r,r*2,r*2);}
 /* Grand halo à l'échelle 1 : le sprite est agrandi UNE fois à sa taille d'écran (pas de 6 %), puis posé au pixel entier.
    Canevas logiciel (Firefox du propriétaire, skia), mesuré le 01/10/2026 : un sprite de 64 px étiré coûte ~8,8 ns par pixel,
    le même à l'échelle 1 et au pixel entier ~1,4 ns ; le halo du joueur (810 px) coûtait ~6 ms par image, à toute qualité.
@@ -36,7 +45,7 @@ const NAT=new Map();
 function natSpr(src,key,n){const k=key+'|'+n;let S=NAT.get(k);if(S){NAT.delete(k);NAT.set(k,S);return S;}
   S=mkCanvas(n,n);const g=S.getContext('2d');g.imageSmoothingEnabled=true;g.drawImage(src,0,0,n,n);if(NAT.size>=24)NAT.delete(NAT.keys().next().value);NAT.set(k,S);return S;}
 function natD(D){return Math.max(8,Math.round(Math.exp(Math.round(Math.log(D)/.0583)*.0583)));}
-function softPx(X,Y,D,col,a){if(!(D>=8))return;if(D>2048)D=2048;const n=natD(D);ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=a*LOWA;ctx.drawImage(natSpr(softSpr(col),'s'+col,n),Math.round(X-n/2),Math.round(Y-n/2));}
+function softPx(X,Y,D,col,a){if(!(D>=8))return;if(D>2048)D=2048;const n=natD(D);ctx.setTransform(1,0,0,1,0,0);TF1=false;ctx.globalAlpha=a*LOWA;ctx.drawImage(natSpr(softSpr(col),'s'+col,n),Math.round(X-n/2),Math.round(Y-n/2));}
 /* halo en coordonnées du monde (appelant en worldTf) */
 function softW(x,y,r,col,a){const s=PS*RZ;softPx(PS*(W/2+RSX)+(x-CAM.x)*s,PS*(H/2+RSY)+(y-CAM.y)*s,2*r*s,col,a);worldTf();}
 function buildCaus(){const s=256,c=mkCanvas(s,s),g=c.getContext('2d');g.strokeStyle='rgba(170,240,255,.6)';g.lineWidth=2.2;
@@ -56,8 +65,8 @@ function lerpIn(A){SW.length=0;lerpObj(G.p,A);
 function lerpOut(){for(let i=0;i<SW.length;i++){const o=SW[i];o.x=o._x;o.y=o._y;}SW.length=0;if(G&&G.p&&G.p._ang!==undefined)G.p.ang=G.p._ang;}
 function w2s(x,y){return[(x-CAM.x)*RZ+W/2+RSX,(y-CAM.y)*RZ+H/2+RSY];}
 function vis(x,y,r){return x+r>VL&&x-r<VR&&y+r>VT&&y-r<VB;}
-function worldTf(){ctx.setTransform(PS*RZ,0,0,PS*RZ,PS*(W/2+RSX-CAM.x*RZ),PS*(H/2+RSY-CAM.y*RZ));}
-function screenTf(){ctx.setTransform(PS,0,0,PS,0,0);}
+function worldTf(){const s=ONE?1:PS*RZ;ctx.setTransform(s,0,0,s,Math.round(PS*(W/2+RSX)-CAM.x*s),Math.round(PS*(H/2+RSY)-CAM.y*s));TF1=ONE;}
+function screenTf(){ctx.setTransform(PS,0,0,PS,0,0);TF1=false;}
 
 /* passe « basse » : décor lointain + grands halos additifs, dessinés DIRECTEMENT dans le canevas principal. */
 /* ⚠️ Saccades sur ordinateur (01/10/2026), deux temps. 1) Cette couche était un <canvas id="low"> du DOM, au quart
@@ -108,25 +117,29 @@ function render(A,dt){
   /* figé : le canevas n'est pas touché. Pendant le choix d'un bonus (arrivée sur un îlot), la cuisson de l'îlot
      continue (file de prewarm) : sans quoi chaque îlot démarrerait sur le sol de secours. */
   else if(CVOK&&WD&&(BGK===fk||G&&!BGK)){BGK=fk;if(G&&G.state==='pick'&&WD.pq&&WD.pq.length)streamWorld(bakeBudget());return;}
-  c.setTransform(1,0,0,1,0,0);c.globalAlpha=1;c.globalCompositeOperation='source-over';
+  /* passage d'îlot : l'îlot entier, vu de loin, n'est plus à l'échelle 1 (sol, obstacles étirés : 10 à 30 ms par image en
+     canevas logiciel). On le dessine en demi-résolution le temps du passage (un quart des pixels, caméra en mouvement) ;
+     seule l'image copiée pour la relique (trSnap, TRF) est faite en pleine résolution. */
+  const tq=G&&G.state==='trans'&&!TRF?.5:1;if(tq!==TRQ){TRQ=tq;applyRes();}
+  c.setTransform(1,0,0,1,0,0);TF1=false;c.globalAlpha=1;c.globalCompositeOperation='source-over';
   if(!WD){c.fillStyle='#05030c';c.fillRect(0,0,cv.width,cv.height);CVOK=false;return;}
   const inGame=!!(G&&G.p);
   if(inGame){RT=G.t+A;
     CAM.x=G.pcx==null?G.cx:G.pcx+(G.cx-G.pcx)*A;CAM.y=G.pcy==null?G.cy:G.pcy+(G.cy-G.pcy)*A;CAM.z=G.pzoom==null?G.zoom:G.pzoom+(G.zoom-G.pzoom)*A;
     RSX=RSY=0;if(G.trauma>0){const s=G.trauma*G.trauma*16;RSX=fr(-s,s);RSY=fr(-s,s);}}
   else{if(MRT<0){MRT=performance.now()/16.67;BGN=0;}RT=MRT;CAM.x=Math.cos(RT*.0007)*RELR*1.6;CAM.y=Math.sin(RT*.00091)*RELR*1.3;CAM.z=Math.min(W,H)/760;RSX=RSY=0;}
-  RZ=CAM.z;if(inGame){lerpIn(A);markStep();}
+  RZ=CAM.z;ONE=Math.abs(PS*RZ-1)<1e-3;TRX=inGame&&G.state==='trans'&&CAM.z<zoomTarget()*.8;if(inGame){lerpIn(A);markStep();}
   VL=CAM.x-(W/2+60)/RZ;VR=CAM.x+(W/2+60)/RZ;VT=CAM.y-(H/2+60)/RZ;VB=CAM.y+(H/2+60)/RZ;
   const mix=biomeMix(CAM.x,CAM.y);
   streamWorld(bakeBudget());
   /* le sol de secours n'est dessiné que si un chunk visible n'est pas encore prêt */
   if(!chunksCover()){c.fillStyle='#05030c';c.fillRect(0,0,cv.width,cv.height);screenTf();drawGround();}
-  worldTf();drawChunks();if(inGame)drawWhaleShadow(mix);
+  worldTf();drawChunks();
   /* ambiance lointaine + halos */
-  lowBegin();if(QL>=2){lowScreen();drawFar(mix);drawWhale(mix);LOWN++;}lowWorld();if(sk<2)drawLowGlows();lowEnd();
+  lowBegin();if(QL>=3&&!TRX){lowScreen();drawFar(mix);LOWN++;}lowWorld();if(sk<2&&!TRX&&QL>=2)drawLowGlows();lowEnd();
   worldTf();drawEdges();if(inGame)drawTerrain();drawObstacles();
-  if(inGame){drawSpawns();drawTele();drawPUs();drawShadows(mix);drawMarks();drawTrails();drawMines();if(DEC==='sky')drawFalls();drawEnemies();if(DEC==='floral'||DEC==='urban')drawDecFX();drawBoss();drawPlayer();drawBullets();drawFX();}
-  screenTf();if(sk<1)drawWeather(mix);
+  if(inGame){drawSpawns();drawTele();drawPUs();drawShadows(mix);if(!TRX&&QL>=2)drawMarks();drawTrails();drawMines();if(DEC==='sky')drawFalls();drawEnemies();if(DEC==='floral'||DEC==='urban')drawDecFX();drawBoss();drawPlayer();drawBullets();drawFX();}
+  screenTf();if(sk<1&&!TRX&&QL>=2)drawWeather(mix);
   if(inGame){if(G.state==='trans')drawTrSnap();else if(sk<1)drawIndicators();drawTexts();}
   postFX();
   if(inGame){screenTf();ctx.translate(SAFE.l,SAFE.t);const w0=W,h0=H;W-=SAFE.l+SAFE.r;H-=SAFE.t+SAFE.b;try{drawHUD();}finally{W=w0;H=h0;}lerpOut();}
@@ -136,7 +149,7 @@ function render(A,dt){
 }
 /* menu principal : tout ce qui est visible est prêt — chunks cuits, et cette image n'a créé ni sprite d'obstacle (SPRB),
    ni décor de chunk (DCB), ni surface de mer (CAUB), ni grappe de lueurs (FLB) faute de budget */
-function bgPret(){if(FACM||SPRB!==3||DCB!==1||CAUB!==1||QL>=2&&FLB!==2)return false;
+function bgPret(){if(FACM||SPRB!==3||DCB!==1||CAUB!==1||QL>=3&&FLB!==2)return false;
   for(let cx=Math.floor(VL/CH);cx<=Math.floor(VR/CH);cx++)for(let cy=Math.floor(VT/CH);cy<=Math.floor(VB/CH);cy++){const c=getChunk(cx,cy);if(c&&!c.bake)return false;}return true;}
 function drawGround(){
   const k=256/(2*WR),wl=CAM.x-(W/2+RSX)/RZ,wt=CAM.y-(H/2+RSY)/RZ;
@@ -249,7 +262,7 @@ function drawChunks(){
     for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy),b=c&&(c.bake||c.bk&&c.bk.cv);if(b){if(c.bake&&CHV.get(b)!==c){CHV.set(b,c);CHNEW++;}ctx.drawImage(chSurf(c,b),c.x0,c.y0,CH,CH);}}
     solMeasure(performance.now()-t0);if(SOLM===1||SOLON)solStat(2,1);}
   STB=10;DCB=1;DEC=G&&G.p&&G.dec?G.biome:'';
-  for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(c){for(const it of c.live)drawLive(it);if(c.bake||c.bk)drawDeco(c);}}
+  if(!TRX)for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(c){for(const it of c.live)drawLive(it);if(c.bake||c.bk)drawDeco(c);}}
   ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
 }
 function drawLive(it){
@@ -347,21 +360,6 @@ function drawDeco(c){let d=DECV.get(c);if(!d){if(DCB<=0)return;DCB--;d=decoOf(c)
     for(let k=0;k<5;k++){const f=((RT*.011+q.ph+k/5)%1),r=5+f*17;soft(q.x+Math.sin(RT*.02+k*1.7+q.ph*9)*4*f+f*10,q.y-f*56,r,'#eef0fa',Math.min(1,f*9)*(1-f)*.75);}
     g.globalAlpha=1;}
 }
-/* 5. baleine céleste : une silhouette qui traverse le lointain toutes les 45 s (couche basse, QL>=2),
-   et son ombre sur la mer de nuages, dans la passe du monde (visible à toute qualité) */
-const WHP=2700;
-function whaleAt(mix){let w=0;for(const m of mix)if(m.b==='sky')w=m.w;if(w<.3)return null;
-  const n=Math.floor(RT/WHP),f=(RT-n*WHP)/WHP,h=hash2(n,0,WD.seed^0x3a1e),dir=h&1?1:-1,sc=RZ*.72,span=W+1300*sc,
-    x=dir>0?-650*sc+f*span:W+650*sc-f*span,y=H*(.2+.6*((h>>>4)&1023)/1023)+Math.sin(f*6)*20*sc;return{x,y,dir,sc,w,f};}
-function drawWhale(mix){const q=whaleAt(mix);if(!q)return;const c=ctx;
-  c.save();c.globalCompositeOperation='lighter';c.translate(q.x,q.y);c.scale(q.dir*q.sc,q.sc);const sw=Math.sin(RT*.03)*.12;
-  c.globalAlpha=.62*q.w;c.fillStyle='#16224f';c.beginPath();c.ellipse(0,0,270,74,0,0,TAU);c.fill();
-  c.beginPath();c.moveTo(-230,-18);c.quadraticCurveTo(-330,0,-360,0);c.lineTo(-420,-60+sw*200);c.quadraticCurveTo(-400,0,-420,60-sw*200);c.lineTo(-360,0);c.quadraticCurveTo(-330,0,-230,18);c.fill();
-  c.beginPath();c.moveTo(60,40);c.quadraticCurveTo(20,130+sw*80,-40,150+sw*80);c.quadraticCurveTo(0,90,-10,50);c.fill();
-  c.globalAlpha=.28*q.w;c.strokeStyle='#cfe0ff';c.lineWidth=5;c.beginPath();for(let k=0;k<5;k++){c.moveTo(210-k*6,20+k*9);c.quadraticCurveTo(40,34+k*9,-120,18+k*8);}c.stroke();
-  c.fillStyle='#cfe0ff';c.beginPath();c.arc(185,-8,7,0,TAU);c.fill();c.restore();c.globalAlpha=1;}
-function drawWhaleShadow(mix){const q=whaleAt(mix);if(!q)return;const x=CAM.x+(q.x-W/2)/RZ+160,y=CAM.y+(q.y-H/2)/RZ+220,L=560*q.sc/RZ;
-  ctx.globalAlpha=.3*q.w;ctx.drawImage(shadowSpr(),x-L,y-L*.32,L*2,L*.64);ctx.globalAlpha=1;}
 /* 8. N3 — trace du joueur, propre au biome. G.trails (g2.js) n'est rempli qu'en fantôme et g2.js est
    hors périmètre : pool FIXE de MKN marques, anneau réécrit sur place (sa taille ne croît jamais). */
 const MKN=48,MKL=150,MK=[];for(let i=0;i<MKN;i++)MK.push({x:0,y:0,px:0,py:0,a:0,t:-1e9,b:'',s:0,r:10});
@@ -396,10 +394,12 @@ function chSurf(c,b){if(!c.bake||typeof document==='undefined')return b;
   o=mkCanvas(b.width,b.height);const g=o.getContext('2d'),k=b.width/CH;g.drawImage(b,0,0);
   g.globalCompositeOperation='lighter';g.globalAlpha=.1*c.sea;g.fillStyle=g.createPattern(CAUS,'repeat');g.setTransform(k,0,0,k,-c.x0*k,-c.y0*k);g.fillRect(c.x0,c.y0,CH,CH);
   CAUV.set(b,o);return o;}
+/* seuls les arcs dans la vue sont tracés : un anneau entier de 130 segments se rastérise même hors écran ; deux traits au lieu de trois */
 function membrane(cx,cy,R,col,t){
-  const c=ctx,N=R>2000?220:130;c.beginPath();
-  for(let i=0;i<=N;i++){const a=i/N*TAU,r=R+Math.sin(a*7+t*.03)*4+Math.sin(a*3-t*.02)*3;const x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;if(i)c.lineTo(x,y);else c.moveTo(x,y);}
-  c.globalCompositeOperation='lighter';if(QL>=3){c.strokeStyle=rgba(col,.06);c.lineWidth=26;c.stroke();}c.strokeStyle=rgba(col,.18);c.lineWidth=9;c.stroke();c.strokeStyle=rgba(col,.9);c.lineWidth=2.6;c.stroke();c.globalCompositeOperation='source-over';
+  const c=ctx,N=R>2000?220:130,m=30;let on=false,n=0;c.beginPath();
+  for(let i=0;i<=N;i++){const a=i/N*TAU,r=R+Math.sin(a*7+t*.03)*4+Math.sin(a*3-t*.02)*3;const x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;
+    const v=x>VL-m&&x<VR+m&&y>VT-m&&y<VB+m;if(v||on){if(on)c.lineTo(x,y);else c.moveTo(x,y);n++;}on=v;}
+  if(!n)return;c.globalCompositeOperation='lighter';c.strokeStyle=rgba(col,.2);c.lineWidth=10;c.stroke();c.strokeStyle=rgba(col,.9);c.lineWidth=2.6;c.stroke();c.globalCompositeOperation='source-over';
 }
 /* bord jouable de l'îlot (confine, g2.js) : une membrane à la couleur du biome */
 function drawEdges(){membrane(0,0,PR+6,BIO[G&&G.p?G.biome:WD.sites[0].t].a,RT);}
@@ -408,11 +408,17 @@ function drawObstacles(){
   for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const ch=getChunk(cx,cy);if(!ch)continue;
     for(const o of ch.obs){if(o.wall)continue;const m=o.R+140;if(o.cx+m<VL||o.cx-m>VR||o.cy+m<VT||o.cy-m>VB)continue;
       if(!o.spr){if(SPRB<=0)continue;SPRB--;OSPR.push(o);}
-      o.su=FRAME;if(o.b==='urban'||o.lt==='urban'&&o.role==='center'){obsSprite(o);TWL.push(o);continue;}ctx.drawImage(obsSprite(o),o.sx,o.sy,o.sw,o.sh);
+      o.su=FRAME;if(o.b==='urban'||o.lt==='urban'&&o.role==='center'){obsSprite(o);TWL.push(o);continue;}obsImg(o,0,0);
       if(o.brk)drawBrk(o);
       if(o.b==='core'){ctx.globalCompositeOperation='lighter';soft(o.x,o.y,o.r*1.3,'#ff3355',(.1+.08*Math.sin(RT*.05+o.s))*(.5+coreK(o.x,o.y)));ctx.globalCompositeOperation='source-over';ctx.globalAlpha=1;}}}
   drawTowers();
 }
+/* sprite d'obstacle : cuit à 1,3× (gw2.js, art inchangé : test/art.js) ; à l'échelle 1, réduit UNE fois à sa taille
+   (o.s1, libéré avec o.spr) puis posé au pixel entier — un sprite étiré à chaque image coûtait ~6× plus en canevas logiciel */
+function obsImg(o,dx,dy){const S=obsSprite(o);
+  if(!TF1){ctx.drawImage(S,o.sx+dx,o.sy+dy,o.sw,o.sh);return;}
+  let T=o.s1;if(!T||o.s1k!==S){T=mkCanvas(Math.round(o.sw),Math.round(o.sh));const g=T.getContext('2d');g.imageSmoothingEnabled=true;g.drawImage(S,0,0,T.width,T.height);o.s1=T;o.s1k=S;}
+  ctx.drawImage(T,Math.round(o.sx+dx),Math.round(o.sy+dy));}
 /* décor cassable (o.brk, gw.js) : fêlures selon les dégâts, éclat blanc au coup reçu, étincelle vert-jaune s'il cache un power-up */
 function drawBrk(o){const c=ctx,f=1-o.hp/o.mhp;
   if(f>0){c.strokeStyle='rgba(0,0,0,.62)';c.lineWidth=2.2;c.beginPath();const n=1+Math.floor(f*5);
@@ -427,7 +433,7 @@ const TWL=[],TWK=.13,TWM=100,PHH=2.6;let FACM=0;/* une façade manquait à la de
 /* décalage du sommet d'un objet de hauteur T posé en x,y (borné à m) */
 function twOff(x,y,T,m){const k=T*TWK;return[clamp((x-CAM.x)*k,-m,m),clamp((y-CAM.y)*k,-m,m)];}
 function drawTowers(){
-  FACM=0;if(!TWL.length)return;const c=ctx,s=PS*RZ,tx=PS*(W/2+RSX-CAM.x*RZ),ty=PS*(H/2+RSY-CAM.y*RZ);let nb=1;
+  FACM=0;if(!TWL.length)return;const c=ctx,s=ONE?1:PS*RZ,tx=Math.round(PS*(W/2+RSX)-CAM.x*s),ty=Math.round(PS*(H/2+RSY)-CAM.y*s);let nb=1;
   TWL.sort((a,b)=>dist2(b.cx,b.cy,CAM.x,CAM.y)-dist2(a.cx,a.cy,CAM.x,CAM.y));
   const face=(o,x0,y0,x1,y1,dx,dy,dk)=>{let t=FACS[(o.s%FACN)*2+(dk?1:0)];if(!t){if(nb<=0){FACM=1;return;}nb--;t=facTex(o.s%FACN,dk);}
     const L=Math.hypot(x1-x0,y1-y0),u0=(o.s>>>4)%(FACW-L|0||1);
@@ -438,12 +444,12 @@ function drawTowers(){
       c.lineCap='round';c.strokeStyle='#1b1930';c.lineWidth=r*2;c.beginPath();c.moveTo(o.x,o.y);c.lineTo(o.x+dx,o.y+dy);c.stroke();c.lineCap='butt';
       c.lineWidth=2;c.strokeStyle='#ffd27a';c.globalAlpha=.55;c.beginPath();for(let t=.12;t<.96;t+=.085){const px=o.x+dx*t,py=o.y+dy*t;c.moveTo(px-nx*r*.92,py-ny*r*.92);c.lineTo(px+nx*r*.92,py+ny*r*.92);}c.stroke();
       c.lineWidth=3;c.globalAlpha=.9;for(const [f,col] of [[-.95,'#ff2d95'],[.95,'#2de2ff']]){c.strokeStyle=col;c.beginPath();c.moveTo(o.x+nx*r*f,o.y+ny*r*f);c.lineTo(o.x+dx+nx*r*f,o.y+dy+ny*r*f);c.stroke();}
-      c.globalAlpha=1;c.drawImage(o.spr,o.sx+dx,o.sy+dy,o.sw,o.sh);c.globalCompositeOperation='lighter';glow(o.x+dx,o.y+dy,r*1.4,'#fff3c4',.55+.2*Math.sin(RT*.05));c.globalCompositeOperation='source-over';c.globalAlpha=1;continue;}
+      c.globalAlpha=1;obsImg(o,dx,dy);c.globalCompositeOperation='lighter';glow(o.x+dx,o.y+dy,r*1.4,'#fff3c4',.55+.2*Math.sin(RT*.05));c.globalCompositeOperation='source-over';c.globalAlpha=1;continue;}
     const T=twH(o),[dx,dy]=twOff(o.cx,o.cy,T,TWM),X=o.x,Y=o.y,R=X+o.w,B=Y+o.h;
     if(R+Math.max(dx,0)+12<VL||X+Math.min(dx,0)-12>VR||B+Math.max(dy,0)+12<VT||Y+Math.min(dy,0)-12>VB)continue;
     if(dx>.6)face(o,X,Y,X,B,dx,dy,0);else if(dx<-.6)face(o,R,Y,R,B,dx,dy,1);
     if(dy>.6)face(o,X,Y,R,Y,dx,dy,0);else if(dy<-.6)face(o,X,B,R,B,dx,dy,1);
-    c.setTransform(s,0,0,s,tx,ty);c.drawImage(o.spr,o.sx+dx,o.sy+dy,o.sw,o.sh);
+    worldTf();obsImg(o,dx,dy);
     if(T>1.15&&Math.sin(RT*.07+o.s)>.55){c.globalCompositeOperation='lighter';glow(o.cx+dx,o.cy+dy,9,'#ff3355',.9);c.globalCompositeOperation='source-over';c.globalAlpha=1;}}
   TWL.length=0;
 }
@@ -513,7 +519,7 @@ function drawTerrain(){const c=ctx,D=G.dec,C=G.courant;
 }
 function drawShadows(mix){
   const sky=G.biome==='sky'?1:0,k=.32+.9*sky,a=.5-.25*sky,S=shadowSpr(),c=ctx;
-  const sh=(x,y,r)=>{if(!vis(x,y,r*3))return;const o=r*k;c.drawImage(S,x-r*1.1+o,y-r*1.1+o*1.3,r*2.2,r*2.2);};
+  const sh=(x,y,r)=>{if(!vis(x,y,r*3))return;const o=r*k;if(TF1)img1(S,'shd',x+o,y+o*1.3,r*1.1);else c.drawImage(S,x-r*1.1+o,y-r*1.1+o*1.3,r*2.2,r*2.2);};
   c.globalAlpha=a;for(const e of G.en)if(e.spawn<=0)sh(e.x,e.y,e.r);const P=G.p;if(!P.dead)sh(P.x,P.y,P.r*1.3);
   const B=G.boss;if(B&&!B.gone)sh(B.x,B.y,B.r);for(const q of G.pus)sh(q.x,q.y,12);c.globalAlpha=1;
 }
@@ -581,7 +587,8 @@ function shapePath(c,t,x,y,r,a){c.beginPath();
     default:P(12,k=>{const b=a+k*Math.PI/6,q=k%2?r*.8:r*1.12;return[Math.cos(b)*q,Math.sin(b)*q];});}
 }
 const PALE={};
-function pale(col){return PALE[col]||(PALE[col]=(q=>'rgb('+(q[0]+255>>1)+','+(q[1]+255>>1)+','+(q[2]+255>>1)+')')(rgb(col)));}
+/* en hexadécimal : sphere() en fait un sprite (rgba() d'un 'rgb(...)' donnait NaN, et l'image s'arrêtait sur une exception à chaque proie avalée) */
+function pale(col){return PALE[col]||(PALE[col]='#'+rgb(col).map(v=>(v+255>>1).toString(16).padStart(2,'0')).join(''));}
 /* orientation de la silhouette : vers où il va (Mite), vers sa cible (Tireur, Mitrailleuse), ou une rotation lente */
 function eAng(e){const P=G.p,aP=Math.atan2(P.y-e.y,P.x-e.x);
   switch(e.t){case 'mite':return e.vx||e.vy?Math.atan2(e.vy,e.vx):aP;case 'sniper':return e.tele>0?e.ta:aP;case 'spike':return e.st===2?e.ca:e.wob*2;
@@ -594,10 +601,10 @@ function drawEnemy(e){
   const a=eAng(e);
   if(e.prey){r*=1+Math.sin(RT*.15+e.wob*3)*.06;c.globalAlpha=.85;shapePath(c,e.t,e.x,e.y,r,a);c.fillStyle=e.flash>0?'#fff':pale(col);c.fill();c.globalAlpha=1;
     c.fillStyle='rgba(255,255,255,.9)';c.beginPath();c.arc(e.x,e.y,Math.max(1.5,r*.22),0,TAU);c.fill();return;}
-  c.globalCompositeOperation='lighter';glow(e.x,e.y,r*2.2,col,e.elite?.45:.25);c.globalCompositeOperation='source-over';c.globalAlpha=1;
+  if(QL>=2||e.elite){c.globalCompositeOperation='lighter';glow(e.x,e.y,r*2.2,col,e.elite?.45:.25);c.globalCompositeOperation='source-over';c.globalAlpha=1;}
   /* annonces propres au type : visée de l'Épine, trait du Tireur */
-  if(e.t==='spike'&&e.st===1){c.globalAlpha=.25+.5*(1-e.st2/40);c.strokeStyle=col;c.lineWidth=2;c.setLineDash([10,8]);c.beginPath();c.moveTo(e.x,e.y);c.lineTo(e.x+Math.cos(e.ca)*260,e.y+Math.sin(e.ca)*260);c.stroke();c.setLineDash([]);c.globalAlpha=1;}
-  if(e.t==='sniper'&&e.tele>0){const f=1-e.tele/60;c.globalAlpha=.15+.7*f;c.strokeStyle=col;c.lineWidth=1+f*2.5;c.beginPath();c.moveTo(e.x,e.y);c.lineTo(e.x+Math.cos(e.ta)*1500,e.y+Math.sin(e.ta)*1500);c.stroke();c.globalAlpha=1;}
+  if(e.t==='spike'&&e.st===1){c.globalAlpha=.25+.5*(1-e.st2/SPK_AIM);c.strokeStyle=col;c.lineWidth=2;c.setLineDash([10,8]);c.beginPath();c.moveTo(e.x,e.y);c.lineTo(e.x+Math.cos(e.ca)*260,e.y+Math.sin(e.ca)*260);c.stroke();c.setLineDash([]);c.globalAlpha=1;}
+  if(e.t==='sniper'&&e.tele>0){const f=1-e.tele/SNP_AIM;c.globalAlpha=.15+.7*f;c.strokeStyle=col;c.lineWidth=1+f*2.5;c.beginPath();c.moveTo(e.x,e.y);c.lineTo(e.x+Math.cos(e.ta)*1500,e.y+Math.sin(e.ta)*1500);c.stroke();c.globalAlpha=1;}
   if(e.t==='orbit'){c.fillStyle=col;for(let k=0;k<2;k++){const b=e.wob*5+k*Math.PI;c.beginPath();c.arc(e.x+Math.cos(b)*r*1.7,e.y+Math.sin(b)*r*1.7,r*.26,0,TAU);c.fill();}}
   const fl=e.flash>0;
   shapePath(c,e.t,e.x,e.y,r,a);c.strokeStyle=e.elite?'#ffffff':EDK;c.lineWidth=e.elite?Math.max(3,r*.24):Math.max(2,r*.18);c.stroke();c.fillStyle=fl?'#ffffff':col;c.fill();
@@ -682,7 +689,7 @@ function drawBullets(){
   c.globalCompositeOperation='lighter';c.lineCap='round';
   for(const col in groups){const L=groups[col];c.strokeStyle=col;c.globalAlpha=.5;c.lineWidth=L[0].r*1.1;c.beginPath();for(const b of L){c.moveTo(b.x-b.vx*2.2,b.y-b.vy*2.2);c.lineTo(b.x,b.y);}c.stroke();for(const b of L)glow(b.x,b.y,b.r*2.6,col,1);}
   c.globalCompositeOperation='source-over';c.lineCap='butt';c.globalAlpha=1;
-  for(const b of G.eb){if(!vis(b.x,b.y,20))continue;const s=b.r*2.9;c.drawImage(ebSpr(b.col),b.x-s,b.y-s,s*2,s*2);}
+  for(const b of G.eb){if(!vis(b.x,b.y,20))continue;const s=b.r*2.9;if(TF1)img1(ebSpr(b.col),'e'+b.col,b.x,b.y,s);else c.drawImage(ebSpr(b.col),b.x-s,b.y-s,s*2,s*2);}
 }
 function drawFX(){
   const c=ctx;
@@ -762,6 +769,19 @@ function cssOp(id,v){v=Math.round(v*50)/50;if(CSSV[id]===v)return;CSSV[id]=v;con
 /* boutons tactiles (espace du HUD) : dash en bas à droite, gonfler juste au-dessus */
 function dashBtn(){return{x:W-62,y:H-92,r:34};}
 function gonBtn(){return{x:W-62,y:H-180,r:30};}
+/* barre de construction, composée une fois par bonus pris (et par taille d'écran), au pixel du canevas : posée telle
+   quelle à chaque image (un fillText par pastille et par image coûtait au canevas logiciel) */
+let BBK='',BBC=null;
+function buildBar(narrow){const P=G.p,ids=[];for(const id of G.picks)if(!ids.includes(id)&&CARDS[id])ids.push(id);
+  const s=narrow?20:24,gp=4,maxW=Math.max(s*4,W/2-NISL*(narrow?17:22)/2-40),per=Math.max(4,Math.floor((maxW+gp)/(s+gp))),k=ids.join()+'|'+ids.map(i=>P.cards[i]).join()+'|'+per+'|'+PS;
+  if(k===BBK)return BBC;BBK=k;if(!ids.length)return BBC=null;
+  const rows=Math.ceil(ids.length/per),cw=Math.min(ids.length,per)*(s+gp),ch=rows*(s+gp),C=mkCanvas(Math.ceil(cw*PS),Math.ceil(ch*PS)),g=C.getContext('2d');g.scale(PS,PS);
+  g.textAlign='center';g.textBaseline='middle';
+  ids.forEach((id,i)=>{const Q=CARDS[id],x=(i%per)*(s+gp),y=Math.floor(i/per)*(s+gp),n=P.cards[id]||1,col=Q.k==='f'?COL.gd:Q.k==='p'?COL.rd:COL.cy;
+    g.fillStyle='rgba(12,7,22,.72)';g.fillRect(x,y,s,s);g.strokeStyle=col;g.lineWidth=1.5;g.strokeRect(x+.75,y+.75,s-1.5,s-1.5);
+    g.font='700 '+(narrow?12:14)+'px '+FD;g.fillStyle=col;g.fillText(Q.u.ic,x+s/2,y+s/2+1);
+    if(n>1){g.font='700 9px '+FD;g.fillStyle='#ffffff';g.fillText(String(n),x+s-4,y+s-5);}});
+  return BBC=C;}
 function drawHUD(){
   const c=ctx,P=G.p,pad=14,narrow=W<600;
   c.textBaseline='top';c.textAlign='left';
@@ -788,6 +808,11 @@ function drawHUD(){
     else if(G.wbn){c.globalAlpha=Math.max(0,Math.min(1,G.wbn.t/10,(150-G.wbn.t)/25));c.textAlign='center';c.textBaseline='top';c.font='700 '+(narrow?14:16)+'px '+FD;c.fillStyle=BIO[G.biome].a;c.fillText('Vague '+G.wbn.w+' sur '+NWAVE,W/2,y1+14);c.globalAlpha=1;}
     /* 3. le score, discret, sous les boutons du coin */
     c.textAlign='right';c.textBaseline='top';c.font='700 '+(narrow?16:20)+'px '+FD;c.fillStyle='#efeaff';c.fillText(fmt(G.score),W-pad,64);
+    /* 3b. la série (g2.js comboUp) sous le score, tant qu'elle court (1,5 s), avec son multiplicateur */
+    const cl=G.t-G.comboT;if(G.combo>=3&&cl<=90){const m=1+Math.min(4,Math.floor(G.combo/5))*.5;c.globalAlpha=Math.min(1,(90-cl)/20);c.font='700 '+(narrow?13:15)+'px '+FD;
+      c.fillStyle=G.combo>=10?COL.gd:'#efeaff';c.fillText('série '+G.combo+(m>1?' · score ×'+m:''),W-pad,64+(narrow?21:26));c.globalAlpha=1;}
+    /* 3c. ta construction : une pastille par bonus pris, en haut à gauche (doré : fusion, rouge : pacte) */
+    if(G.picks.length){const B=buildBar(narrow);if(B){c.setTransform(1,0,0,1,Math.round(PS*(SAFE.l+pad)),Math.round(PS*(SAFE.t+pad)));c.drawImage(B,0,0);screenTf();c.translate(SAFE.l,SAFE.t);}}
     /* 4. commandes tactiles ; au clavier, seul le rappel « gonfler » quand la jauge est pleine */
     if(inp.touch){const L=inp.L,Rs=inp.R;
       for(const s of [L,Rs]){if(!s)continue;c.globalAlpha=.25;c.strokeStyle='#fff';c.lineWidth=2;c.beginPath();c.arc(s.ox,s.oy,60,0,TAU);c.stroke();c.fillStyle=s===L?COL.cy:COL.mg;c.beginPath();c.arc(s.x,s.y,24,0,TAU);c.fill();c.globalAlpha=1;}
@@ -843,7 +868,7 @@ function drawHUD(){
        decoratif, 2 sans halos), SKP la periode d'ecran qu'il croit voir (a comparer a « ref »), SKW l'attente avant
        de redescendre. Sans lui, un saut engage a vie ne se distinguait pas d'une scene pauvre. */
     const rq=meta.q||'auto',capq=rq==='auto'?[3,1]:QPRE[rq],dsc=QL<capq[0]||RES<capq[1];
-    const seg3=['régul '+(rq==='auto'?'auto':'plafond '+rq+(dsc?' ↓':''))+' '+QL+'/3 ×'+RES.toFixed(2),'PS '+PS.toFixed(2),'canvas '+cv.width+'×'+cv.height,'DPR '+DPR,'ref '+REFDT.toFixed(1)+' ms'].concat(typeof SKIPD==='number'?['saut '+SKIPD+'/2 P '+SKP.toFixed(1)+' ms W '+(SKW/1e3).toFixed(0)+' s']:[],['cuisson '+cuis]);
+    const seg3=['régul '+(rq==='auto'?'auto':'plafond '+rq+(dsc?' ↓':''))+' '+QL+'/3 ×'+RES.toFixed(2),'PS '+PS.toFixed(2),'canvas '+cv.width+'×'+cv.height,'DPR '+DPR,'ref '+REFDT.toFixed(1)+' ms'].concat(typeof SKIPD==='number'?['saut '+SKIPD+'/2 P '+SKP.toFixed(1)+' ms W '+(SKW/1e3).toFixed(0)+' s'+(HR?' cadence 1/2':'')]:[],['cuisson '+cuis]);
     if(DIAG_MARGIN>=0)seg3.push('marge audio '+DIAG_MARGIN.toFixed(2)+' s');
     /* jointure : « · » entre morceaux, mais un simple espace apres un morceau qui finit par « : »
        — sinon la ligne s'ecrit « ou : · render 6.06/12 » au lieu de « ou : render 6.06/12 ». */
@@ -925,7 +950,7 @@ function drawHUD(){
    sa relique, au centre, EST l'îlot quitté en miniature (gw.js relicInto). La copie rétrécit jusqu'au disque de la
    relique et s'y fond : la dimension visible change d'échelle. Hors navigateur (harnais), rien n'est copié. */
 let TRS=null;
-function trSnap(){if(typeof document==='undefined'||!cv.width)return;if(!TRS||TRS.width!==cv.width||TRS.height!==cv.height)TRS=mkCanvas(cv.width,cv.height);
+function trSnap(){if(typeof document==='undefined'||!cv.width)return;if(TRQ<1){TRF=true;try{render(1,RDT);}finally{TRF=false;}}if(!TRS||TRS.width!==cv.width||TRS.height!==cv.height)TRS=mkCanvas(cv.width,cv.height);
   const g=TRS.getContext('2d');g.setTransform(1,0,0,1,0,0);g.globalAlpha=1;g.globalCompositeOperation='copy';g.drawImage(cv,0,0);g.globalCompositeOperation='source-over';TRS.ok=1;
   /* la relique de l'îlot suivant : le disque de l'îlot (rayon WR) recadré à la résolution du sol (un pixel par unité de monde) */
   const R0=PS*WR*zoomFull(),N=512,rc=mkCanvas(N,N),rg=rc.getContext('2d');rg.fillStyle='#05030c';rg.fillRect(0,0,N,N);
@@ -934,6 +959,6 @@ function drawTrSnap(){const T=G.tr;if(!T||!TRS||!TRS.ok||T.t<=TR_SNAP)return;
   const f=Math.min(1,(T.t-TR_SNAP)/(TR_SHRINK-TR_SNAP));if(f>=1){TRS.ok=0;return;}
   const e=f*f*(3-2*f),s=1+(RELR/WR-1)*e,cx=PS*W/2,cy=PS*H/2,R=PS*(WR+40)*zoomFull()*s,c=ctx;
   c.setTransform(1,0,0,1,0,0);c.save();c.beginPath();c.arc(cx,cy,R,0,TAU);c.clip();
-  c.globalAlpha=f<.7?1:1-(f-.7)/.3;c.drawImage(TRS,cx-cx*s,cy-cy*s,TRS.width*s,TRS.height*s);c.restore();
+  c.globalAlpha=f<.7?1:1-(f-.7)/.3;c.drawImage(TRS,cx-cx*s,cy-cy*s,cv.width*s,cv.height*s);c.restore();
   const b=BIO[ISL[G.isl-2]];c.globalCompositeOperation='lighter';c.globalAlpha=.7*(1-f);c.strokeStyle=b?b.a:'#ffffff';c.lineWidth=3*PS;c.beginPath();c.arc(cx,cy,R,0,TAU);c.stroke();
   c.globalAlpha=1;c.globalCompositeOperation='source-over';screenTf();}

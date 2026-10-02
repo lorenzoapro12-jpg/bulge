@@ -8,22 +8,23 @@ let G=null;
 /* PRAD : rayon de la bulle ; SEG0 : segments de membrane au départ ; GROW : croissance par îlot (taille), GROWD (puissance :
    les dégâts de la bulle suivent la vie des ennemis, HPM, pour que les bonus restent un vrai gain) ;
    PREYA : écart d'îlots à partir duquel un type devient proie ; GONEA : écart où il quitte le jeu */
-const PRAD=18,SEG0=5,NWAVE=3,GROW=1.4,GROWD=1.2,PREYA=2,GONEA=4,EBC='#ff5a2d';
-/* vie des ennemis selon l'îlot : au même pas que les dégâts de la bulle (GROWD) ; le gain net vient des bonus */
-const HPM=()=>Math.pow(GROWD,G.isl-1);
+const PRAD=18,SEG0=5,NWAVE=3,GROW=1.4,GROWD=1.2,PREYA=2,GONEA=4,EBC='#ff5a2d',SPK_AIM=30,SNP_AIM=45;
+/* vie des ennemis selon l'îlot : au pas des dégâts de la bulle (GROWD), +12 % par îlot (deux bonus par îlot depuis le
+   02/10/2026 : la construction grandit deux fois plus vite), et ×1,2 contre la cadence de tir plus rapide */
+const HPM=()=>1.2*Math.pow(GROWD,G.isl-1)*(1+.12*(G.isl-1));
 function decor0(){return{bite:[],car:[],fall:[],givre:[],glisseT:-1,sw:null,swO:{},vu:false,vuT:-1,relais:[]};}
 function mkGame(seed){return{state:'play',t:0,time:0,seed,isl:1,ph:'arrive',phT:0,islT:0,wave:0,wq:null,
   p:null,en:[],eb:[],pb:[],pus:[],fx:[],tx:[],tele:[],marks:[],mines:[],trails:[],boss:null,
   score:0,kills:0,eats:0,hits:0,maxIsl:1,islHit:false,
   trauma:0,freeze:0,glitch:0,hurtT:0,flash:0,timeScale:1,cx:0,cy:0,zoom:1,pcx:null,pcy:null,pzoom:null,
-  banner:null,toasts:[],choices:[],pickIsl:0,rerolls:1,picks:[],
+  banner:null,toasts:[],choices:[],pickIsl:0,pickMid:0,pkMid:false,rerolls:1,picks:[],combo:0,comboT:-999,comboMx:0,
   win:false,tgt:null,tgtT:0,dieT:0,manual:false,slowF:1,
   inX:0,inY:0,aimMan:false,aimA:0,tut:{},tutOn:false,biome:'plains',wbn:null,
   dec:decor0(),courant:null,tr:null};}
 function mkPlayer(){return{x:0,y:0,vx:0,vy:0,r:PRAD,baseR:PRAD,ang:-Math.PI/2,col:COL.cy,
-  seg:SEG0,segMax:SEG0,spd:3.3,fireI:13,dmg:1,bspd:9.5,blife:72,bsize:4.5,pierce:0,turrets:1,spreadW:.16,homing:0,rico:0,split:0,crit:.03,critM:2.5,
+  seg:SEG0,segMax:SEG0,spd:4.4,fireI:9,dmg:1,bspd:12.5,blife:58,bsize:4.5,pierce:0,turrets:1,spreadW:.16,homing:0,rico:0,split:0,crit:.03,critM:2.5,
   aura:0,auraR:0,orbs:0,drones:0,dronesHome:false,missile:0,missileT:0,nova:0,novaT:0,mines:0,
-  dashMax:84,dashT:0,dashing:0,dvx:0,dvy:0,dashDmg:0,dashHit:[],ghost:false,
+  dashMax:55,dashT:0,dashing:0,dvx:0,dvy:0,dashDmg:0,dashHit:[],ghost:false,
   inv:0,fireT:0,flash:0,recoil:0,glow:0,shots:0,
   gauge:0,gon:0,gonMax:1,gGain:1,gDur:240,gScale:2,
   pu:{},puMax:{},puDur:1,luck:0,magnet:0,regen:0,regenT:0,digest:0,digN:0,
@@ -59,28 +60,31 @@ function islStart(){
 }
 function arriveBanner(){const b=BIO[G.biome];banner(b.n,'Îlot '+G.isl+' sur '+NISL+' · '+b.sub,b.a,170);
   if(G.isl===1&&G.tutOn)toast(inp.touch?'Pouce gauche : bouger. Le tir est automatique.':'ZQSD ou flèches : bouger. Le tir est automatique.');}
-/* déroulé d'un îlot (G.ph) : arrive → wave (×3, séparées par pause) → preboss → boss → clear */
+/* déroulé d'un îlot (G.ph) : arrive → wave (×3, séparées par pause) → preboss → boss → clear.
+   Rythme (02/10/2026, « trop lent, peu dynamique ») : arrivée 2,5 s → 1,25 s, pauses 1,7 s → 0,75 s, avant le boss
+   1,7 s → 0,9 s, îlot nettoyé 3 s → 1,7 s. Un DEUXIÈME bonus se choisit après la vague 2 (avant la dernière) :
+   seize choix par partie au lieu de huit, la bulle change de forme deux fois par îlot. */
 function updIslet(){
   G.phT++;G.islT++;
   switch(G.ph){
-    case 'arrive':if(G.phT===20&&G.pickIsl!==G.isl){openPick();if(G.state!=='play')return;}if(G.phT>=150)waveStart(1);break;
+    case 'arrive':if(G.phT===12&&G.pickIsl!==G.isl){openPick();if(G.state!=='play')return;}if(G.phT>=75)waveStart(1);break;
     case 'wave':waveTick();break;
-    case 'pause':if(G.phT>=100)waveStart(G.wave+1);break;
-    case 'preboss':if(G.phT>=100)spawnBoss();break;
+    case 'pause':if(G.phT===8&&G.wave===NWAVE-1&&G.pickMid!==G.isl){openPick(true);if(G.state!=='play')return;}if(G.phT>=45)waveStart(G.wave+1);break;
+    case 'preboss':if(G.phT>=55)spawnBoss();break;
     case 'clear':clearTick();break;
   }
   if(G.wbn&&++G.wbn.t>150)G.wbn=null;
 }
 function waveStart(w){
-  const k=G.isl,n=2+2*w+Math.ceil(k*.75);G.wave=w;G.ph='wave';G.phT=0;
+  const k=G.isl,n=3+3*w+Math.ceil(k*.9);G.wave=w;G.ph='wave';G.phT=0;
   G.wq={left:n,n,el:Math.ceil(n*.55),eld:false,prey:k>=PREYA+1?Math.round(n*.5):0,nextT:0};
   G.wbn={w,t:0};SFX.wave();
   if(w===2&&k===1&&G.tutOn)toast(inp.touch?'Bouton ⚡ : dash. Tu es invulnérable pendant.':'Espace ou Maj : dash. Tu es invulnérable pendant.');
 }
 function waveTick(){
   const Q=G.wq,k=G.isl;let alive=0;for(const e of G.en)if(!e.dead&&!e.prey)alive++;
-  const cap=3+Math.ceil(k*.8);
-  if((Q.left>0||Q.prey>0&&Q.left<Q.n)&&G.marks.length<2&&G.phT>=Q.nextT&&(alive<cap||G.phT>=Q.nextT+300)){spawnGroup();Q.nextT=G.phT+Math.round(rr(60,120));}
+  const cap=4+Math.ceil(k*1.1);
+  if((Q.left>0||Q.prey>0&&Q.left<Q.n)&&G.marks.length<3&&G.phT>=Q.nextT&&(alive<cap||G.phT>=Q.nextT+200)){spawnGroup();Q.nextT=G.phT+Math.round(rr(38,72));}
   if(Q.left<=0&&!G.marks.some(m=>!m.prey)&&alive===0){G.score+=100*k*G.wave;
     if(G.wave<NWAVE){G.ph='pause';G.phT=0;}else{G.ph='preboss';G.phT=0;G.marks=[];}}
 }
@@ -95,10 +99,10 @@ function spawnGroup(){
   const Q=G.wq,k=G.isl,P=G.p;let t,n,prey=false;
   const pt=[];for(let a=PREYA;a<GONEA;a++)if(k-a>=1)pt.push(ETL[k-a-1]);
   if(Q.prey>0&&pt.length&&(Q.left<=0||R()<.34)){t=pick(pt);prey=true;n=Math.min(Q.prey,t==='mite'?5:3);Q.prey-=n;}
-  else{if(Q.left<=0)return;t=k>=2&&R()<.36?ETL[k-2]:ETL[k-1];const big=ET[t].r>=19;n=Math.min(Q.left,t==='mite'?4:big?1:2+(R()<.4?1:0));Q.left-=n;}
+  else{if(Q.left<=0)return;t=k>=2&&R()<.36?ETL[k-2]:ETL[k-1];const big=ET[t].r>=19;n=Math.min(Q.left,t==='mite'?5:big?1+(R()<.35?1:0):2+(R()<.6?1:0));Q.left-=n;}
   const [x,y]=spawnSpot();
   let el=0;if(!prey&&!Q.eld&&Q.n-Q.left>=Q.el){Q.eld=true;el=1;}
-  G.marks.push({x,y,t:0,max:prey?30:50,t2:t,n,prey,el,col:ET[t].col});
+  G.marks.push({x,y,t:0,max:prey?30:38,t2:t,n,prey,el,col:ET[t].col});
 }
 function updMarks(){
   for(let i=G.marks.length-1;i>=0;i--){const m=G.marks[i];if(++m.t<m.max)continue;G.marks.splice(i,1);
@@ -112,17 +116,17 @@ function islClear(){
   for(const e of G.en)if(!e.dead){e.dead=true;shards(e.x,e.y,e.col,5,3,e.r);G.score+=10;}G.en=[];
 }
 function clearTick(){
-  const P=G.p;if(G.phT===50)G.timeScale=1;
+  const P=G.p;if(G.phT===35)G.timeScale=1;
   for(const q of G.pus)q.life=Math.min(q.life,90);
-  if(G.phT===110){if(!P.noRegen&&P.seg<P.segMax){P.seg++;SFX.seg();ringFX(P.x,P.y,P.r,P.r*3,COL.cy,24,4);ftext(P.x,P.y-P.r-14,'+1 segment',COL.cy,16);}
+  if(G.phT===55){if(!P.noRegen&&P.seg<P.segMax){P.seg++;SFX.seg();ringFX(P.x,P.y,P.r,P.r*3,COL.cy,24,4);ftext(P.x,P.y-P.r-14,'+1 segment',COL.cy,16);}
     G.score+=500*G.isl;if(!G.islHit){G.score+=1000*G.isl;toast('Îlot sans une égratignure');}}
-  if(G.phT>=180){if(G.isl>=NISL){G.win=true;endRun(true);}else transStart();}
+  if(G.phT>=100){if(G.isl>=NISL){G.win=true;endRun(true);}else transStart();}
 }
 /* ---------- croissance : la bulle gonfle, l'îlot rapetisse jusqu'à devenir la relique du suivant ----------
-   0-60 : caméra au centre, recul jusqu'à voir l'îlot entier, la bulle gonfle (×GROW) ;
-   60 : copie d'écran (g3.js trSnap), îlot suivant généré, la bulle reprend PRAD dans le nouveau repère ;
-   60-150 : la copie rétrécit jusqu'au disque de la relique (g3.js drawTrSnap) ; 150-210 : la caméra revient. */
-const TR_SNAP=60,TR_SHRINK=150,TR_END=210;
+   0-45 : caméra au centre, recul jusqu'à voir l'îlot entier, la bulle gonfle (×GROW) ;
+   45 : copie d'écran (g3.js trSnap), îlot suivant généré, la bulle reprend PRAD dans le nouveau repère ;
+   45-110 : la copie rétrécit jusqu'au disque de la relique (g3.js drawTrSnap) ; 110-150 : la caméra revient (2,5 s en tout, 3,5 avant). */
+const TR_SNAP=45,TR_SHRINK=110,TR_END=150;
 /* messages et bandeau s'effacent avant la copie de l'écran (trSnap) : la relique n'en garde pas la trace */
 function transStart(){G.state='trans';G.tr={t:0,z0:G.zoom,cx0:G.cx,cy0:G.cy,x0:G.p.x,y0:G.p.y};G.pus=[];G.trauma=0;SFX.grow();
   for(const t of G.toasts)t.t=Math.max(t.t,180);if(G.banner)G.banner.t=Math.max(G.banner.t,G.banner.max-20);}
@@ -163,17 +167,22 @@ function gain(v){const P=G.p;if(P.gon>0)return;const was=P.gauge<1;P.gauge=Math.
   if(was&&P.gauge>=1){SFX.evo();ringFX(P.x,P.y,P.r,P.r*2.4,COL.wh,18,3);if(!G.tut.gon){G.tut.gon=1;toast(inp.touch?'Jauge pleine : bouton ◉ pour gonfler !':'Jauge pleine : E ou clic droit pour gonfler !');}}}
 function killEnemy(e){
   if(e.dead)return;e.dead=true;if(e.parent&&!e.parent.dead)e.parent.kids--;
-  const P=G.p;G.kills++;G.score+=e.d.sc*(e.elite?4:1)*(e.prey?.5:1);gain(e.elite?.12:e.prey?.02:.035);
+  const P=G.p;G.kills++;G.score+=Math.round(e.d.sc*(e.elite?4:1)*(e.prey?.5:1)*comboUp(e));gain(e.elite?.12:e.prey?.02:.035);
   if(e.elite){dropPU(e.x,e.y);if(P.luck&&R()<.3*P.luck)dropPU(e.x,e.y);if(P.trophy&&P.seg<P.segMax){P.seg++;SFX.seg();}}
   FX({ty:4,x:e.x,y:e.y,vx:0,vy:0,r:e.r*7,life:14,max:14,col:e.col});
   shards(e.x,e.y,e.col,6+Math.floor(e.r/3),3+e.r*.08,e.r);sparks(e.x,e.y,e.col,8,4);ringFX(e.x,e.y,e.r,e.r*2.4,e.col,18,3);
   const big=e.r>=20;SFX.pop(big);
   if(big){shake(.22);if(G.t-(G.lastFz||-99)>40){G.freeze=Math.max(G.freeze,2);G.lastFz=G.t;}}else shake(.05);
 }
+/* COMBO : chaque ennemi abattu ou avalé moins de 1,5 s après le précédent fait monter la série ; le score est
+   multiplié (×1 puis +0,5 toutes les 5, jusqu'à ×3). Affiché sous le score (g3.js drawHUD), annoncé à 10, 25, 50, 100. */
+function comboUp(e){const P=G.p;G.combo=G.t-G.comboT<=90?G.combo+1:1;G.comboT=G.t;if(G.combo>G.comboMx)G.comboMx=G.combo;
+  if(G.combo===10||G.combo===25||G.combo===50||G.combo===100){ftext(P.x,P.y-P.r-26,'Série ×'+G.combo+' !',COL.gd,18);SFX.evo();}
+  return 1+Math.min(4,Math.floor(G.combo/5))*.5;}
 /* avaler : une proie (ou n'importe quel ennemi plus petit que toi quand tu es gonflé) */
 function absorb(e){
   if(e.dead)return;e.dead=true;if(e.parent&&!e.parent.dead)e.parent.kids--;const P=G.p;
-  G.eats++;G.score+=e.prey?25:e.d.sc;gain((e.prey?.075:.04)*(1+.4*P.glouton));
+  G.eats++;G.score+=Math.round((e.prey?25:e.d.sc)*comboUp(e));gain((e.prey?.075:.04)*(1+.4*P.glouton));
   if(P.digest&&++P.digN>=12){P.digN=0;if(P.seg<P.segMax){P.seg++;SFX.seg();ftext(P.x,P.y-P.r-14,'+1 segment',COL.cy,15);}}
   if(e.elite)dropPU(e.x,e.y);
   FX({ty:5,x:e.x,y:e.y,vx:(P.x-e.x)/12,vy:(P.y-e.y)/12,r:e.r,life:12,max:12,col:e.col});
@@ -198,33 +207,37 @@ function updEnemy(e){
   const P=G.p,d=e.d,dx=P.x-e.x,dy=P.y-e.y,dd=Math.hypot(dx,dy)||1,aP=Math.atan2(dy,dx);let ax=dx/dd,ay=dy/dd;
   /* un massif entre lui et toi : il suit la carte des distances (flowDir) au lieu de foncer dans la falaise */
   if(G.t%15===e.nk)e.nav=losWall(e.x,e.y,P.x,P.y)?flowDir(e.x,e.y):null;if(e.nav){ax=e.nav[0];ay=e.nav[1];}
-  let tx=0,ty=0,sp=d.spd*(e.alarmT>G.t?SW_SP:1);const vr=viewR();
+  /* plus vifs d'îlot en îlot (+4 % par îlot) : la bulle grandit, eux aussi */
+  let tx=0,ty=0,sp=d.spd*(e.alarmT>G.t?SW_SP:1)*(1+.04*(G.isl-1));const vr=viewR();
   e.wob+=.03*tf;
   const fire=()=>(e.cd-=tf)<=0;
   switch(e.t){
-    case 'mite':tx=ax+Math.cos(e.wob*3)*.45;ty=ay+Math.sin(e.wob*3)*.45;break;
+    /* Mite : essaim qui zigzague, puis BONDIT droit sur toi (×2,4 pendant ¼ s) quand tu es à portée — on l'esquive au dash */
+    case 'mite':if(e.st===1){sp*=2.4;tx=Math.cos(e.ca);ty=Math.sin(e.ca);if(G.t%3===0)FX({ty:3,x:e.x,y:e.y,vx:0,vy:0,r:e.r,life:9,max:9,col:e.col});if((e.st2-=tf)<=0){e.st=0;e.cd=rr(70,120);}}
+      else{tx=ax+Math.cos(e.wob*3)*.45;ty=ay+Math.sin(e.wob*3)*.45;if(fire()&&dd<250){e.st=1;e.st2=15;e.ca=aP;}}break;
     case 'spread':{const s=dd>Math.min(300,vr-40)?1:dd<Math.min(220,vr-100)?-1:0;tx=ax*s-ay*.5;ty=ay*s+ax*.5;
-      if(fire()){e.cd=rr(100,140);for(let k=-1;k<=1;k++)ebulE(e,aP+k*.22,3);SFX.eshot();}break;}
+      if(fire()){e.cd=rr(75,105);for(let k=-1;k<=1;k++)ebulE(e,aP+k*.22,3.6);SFX.eshot();}break;}
     case 'spike':
-      if(e.st===0){tx=ax*.4+Math.cos(e.wob)*.3;ty=ay*.4+Math.sin(e.wob)*.3;if(fire()&&dd<460){e.st=1;e.st2=40;}}
-      else if(e.st===1){sp=0;e.ca=aP;if((e.st2-=tf)<=0){e.st=2;e.st2=34;}}
-      else{sp=6.2;tx=Math.cos(e.ca);ty=Math.sin(e.ca);if((e.st2-=tf)<=0){e.st=0;e.cd=rr(60,110);}}break;
+      /* Épine : vise ½ s (trait pointillé), puis charge — plus courte et plus vive qu'avant */
+      if(e.st===0){tx=ax*.4+Math.cos(e.wob)*.3;ty=ay*.4+Math.sin(e.wob)*.3;if(fire()&&dd<460){e.st=1;e.st2=SPK_AIM;}}
+      else if(e.st===1){sp=0;e.ca=aP;if((e.st2-=tf)<=0){e.st=2;e.st2=28;}}
+      else{sp=7.8;tx=Math.cos(e.ca);ty=Math.sin(e.ca);if((e.st2-=tf)<=0){e.st=0;e.cd=rr(40,75);}}break;
     case 'orbit':{if(!e.dir)e.dir=R()<.5?1:-1;if((e.st2-=tf)<=0){e.st2=rr(90,170);e.dir*=-1;}const s=clamp((dd-Math.min(210,vr-70))/60,-1,1);tx=ax*s-ay*e.dir;ty=ay*s+ax*e.dir;if(e.st2<30)sp*=.25;
-      if(fire()){e.cd=rr(70,95);ebulE(e,aP,3.2);SFX.eshot();}break;}
+      if(fire()){e.cd=rr(55,75);ebulE(e,aP,3.8);SFX.eshot();}break;}
     case 'ring':tx=ax*.3+Math.cos(e.wob)*.5;ty=ay*.3+Math.sin(e.wob)*.5;
-      if(fire()){e.cd=rr(130,160);const n=12,o=R()*TAU,g=R()*TAU;for(let k=0;k<n;k++){const a=o+k*TAU/n;if(Math.abs(angDiff(a,g))<.5)continue;ebulE(e,a,2.2);}SFX.bshot();}break;
+      if(fire()){e.cd=rr(100,125);const n=12,o=R()*TAU,g=R()*TAU;for(let k=0;k<n;k++){const a=o+k*TAU/n;if(Math.abs(angDiff(a,g))<.5)continue;ebulE(e,a,2.6);}SFX.bshot();}break;
     case 'sniper':{const s=dd>vr-20?1:dd<vr-90?-1:0;tx=ax*s+Math.cos(e.wob)*.3;ty=ay*s+Math.sin(e.wob)*.3;
-      if(e.tele>0){sp*=.2;e.tele-=tf;e.ta+=angDiff(e.ta,aP)*.045;if(e.tele<=0){e.tele=0;ebulE(e,e.ta,9);SFX.snipe();}}
-      else if(fire()){e.cd=rr(150,200);e.tele=60;e.ta=aP;SFX.tele();}break;}
+      if(e.tele>0){sp*=.2;e.tele-=tf;e.ta+=angDiff(e.ta,aP)*.045;if(e.tele<=0){e.tele=0;ebulE(e,e.ta,11);SFX.snipe();}}
+      else if(fire()){e.cd=rr(110,150);e.tele=SNP_AIM;e.ta=aP;SFX.tele();}break;}
     case 'gatling':tx=ax*.2;ty=ay*.2;
-      if(e.st>0){const f=1-e.st/40;if(Math.round(e.st)%5===0)ebulE(e,e.ca-.5+f,3.6);if(Math.round(e.st)%15===0)SFX.eshot();e.st-=tf;if(e.st<=0)e.st=0;}
-      else if(fire()){e.cd=rr(140,180);e.st=40;e.ca=aP;}break;
+      if(e.st>0){const f=1-e.st/40;if(Math.round(e.st)%5===0)ebulE(e,e.ca-.5+f,4.2);if(Math.round(e.st)%15===0)SFX.eshot();e.st-=tf;if(e.st<=0)e.st=0;}
+      else if(fire()){e.cd=rr(110,140);e.st=40;e.ca=aP;}break;
     case 'spawner':tx=Math.cos(e.wob*.7);ty=Math.sin(e.wob*.9);
-      if(fire()){e.cd=rr(170,220);if(e.kids<4&&e.made<6&&G.en.length<40)for(let k=0;k<2;k++){e.made++;const a=R()*TAU;mkEnemy('mite',e.x+Math.cos(a)*e.r,e.y+Math.sin(a)*e.r,{age:0,spawn:10,parent:e});e.kids++;}}break;
+      if(fire()){e.cd=rr(130,170);if(e.kids<4&&e.made<6&&G.en.length<40)for(let k=0;k<2;k++){e.made++;const a=R()*TAU;mkEnemy('mite',e.x+Math.cos(a)*e.r,e.y+Math.sin(a)*e.r,{age:0,spawn:10,parent:e});e.kids++;}}break;
   }
   if(e.sl>0&&e.sn){e.sl--;const n=e.sn,sg=(tx*-n[1]+ty*n[0])>=0?1:-1;tx+=-n[1]*sg*.9;ty+=n[0]*sg*.9;}
   const tl=Math.hypot(tx,ty)||1;
-  if(e.t==='spike'&&e.st===2){e.vx=tx*sp;e.vy=ty*sp;if(G.t%2===0)FX({ty:3,x:e.x,y:e.y,vx:0,vy:0,r:e.r,life:12,max:12,col:e.col});}
+  if(e.t==='spike'&&e.st===2||e.t==='mite'&&e.st===1){e.vx=tx*sp;e.vy=ty*sp;if(e.t==='spike'&&G.t%2===0)FX({ty:3,x:e.x,y:e.y,vx:0,vy:0,r:e.r,life:12,max:12,col:e.col});}
   else{e.vx=lerp(e.vx,tx/tl*sp,.08);e.vy=lerp(e.vy,ty/tl*sp,.08);}
   e.x+=e.vx*tf;e.y+=e.vy*tf;
   const oh=collideCircle(e,e.r);
@@ -289,7 +302,7 @@ function clearNear(rad){const P=G.p;for(let i=G.eb.length-1;i>=0;i--){const b=G.
 function tryDash(){
   if(!G||G.state!=='play')return;const P=G.p;if(P.dashT>0||P.dead||P.noDash||P.dashing>0)return;
   let dx=G.inX,dy=G.inY;if(!dx&&!dy){dx=Math.cos(P.ang);dy=Math.sin(P.ang);}const l=Math.hypot(dx,dy)||1;dx/=l;dy/=l;
-  P.glisse=G.biome==='ice';P.dashing=P.glisse?ICE_DASH:12;if(P.glisse)G.dec.glisseT=G.t;P.dashT=P.dashMax;P.dvx=dx*P.spd*3.6;P.dvy=dy*P.spd*3.6;P.inv=Math.max(P.inv,18);P.dashHit=[];SFX.dash();
+  P.glisse=G.biome==='ice';P.dashing=P.glisse?ICE_DASH:12;if(P.glisse)G.dec.glisseT=G.t;P.dashT=P.dashMax;P.dvx=dx*P.spd*3.2;P.dvy=dy*P.spd*3.2;P.inv=Math.max(P.inv,18);P.dashHit=[];SFX.dash();
   ringFX(P.x,P.y,P.r,P.r*2.2,P.col,14,3);if(P.echo)clearNear(160);if(P.mines)layMine(P.x,P.y);
 }
 /* Gonfler : jauge pleine. La bulle double, devient invulnérable et avale ce qui est plus petit qu'elle ; à la fin, elle éclate. */
@@ -311,7 +324,7 @@ function updPlayer(){
     if(P.ghost&&G.t%3===0)G.trails.push({x:P.x,y:P.y,r:P.r*1.15,life:70});
     if(P.dashDmg>0)for(const e of G.en){if(e.dead||e.spawn>0||P.dashHit.includes(e))continue;if(dist2(e.x,e.y,P.x,P.y)<(e.r+P.r+6)**2){P.dashHit.push(e);hurtEnemy(e,P.dashDmg*P.dmg,P.dvx*.5,P.dvy*.5);}}
     if(P.dashing===0){P.vx*=.35;P.vy*=.35;if(P.mines)layMine(P.x,P.y);}
-  }else{const m=porte()?CUR_K:1;P.vx=lerp(P.vx,G.inX*P.spd*m,.16);P.vy=lerp(P.vy,G.inY*P.spd*m,.16);}
+  }else{const m=porte()?CUR_K:1;P.vx=lerp(P.vx,G.inX*P.spd*m,.24);P.vy=lerp(P.vy,G.inY*P.spd*m,.24);}
   P.x+=P.vx;P.y+=P.vy;
   const oh=collideCircle(P,P.r*.92);if(oh){const vn=P.vx*oh[0]+P.vy*oh[1];if(vn<0){P.vx-=vn*oh[0];P.vy-=vn*oh[1];}}
   const cn=confine(P,P.r);if(cn){const vn=P.vx*cn[0]+P.vy*cn[1];if(vn>0){P.vx-=vn*cn[0]*1.6;P.vy-=vn*cn[1]*1.6;}}
@@ -392,7 +405,7 @@ function explode(b){
 /* ---------- décor cassable : les obstacles moyens (o.brk, gw.js) cèdent sous tes tirs ---------- */
 function hitObs(o,d){if(o.gone)return;o.hp-=d*(G.p.demol?3:1);o.hf=G.t;if(o.hp<=0)breakObs(o);else if(G.t-(o.ht||-9)>8){o.ht=G.t;sparks(o.cx,o.cy,'#ffffff',3,2,12);}}
 function breakObs(o){
-  dropObs(o);const i=OSPR.indexOf(o);if(i>=0)OSPR.splice(i,1);o.spr=null;
+  dropObs(o);const i=OSPR.indexOf(o);if(i>=0)OSPR.splice(i,1);o.spr=o.s1=null;
   const col=BIO[o.b]?BIO[o.b].a:'#ffffff';shards(o.cx,o.cy,col,10+(o.R/4|0),4,o.R*.5);ringFX(o.cx,o.cy,o.R*.6,o.R*1.6,col,18,3);SFX.brk();shake(.12);G.score+=20;
   const P=G.p;if(o.pu||P.luck&&R()<.1*P.luck)dropPU(o.cx,o.cy);
   if(P.demol)for(const e of G.en)if(!e.dead&&e.spawn<=0&&dist2(e.x,e.y,o.cx,o.cy)<(o.R+70+e.r)**2)hurtEnemy(e,P.dmg*4,0,0,true);

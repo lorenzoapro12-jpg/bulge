@@ -75,8 +75,8 @@ const ROMAN=['','I','II','III','IV','V','VI','VII','VIII','IX','X'];
 /* le choix d'un bonus (gp.js openPick) : bleu = bonus, or = fusion de deux bonus possédés, rouge = pacte (un prix) */
 function renderPick(){
   const P=G.p;
-  $('evoT').textContent=G.isl===1?'Première mutation':'Îlot '+G.isl+' : '+BIO[G.biome].n;
-  $('evoS').textContent=G.isl===1?'Choisis un bonus. Tu en gagnes un à chaque îlot, jusqu’au bout de la partie.':'Choisis un bonus. Il te suit jusqu’au bout de la partie.';
+  $('evoT').textContent=G.pkMid?'Mutation avant la vague finale':G.isl===1?'Première mutation':'Îlot '+G.isl+' : '+BIO[G.biome].n;
+  $('evoS').textContent=G.isl===1&&!G.pkMid?'Choisis un bonus. Tu en gagnes deux par îlot : à l’arrivée et avant la dernière vague.':'Choisis un bonus. Il te suit jusqu’au bout de la partie ('+(G.picks.length+1)+'ᵉ sur '+2*NISL+').';
   $('evoCards').innerHTML=G.choices.map((ch,i)=>{const u=ch.u,n=P.cards[u.id]||0,cat=ch.k==='f'?'Fusion : '+CARDS[u.a].u.n+' + '+CARDS[u.b].u.n:ch.k==='p'?'Pacte':u.c;
     return '<button class="card'+(ch.k==='f'?' mut':ch.k==='p'?' pact':'')+'" data-i="'+i+'"><span class="key">'+(i+1)+'</span><span class="ic">'+u.ic+'</span><span class="cat">'+cat+'</span><span class="nm">'+u.n+(n>0?' '+ROMAN[n+1]:'')+'</span><span class="ds">'+u.d+'</span>'+(ch.k==='p'?'<span class="cost">Prix : '+u.cost+'</span>':'')+'</button>';}).join('');
   const rb=$('bReroll');rb.hidden=!(G.rerolls>0);rb.textContent='Relancer ('+G.rerolls+')'+(COARSE?'':' · R');
@@ -172,7 +172,7 @@ function ltStart(){if(LT_ST)return;const P=globalThis.PerformanceObserver,T=P&&P
   try{new P(l=>{for(const e of l.getEntries())if(e.duration>DIAG_LT[0]){const a=e.attribution&&e.attribution[0];DIAG_LT[0]=e.duration;DIAG_LT[1]=e.name||'?';DIAG_LT[2]=a&&a.name||'?';}}).observe({entryTypes:['longtask']});LT_ST=1;}
   catch(e){LT_ST=-2;}}
 const JSPROF_N=['render','step','streamWorld','bakeStep','genChunk','getChunk','perf',
-  'drawChunks','drawLive','drawDeco','solDraw','drawTowers','chSurf','drawWhaleShadow','drawDecFX','drawFalls','drawHUD',
+  'drawChunks','drawLive','drawDeco','solDraw','drawTowers','chSurf','drawDecFX','drawFalls','drawHUD',
   'drawEdges','drawObstacles','drawEnemies','drawBoss','drawPlayer','drawBullets',
   'drawFX','drawWeather','drawIndicators','drawTexts','drawShadows',
   'drawTrails','drawPUs','drawTele','drawSpawns','drawTerrain','drawTrSnap','postFX','lowBegin','lowWorld','lowEnd',
@@ -198,13 +198,17 @@ function jsProfStart(){
    temps récent -> se déclenchait sur une simple gigue de vsync, même sur une machine capable.
    Nouvelle méthode : on compare la médiane au rafraîchissement réel de l'écran, sur 3 s, et on retire
    d'abord des effets ; la résolution ne baisse qu'en dernier recours, une seule fois. */
-const QPRE={high:[3,1],mid:[2,1],low:[1,.8]};
+/* ⚠️ 02/10/2026 : la résolution (RES) ne baisse plus. Le monde est dessiné à l'échelle 1 (g3.js applyRes : ~720 lignes,
+   un pixel du canevas par unité du monde) ; à RES 0,8 il serait ÉTIRÉ, et un sol étiré coûte ~6× plus par pixel en canevas
+   logiciel (Firefox du propriétaire) : baisser la résolution y RALENTISSAIT le jeu. Seuls les effets (QL) se règlent ;
+   un cran RES appris avant (meta.qAuto) est ignoré. Dernier recours sur écran rapide : la cadence (hrCtl). */
+const QPRE={high:[3,1],mid:[2,1],low:[1,1]};
 /* En mode auto, la qualité APPRISE survit d'une partie à l'autre (meta.qAuto, donc aussi d'un
    chargement à l'autre). La remettre au maximum à chaque startGame condamnait chaque début de
    partie à resaccader le temps que perf() redescende les crans un par un. Elle reste un POINT DE
    DÉPART, jamais un plafond : perf() sait aussi remonter (voir plus bas). */
 function applyQuality(){const q=meta.q||'auto';
-  if(q==='auto'){const a=meta.qAuto;if(a&&a.length===2){QL=a[0];RES=a[1];}else{QL=3;RES=1;}}
+  if(q==='auto'){const a=meta.qAuto;if(a&&a.length===2){QL=a[0];RES=1;}else{QL=3;RES=1;}}
   else{QL=QPRE[q][0];RES=QPRE[q][1];}
   applyRes();}
 /* Référence de fluidité = ce que la machine fait RÉELLEMENT en début de partie, pas le meilleur
@@ -286,7 +290,7 @@ function perf(dt){
      moins : une vraie lenteur doit d'abord etre combattue (descente en ~10 s), pas aussitot acceptee.
      Refuse : estimer la periode sur les images HORS partie (menus). La boucle y tourne bien, mais elle y mesure
      la DALLE — 8,3 ms sur ce S22 — c'est-a-dire precisement la valeur qui l'a verrouille. */
-  flT=p90>REFDT*1.35&&med>=REFDT*1.10&&QL<=1&&RES<=.8?flT+15:0;
+  flT=p90>REFDT*1.35&&med>=REFDT*1.10&&QL<=1?flT+15:0;
   if(flT>1200){flT=0;slowT=0;upT=0;REFDT=env;REFOK=true;}
   /* Descente rapide (~1 s au-dessus de 1,35x), remontée LENTE et plus exigeante (~5 s sous 1,10x).
      L'asymétrie est voulue : une oscillation entre deux crans saccaderait plus que le défaut, et
@@ -304,7 +308,6 @@ function perf(dt){
   if(p90>REFDT*1.35){
     if((slowT+=15)>60){slowT=0;upT=0;DTH.length=0;
       if(QL>1){QL--;applyRes();if(G)toast('Effets allégés pour garder la fluidité');}
-      else if(RES>.8){RES=.8;applyRes();if(G)toast('Résolution réduite pour garder la fluidité');}
       else return;
       if(!man){meta.qAuto=[QL,RES];saveMeta();}}
   }else{
@@ -358,6 +361,20 @@ function skipCtl(w,dt,b=BKMS){
     if(SKIPD>0){if(SKO>=SKW){SKIPD--;SKO=0;SKT=0;}}else if(SKO>=30000)SKW=3000;}
   if(SKT>=2000&&SKT-dt<2000)SKW=Math.max(3000,SKW/2);
 }
+/* ---------- CADENCE (02/10/2026) ----------
+   Écran rapide (SKP < 11 ms : 90 à 144 Hz) et machine qui n'en tient pas la période : une image coûte tantôt une
+   période, tantôt deux, et le mouvement hoquette (8 / 17 / 8 / 17 ms) — pire qu'un 60 ips régulier. La logique tourne
+   de toute façon à 60 pas par seconde (STEPMS) : on ne dessine alors qu'une fois par ~16,7 ms (rappel distant d'au
+   moins HRMIN du dernier dessin), soit 60 images RÉGULIÈRES, que l'image coûte 6 ou 12 ms.
+   Entrée : HRB compte les images perdues (+1) et s'use sur les bonnes (−0,08) : ~30 % d'images perdues pendant ~1 s, ou
+   une perte continue d'une demi-seconde (une pointe isolée — cuisson, passage d'îlot — n'y suffit pas).
+   Sortie : le rendu mesuré (FWK des images dessinées) sous 40 % de la période pendant HRD ms ; HRD double à chaque
+   rechute, pour ne pas osciller. Écran 60 Hz : jamais. Banc : test/cadence.js. */
+const HRMIN=15;let HR=false,HRB=0,HRW=0,HRO=0,HRL=0,HRD=5000;
+function hrCtl(dt,drawn){
+  if(!G||G.state!=='play'||dt<DTMIN)return;
+  if(!HR){if(SKP<11){HRB=dt>SKP*1.4?HRB+1:Math.max(0,HRB-.08);if(HRB>=30){HR=true;HRB=0;HRW=0;HRO=0;}}else HRB=0;return;}
+  if(!drawn)return;HRW=HRW?HRW*.9+FWK*.1:FWK;if(HRW<SKP*.4){if((HRO+=HRMIN)>=HRD){HR=false;HRO=0;HRD=Math.min(60000,HRD*2);}}else HRO=0;}
 let FRN=0;
 function frame(ts){
   requestAnimationFrame(frame);
@@ -375,9 +392,10 @@ function frame(ts){
   }
   if(REDUCED&&G){G.trauma*=.5;G.glitch=Math.min(G.glitch,2);}
   const bgOnly=!G||['pause','end','pick'].includes(G.state);FRN=(FRN+1)%4;
-  if(!bgOnly||FRN%(G&&G.state!=='pick'?4:2)===0||!G&&FRN%2===0)render(A,dt);
+  const drawn=!bgOnly?!HR||ts-HRL>=HRMIN:FRN%(G&&G.state!=='pick'?4:2)===0||!G&&FRN%2===0;
+  if(drawn){let rd=dt;if(!bgOnly){if(HR&&HRL)rd=Math.min(100,ts-HRL);HRL=ts;}render(A,rd);}
   /* travail JS réel de cette image, hors cuisson : la mesure dont bakeBudget() part à l'image suivante */
-  FWK=performance.now()-t0-BKMS;skipCtl(FWK+BKMS,dt);
+  FWK=performance.now()-t0-BKMS;skipCtl(FWK+BKMS,dt);hrCtl(dt,drawn&&!bgOnly);
   /* ---------- diagnostic embarque : cumul sur une seconde, puis publication ---------- */
   /* On ne cumule que les images qui JOUENT : la meme condition que la boucle de simulation ci-dessus.
      Avant, les images d'interface entraient dans la fenetre d'une seconde, donc « image : N ms »

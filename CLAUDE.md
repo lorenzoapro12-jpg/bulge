@@ -2,7 +2,8 @@
 
 Roguelike d'absorption, Canvas 2D, jeu de navigateur **en français**, desktop + mobile.
 Depuis la refonte d'octobre 2026 : **huit îlots = huit niveaux**. Chaque îlot est une arène ronde
-(trois vagues puis un boss), apporte son type d'ennemi, et à l'arrivée on choisit un bonus parmi trois.
+(trois vagues puis un boss), apporte son type d'ennemi, et on choisit un bonus parmi trois à l'arrivée, puis un
+second avant la vague finale.
 Les anciens types rapetissent d'îlot en îlot (÷1,4), deviennent des proies à avaler, puis disparaissent ;
 au centre de chaque îlot, la relique est l'îlot quitté, en miniature. Rien ne se garde d'une partie à l'autre.
 Aucune dépendance : pas de framework, pas de bundler, pas de npm. Tout tient dans un
@@ -93,7 +94,7 @@ Outils complémentaires :
 - `node test/navigateur.js` — porte navigateur (vrai Chromium) : empreinte du build, `test/worker.js` (le worker cuit
   octet pour octet comme la page, relique comprise), `test/sol.js`, `test/pire-navigateur.js`, `?wk=0`, compteur.
 - `node test/regule.js` — garde-fou du **régulateur de qualité** (`perf()` : référence `REFDT`, crans,
-  plafond manuel). Il compte les **images dégradées**, pas seulement l'état final : c'est ce chiffre qui a
+  plafond manuel ; depuis le 02/10/2026 il ne baisse plus que les effets `QL`, jamais la résolution `RES`). Il compte les **images dégradées**, pas seulement l'état final : c'est ce chiffre qui a
   réfuté une première correction (elle rendait la qualité, au prix de 64 s de jeu dégradé). `--ref=` pour
   l'ancien code. Appelé par headless.js.
 - `node test/saut.js` — garde-fou du **filet de budget** (`skipCtl` : `SKP`, `SKW`, `SKIPD`), sur horloge
@@ -101,6 +102,17 @@ Outils complémentaires :
   bloque plus la remontée de `SKP`, `SKW` se révise des deux côtés. `--ref=` pour l'ancien code. Appelé par
   headless.js. ⚠️ Il **extrait `skipCtl` de `g4.js`** : si ce bloc est renommé ou déplacé, le banc doit
   échouer **en le disant** — ne jamais « réparer » en assouplissant l'extraction.
+- `node test/echelle.js` — garde-fou du **monde à l'échelle 1** (`applyRes`, `worldTf`, `img1`, `obsImg` dans `g3.js`) :
+  le canevas a ~720 lignes en paysage (560 colonnes en portrait), un pixel par unité du monde (`PS×RZ = 1`), et
+  sprites, halos, obstacles sont posés à leur taille naturelle au pixel entier. Raison : sur le canevas LOGICIEL de
+  Firefox (celui du propriétaire), un `drawImage` étiré coûte ~8,8 ns/px contre ~1,4 ns/px posé tel quel. Vérifie
+  aussi le passage d'îlot en demi-résolution (`TRQ`) avec la copie de la relique en pleine résolution. Appelé par headless.js.
+- `node test/cadence.js` — garde-fou de la **demi-cadence sur écran rapide** (`hrCtl`, `HR` dans `g4.js`) : sur un
+  écran 120 Hz, une machine qui dessine en 6 à 10 ms alternait 8 / 17 ms (hoquet) ; on dessine alors une fois par
+  ~16,7 ms, et on revient à la pleine cadence quand l'image redevient légère. Vraie boucle `frame()`, horloge
+  virtuelle. Appelé par headless.js.
+- `node test/rythme.js` — garde-fou du **rythme** (`g2.js`) : temps morts d'un îlot < 6,5 s, bulle vive (vitesse,
+  cadence de tir), série de kills qui multiplie le score, mite qui bondit. Appelé par headless.js.
 - `node test/unused.js` — recensement du code mort (identifiants, `SFX`, `id` HTML,
   classes CSS, médias). À lancer avant d'affirmer qu'un symbole est utilisé.
 - `node test/compteur.js` — garde-fou du compteur de diagnostic (`meta.fps`) : chaque ligne doit

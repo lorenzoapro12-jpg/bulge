@@ -50,7 +50,8 @@ const check = (label, cond, info) => { if (!cond) ok = false; console.log((cond 
   for (const [q, want] of [['', 'worker'], ['?wk=0', 'sur place'], ['?wk=1', 'worker']]) { const B = await launch(); let r = null;
     try { await B.nav('file://' + html + q);
       for (let i = 0; i < 40; i++) { await sleep(500); try { if (i > 5) await B.ev('WK===null&&' + START()); r = await B.ev('(()=>({wk:WK===null?"?":WK?"worker":"sur place",wkn:WKN,s:location.search}))()'); } catch (e) { r = { wk: 'exception ' + e.message }; }
-        if (r.wk !== '?' && (r.wk !== 'worker' || r.wkn > 0)) break; }
+        /* une exception au premier relevé (script de la page pas encore exécuté, vu une fois sur deux passes) : on relève encore ; elle échoue si elle dure 20 s */
+        if (r.wk !== '?' && !/^exception/.test(r.wk) && (r.wk !== 'worker' || r.wkn > 0)) break; }
     } finally { B.close(); }
     check('vrai navigateur, URL « ' + q + ' » => cuisson ' + want, r && r.wk === want && (want !== 'worker' || r.wkn > 0), r ? 'etat « ' + r.wk + ' », ' + r.wkn + ' chunks recus du worker, location.search=« ' + r.s + ' »' : ''); }
   /* 4. chantier A4 — le « hors JS » attribue, dans un VRAI Chromium (S22 standard 360x780, DPR 2.625, tactile).

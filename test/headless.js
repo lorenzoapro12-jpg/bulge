@@ -54,8 +54,8 @@ const ETL = ['mite', 'spike', 'spread', 'sniper', 'orbit', 'gatling', 'ring', 's
    ========================================================= */
 function playRun(name, seed, maxSteps, o = {}) {
   const H = L.mkGame({ ref: REF, seed });
-  const res = { run: name, seed, ended: 0, win: null, steps: 0, error: null, choix: [] };
-  H.win.__SIM_PICK = (c) => { res.choix.push(c.map(x => x.u.id)); return c[Math.floor(H.call('Math.random()') * c.length)]; };
+  const res = { run: name, seed, ended: 0, win: null, steps: 0, error: null, choix: [], quand: [] };
+  H.win.__SIM_PICK = (c) => { res.choix.push(c.map(x => x.u.id)); res.quand.push(H.call('G.isl+":"+G.ph+":"+G.wave')); return c[Math.floor(H.call('Math.random()') * c.length)]; };
   H.win.__SIM_END = (w) => { res.ended++; res.win = w; };
   H.ai(o.god); if (o.boost) H.call('window.__SIM_BOOST=' + o.boost);
   H.call(OBS); const OB = H.call('window.__OBS');
@@ -85,7 +85,10 @@ if (!ONLY_SCN) {
   for (const r of [r2, r3]) {
     check(r.run + ' : VICTOIRE après les 8 îlots (__SIM_END(true) une seule fois)', r.ended === 1 && r.win === true && r.isl === 8 && r.state === 'end', 'fin=' + r.ended + ' victoire=' + r.win + ' îlot=' + r.isl + ' pas=' + r.steps);
     check(r.run + ' : 8 boss, chacun abattu', K8.every(k => r.ob.boss[k] && r.ob.kills[k]), 'boss=' + Object.keys(r.ob.boss).join(',') + ' abattus=' + Object.keys(r.ob.kills).join(','));
-    check(r.run + ' : un bonus choisi à l’arrivée sur chaque îlot, parmi 3 cartes distinctes', r.picks.length === 8 && r.choix.length === 8 && r.choix.every(c => c.length === 3 && new Set(c).size === 3), 'bonus=' + r.picks.length + ' tirages=' + r.choix.map(c => c.length).join(''));
+    /* deux bonus par îlot (02/10/2026) : à l'arrivée, puis dans la pause qui précède la dernière vague */
+    const attendu = K8.flatMap(k => [k + ':arrive:0', k + ':pause:2']);
+    check(r.run + ' : deux bonus par îlot (à l’arrivée, puis avant la vague finale), chacun parmi 3 cartes distinctes', r.picks.length === 16 && r.choix.length === 16 && r.choix.every(c => c.length === 3 && new Set(c).size === 3) && r.quand.join() === attendu.join(),
+      'bonus=' + r.picks.length + ' tirages=' + r.choix.map(c => c.length).join('') + ' moments=' + r.quand.join(' '));
     const ty = r.ob.types, permis = k => Object.keys(ty[k] || {}).every(t => { const a = k - ETL.indexOf(t) - 1; return a >= 0 && (a < 4 || t === 'mite'); });
     check(r.run + ' : chaque îlot apporte son ennemi (le type de l’îlot k est là à l’îlot k), et rien d’autre que ses aînés', K8.every(k => ty[k] && ty[k][ETL[k - 1]]) && K8.every(permis),
       K8.map(k => k + ':' + Object.keys(ty[k] || {}).join('+')).join(' '));
@@ -333,6 +336,9 @@ const GARDES = [
   ['degradation.js', 'dégradation : les postes décoratifs cèdent sous budget, jamais le monde ni le joueur'],
   ['compteur.js', 'compteur : lisible sur téléphone et il dit qui cuit le monde, worker ou sur place'],
   ['halos.js', 'halos : dessinés directement dans le canevas principal, plus aucun calque composé en plein écran'],
+  ['echelle.js', 'échelle 1 : le monde est posé au pixel entier (plus de sol ni de sprite étiré), passage d’îlot en demi-résolution'],
+  ['rythme.js', 'rythme : temps morts d’un îlot courts, bulle vive, une série paie, la mite bondit'],
+  ['cadence.js', 'cadence : sur écran 120 Hz, une image trop lourde pour 8,3 ms passe à un dessin régulier toutes les 16,7 ms, et en revient'],
   ['menus.js', 'écrans d’interface : fond figé (menu, pause, choix, fin), plus de flou CSS ni de filtre animé'],
   ['ambiance.js', 'ambiance : surfaces posées par les effets d’environnement bornées sur chaque îlot'],
   ['defaut.js', 'cuisson déléguée : worker pris PAR DÉFAUT, ?wk=0 = témoin sur place, repli propre si worker absent, en panne ou muet'],

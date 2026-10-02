@@ -42,8 +42,11 @@ function play(n, dt) { for (let i = 0; i < n; i++) { GAME.advance(dt); PERF(dt);
 const secs = (s, dt) => play(Math.round(s * 1000 / dt), dt);
 
 /* l'invariant : l'etat de qualite et la taille reelle du canevas doivent concorder */
+/* 02/10/2026 : PS ne depend plus ni du cran d'effets (QL) ni du DPR. Le monde est dessine a l'echelle 1 : ~720 lignes
+   en paysage (560 colonnes en portrait), un pixel du canevas par unite du monde, fois RES (g3.js applyRes). Un monde
+   etire coutait ~6x plus par pixel en canevas logiciel ; QL ne regle plus que les effets. */
 function coherent(S) {
-  const ps = Math.min(2, S.QL >= 3 ? 2 : S.QL === 2 ? 1.25 : 1) * S.RES;
+  const ps = 720 / 600 * S.RES;
   return Math.abs(S.w - Math.round(800 * ps)) <= 1 && Math.abs(S.ps - ps) < 1e-9;
 }
 

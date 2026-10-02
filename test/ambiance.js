@@ -65,7 +65,7 @@ if (call("typeof genIslet") !== 'function') { console.log(`test/ambiance.js — 
    (pas les aplats ni les traits : rais de lumière, aurores, réseau). */
 const AMB_ETIRE = 250e3, AMB_TOTAL = 1.2e6;
 /* fonctions d'ambiance du rendu (g3.js), TOUTES exigées (A0) */
-const FN = ['drawFar', 'drawWhale', 'drawWhaleShadow', 'drawLowGlows', 'drawWeather', 'drawLive', 'drawDeco', 'drawMarks'];
+const FN = ['drawFar', 'drawLowGlows', 'drawWeather', 'drawLive', 'drawDeco', 'drawMarks'];
 const manquantes = JSON.parse(call(`JSON.stringify(${JSON.stringify(FN)}.filter(n=>typeof globalThis[n]!=='function'))`));
 call(`(function(){globalThis.__AMB=0;globalThis.__AMBN={};for(const n of ${JSON.stringify(FN)}){if(typeof globalThis[n]!=='function')continue;const f=globalThis[n];__AMBN[n]=0;globalThis[n]=function(){__AMB++;__AMBN[n]++;try{return f.apply(this,arguments);}finally{__AMB--;}};}})()`);
 const realPush = LOG.push.bind(LOG);
