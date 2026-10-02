@@ -29,13 +29,16 @@ function vnoise(x,y,s){const ix=Math.floor(x),iy=Math.floor(y),fx=x-ix,fy=y-iy,u
 let WD=null;
 /* cartes des îlots déjà générés pour la partie en cours (la relique de l'îlot k est la carte de l'îlot k-1) */
 const ISLM=new Map();let ISLS=-1;
-function islMap(seed,k){if(k<1)return null;if(ISLS!==seed){ISLM.clear();ISLS=seed;}let m=ISLM.get(k);if(m)return m;const S=WD;genIslet(seed,k);m=WD.map;WD=S;return m;}
+function islMap(seed,k){if(k<1)return null;if(ISLS!==seed){ISLM.clear();ISLS=seed;}let m=ISLM.get(k);if(m)return m;const S=WD;genIslet(seed,k);m=WD.mini;WD=S;return m;}
+/* RELSNAP : l'image RÉELLE de l'îlot quitté, copiée à l'écran au passage (g3.js trSnap, transmise au worker) ;
+   sans elle (harnais, îlot régénéré pour une autre relique), la miniature calculée (WD.mini) */
+let RELSNAP=null;
 function genIslet(seed,k){
-  const relic=islMap(seed,k-1),s=(seed^Math.imul(k,0x9E3779B1))>>>0,rnd=mkRng(s),t=ISL[k-1];
+  const rs=RELSNAP&&RELSNAP.run===seed&&RELSNAP.k===k?RELSNAP.img:null,relic=rs||islMap(seed,k-1),s=(seed^Math.imul(k,0x9E3779B1))>>>0,rnd=mkRng(s),t=ISL[k-1];
   WD={seed:s,run:seed,isl:k,sites:[{x:0,y:0,t}],core:{x:0,y:0},chunks:new Array(NC*NC),bakes:[],warp:[rnd()*100,rnd()*100],map:null,relic,relicB:k>1?ISL[k-2]:null,lms:[],used:false};
   WD.hs=(s%9973)+17;
   buildWalls();buildMaps();
-  if(ISLS!==seed){ISLM.clear();ISLS=seed;}ISLM.set(k,WD.map);
+  if(ISLS!==seed){ISLM.clear();ISLS=seed;}ISLM.set(k,WD.mini);
 }
 function warpXY(x,y){const w=WD.warp;return[x+Math.sin(y*.0013+w[0])*190+Math.sin(y*.0041+w[1])*60,y+Math.sin(x*.0012+w[1])*190+Math.sin(x*.0037+w[0])*60];}
 /* un seul biome par îlot : les fonctions de lecture du monde gardent leur forme (art, audio, météo) */
@@ -57,6 +60,11 @@ function buildMaps(){
   const bl=mkCanvas(N,N),bg=bl.getContext('2d');bg.fillStyle='#05030c';bg.fillRect(0,0,N,N);bg.filter='blur(2.2px)';bg.drawImage(cm,0,0);bg.filter='none';
   if(WD.relic)relicInto(bg,N/2,N/2,RELR/k,WD.relic,WD.relicB);
   WD.map=bl;
+  /* la miniature (relique de l'îlot suivant) : la même carte, plus ses falaises en ombre, pour qu'on reconnaisse l'îlot quitté */
+  const wc=mkCanvas(N,N),wg=wc.getContext('2d'),q=WC/k;wg.fillStyle='rgb(5,3,12)';wg.beginPath();
+  for(let j=0;j<NG;j++)for(let i=0;i<NG;i++)if(WD.wall[j*NG+i]){const x=(G0+(i+.5)*WC+WR)/k,y=(G0+(j+.5)*WC+WR)/k;wg.moveTo(x+q*.72,y);wg.arc(x,y,q*.72,0,TAU);}
+  wg.fill();
+  const mi=mkCanvas(N,N),mg=mi.getContext('2d');mg.drawImage(bl,0,0);mg.filter='blur(1.2px)';mg.drawImage(wc,0,0);mg.filter='none';WD.mini=mi;
 }
 /* l'îlot précédent, réduit, dans un disque : ombre portée, liseré à la couleur de son biome */
 function relicInto(g,x,y,r,map,b){

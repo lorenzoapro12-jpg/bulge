@@ -6,11 +6,12 @@
    deterministe, prouve champ par champ par test/worker.js), puis cuit un chunk avec les MEMES bakeStep que la page, sur un
    OffscreenCanvas neuf (mkCanvas, gw2.js). Branche par streamWorld (gw2.js, wkAsk/wkRecv) PAR DEFAUT ;
    ?wk=0 garde le temoin sur place (gw2.js : WKW).
-   Protocole : {t:'monde',seed,k,g} -> {t:'monde',seed}   (g : generation, renvoyee avec chaque chunk)
+   Protocole : {t:'monde',seed,k,g,rs} -> {t:'monde',seed}   (g : generation, renvoyee avec chaque chunk ;
+               rs : pixels de l'ilot quitte, la relique, ou null)
                {t:'cuis',cx,cy}   -> {t:'cuis',cx,cy,g,bm}  (ImageBitmap transfere ; null hors du monde)
    ========================================================= */
 let FRAME=0,WG=0;
 function wkBake(cx,cy){const c=getChunk(cx,cy);if(!c)return null;c.bake=null;c.bk=null;while(!bakeStep(c));WD.bakes.length=0;const cv=c.bake;c.bake=null;return cv;}
 onmessage=e=>{const m=e.data;
-  if(m.t==='monde'){genIslet(m.seed,m.k);WG=m.g|0;postMessage({t:'monde',seed:m.seed});return;}
+  if(m.t==='monde'){if(m.rs){const c=mkCanvas(m.rs.width,m.rs.height);c.getContext('2d').putImageData(m.rs,0,0);RELSNAP={run:m.seed,k:m.k,img:c};}genIslet(m.seed,m.k);WG=m.g|0;postMessage({t:'monde',seed:m.seed});return;}
   if(m.t==='cuis'){const cv=wkBake(m.cx,m.cy),bm=cv?cv.transferToImageBitmap():null;postMessage({t:'cuis',cx:m.cx,cy:m.cy,g:WG,bm},bm?[bm]:[]);}};

@@ -45,9 +45,9 @@ const ET={
   spread:{n:'Tireur',isl:3,r:16,hp:6,spd:1.15,col:'#ff8a2d',sc:50},
   sniper:{n:'Tireur d\'élite',isl:4,r:13,hp:4.5,spd:1.25,col:'#ff5a36',sc:60},
   orbit:{n:'Orbiteur',isl:5,r:14,hp:6,spd:2.1,col:'#ff4fd8',sc:60},
-  gatling:{n:'Gatling',isl:6,r:19,hp:11,spd:.5,col:'#ffa22d',sc:80},
-  ring:{n:'Pulsar',isl:7,r:21,hp:13,spd:.6,col:'#ff6a5a',sc:90},
-  spawner:{n:'Porteur',isl:8,r:27,hp:20,spd:.5,col:'#e040ff',sc:120},
+  gatling:{n:'Gatling',isl:6,r:19,hp:9,spd:.5,col:'#ffa22d',sc:80},
+  ring:{n:'Pulsar',isl:7,r:21,hp:10,spd:.6,col:'#ff6a5a',sc:90},
+  spawner:{n:'Porteur',isl:8,r:27,hp:16,spd:.5,col:'#e040ff',sc:120},
 };
 const ETL=['mite','spike','spread','sniper','orbit','gatling','ring','spawner'];
 

@@ -926,7 +926,10 @@ function drawHUD(){
    relique et s'y fond : la dimension visible change d'échelle. Hors navigateur (harnais), rien n'est copié. */
 let TRS=null;
 function trSnap(){if(typeof document==='undefined'||!cv.width)return;if(!TRS||TRS.width!==cv.width||TRS.height!==cv.height)TRS=mkCanvas(cv.width,cv.height);
-  const g=TRS.getContext('2d');g.setTransform(1,0,0,1,0,0);g.globalAlpha=1;g.globalCompositeOperation='copy';g.drawImage(cv,0,0);g.globalCompositeOperation='source-over';TRS.ok=1;}
+  const g=TRS.getContext('2d');g.setTransform(1,0,0,1,0,0);g.globalAlpha=1;g.globalCompositeOperation='copy';g.drawImage(cv,0,0);g.globalCompositeOperation='source-over';TRS.ok=1;
+  /* la relique de l'îlot suivant : le disque de l'îlot (rayon WR) recadré à la résolution du sol (un pixel par unité de monde) */
+  const R0=PS*WR*zoomFull(),N=512,rc=mkCanvas(N,N),rg=rc.getContext('2d');rg.fillStyle='#05030c';rg.fillRect(0,0,N,N);
+  rg.imageSmoothingEnabled=true;rg.drawImage(cv,PS*W/2-R0,PS*H/2-R0,2*R0,2*R0,0,0,N,N);RELSNAP={run:G.seed,k:G.isl+1,img:rc,data:null};}
 function drawTrSnap(){const T=G.tr;if(!T||!TRS||!TRS.ok||T.t<=TR_SNAP)return;
   const f=Math.min(1,(T.t-TR_SNAP)/(TR_SHRINK-TR_SNAP));if(f>=1){TRS.ok=0;return;}
   const e=f*f*(3-2*f),s=1+(RELR/WR-1)*e,cx=PS*W/2,cy=PS*H/2,R=PS*(WR+40)*zoomFull()*s,c=ctx;

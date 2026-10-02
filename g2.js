@@ -9,8 +9,8 @@ let G=null;
    les dégâts de la bulle suivent la vie des ennemis, HPM, pour que les bonus restent un vrai gain) ;
    PREYA : écart d'îlots à partir duquel un type devient proie ; GONEA : écart où il quitte le jeu */
 const PRAD=18,SEG0=5,NWAVE=3,GROW=1.4,GROWD=1.2,PREYA=2,GONEA=4,EBC='#ff5a2d';
-/* vie des ennemis selon l'îlot (le joueur, lui, progresse par ses bonus) */
-const HPM=()=>Math.pow(1.24,G.isl-1);
+/* vie des ennemis selon l'îlot : au même pas que les dégâts de la bulle (GROWD) ; le gain net vient des bonus */
+const HPM=()=>Math.pow(GROWD,G.isl-1);
 function decor0(){return{bite:[],car:[],fall:[],givre:[],glisseT:-1,sw:null,swO:{},vu:false,vuT:-1,relais:[]};}
 function mkGame(seed){return{state:'play',t:0,time:0,seed,isl:1,ph:'arrive',phT:0,islT:0,wave:0,wq:null,
   p:null,en:[],eb:[],pb:[],pus:[],fx:[],tx:[],tele:[],marks:[],mines:[],trails:[],boss:null,
@@ -72,7 +72,7 @@ function updIslet(){
   if(G.wbn&&++G.wbn.t>150)G.wbn=null;
 }
 function waveStart(w){
-  const k=G.isl,n=3+2*w+k;G.wave=w;G.ph='wave';G.phT=0;
+  const k=G.isl,n=2+2*w+Math.ceil(k*.75);G.wave=w;G.ph='wave';G.phT=0;
   G.wq={left:n,n,el:Math.ceil(n*.55),eld:false,prey:k>=PREYA+1?Math.round(n*.5):0,nextT:0};
   G.wbn={w,t:0};SFX.wave();
   if(w===2&&k===1&&G.tutOn)toast(inp.touch?'Bouton ⚡ : dash. Tu es invulnérable pendant.':'Espace ou Maj : dash. Tu es invulnérable pendant.');
@@ -91,9 +91,12 @@ function spawnGroup(){
   if(Q.prey>0&&pt.length&&(Q.left<=0||R()<.34)){t=pick(pt);prey=true;n=Math.min(Q.prey,t==='mite'?5:3);Q.prey-=n;}
   else{if(Q.left<=0)return;t=k>=2&&R()<.36?ETL[k-2]:ETL[k-1];const big=ET[t].r>=19;n=Math.min(Q.left,t==='mite'?4:big?1:2+(R()<.4?1:0));Q.left-=n;}
   let x=0,y=0,ok=false;
-  for(let tr=0;tr<24&&!ok;tr++){const a=R()*TAU,r=tr<16?PR-110:PR-260;x=Math.cos(a)*r;y=Math.sin(a)*r;ok=dist2(x,y,P.x,P.y)>(tr<16?460:300)**2&&!wallNear(x,y,56)&&!pointHit(x,y,44);}
+  /* à vue, ni collés ni au bout de l'îlot : la marque au sol laisse le temps de les voir venir (sinon, le bord) */
+  for(let tr=0;tr<40&&!ok;tr++){if(tr<24){const a=R()*TAU,r=rr(330,540);x=P.x+Math.cos(a)*r;y=P.y+Math.sin(a)*r;if(Math.hypot(x,y)>PR-90)continue;}
+    else{const a=R()*TAU,r=tr<32?PR-110:PR-260;x=Math.cos(a)*r;y=Math.sin(a)*r;if(dist2(x,y,P.x,P.y)<(tr<32?460:300)**2)continue;}
+    ok=!wallNear(x,y,56)&&!pointHit(x,y,44);}
   let el=0;if(!prey&&!Q.eld&&Q.n-Q.left>=Q.el){Q.eld=true;el=1;}
-  G.marks.push({x,y,t:0,max:prey?24:34,t2:t,n,prey,el,col:ET[t].col});
+  G.marks.push({x,y,t:0,max:prey?30:50,t2:t,n,prey,el,col:ET[t].col});
 }
 function updMarks(){
   for(let i=G.marks.length-1;i>=0;i--){const m=G.marks[i];if(++m.t<m.max)continue;G.marks.splice(i,1);
@@ -118,7 +121,9 @@ function clearTick(){
    60 : copie d'écran (g3.js trSnap), îlot suivant généré, la bulle reprend PRAD dans le nouveau repère ;
    60-150 : la copie rétrécit jusqu'au disque de la relique (g3.js drawTrSnap) ; 150-210 : la caméra revient. */
 const TR_SNAP=60,TR_SHRINK=150,TR_END=210;
-function transStart(){G.state='trans';G.tr={t:0,z0:G.zoom,cx0:G.cx,cy0:G.cy,x0:G.p.x,y0:G.p.y};G.pus=[];G.trauma=0;SFX.grow();}
+/* messages et bandeau s'effacent avant la copie de l'écran (trSnap) : la relique n'en garde pas la trace */
+function transStart(){G.state='trans';G.tr={t:0,z0:G.zoom,cx0:G.cx,cy0:G.cy,x0:G.p.x,y0:G.p.y};G.pus=[];G.trauma=0;SFX.grow();
+  for(const t of G.toasts)t.t=Math.max(t.t,180);if(G.banner)G.banner.t=Math.max(G.banner.t,G.banner.max-20);}
 function updTrans(){
   const T=G.tr,P=G.p;T.t++;P.vx=P.vy=0;P.dashing=0;G.trauma=0;
   if(T.t<=TR_SNAP){const f=T.t/TR_SNAP,e=f*f*(3-2*f);P.x=T.x0*(1-e);P.y=T.y0*(1-e);P.r=lerp(P.r,P.baseR*GROW,.08);P.ang+=.05;}
@@ -127,7 +132,9 @@ function updTrans(){
   if(T.t>=TR_END){G.tr=null;G.state='play';G.ph='arrive';G.phT=0;P.r=P.baseR;}
 }
 /* zoom fixe pendant un îlot : le cache du sol (g3.js solDraw) sert à chaque image */
-function zoomTarget(){return Math.min(W,H)/(W<H?560:720);}
+/* viewR : demi-côté court de la vue, en unités du monde (280 en portrait, 360 en paysage) ; les tireurs s'y tiennent */
+function viewR(){return W<H?280:360;}
+function zoomTarget(){return Math.min(W,H)/(2*viewR());}
 function zoomFull(){return Math.min(W,H)/(2*(WR+40));}
 
 /* ---------- ennemis ---------- */
@@ -188,29 +195,29 @@ function updEnemy(e){
   const P=G.p,d=e.d,dx=P.x-e.x,dy=P.y-e.y,dd=Math.hypot(dx,dy)||1,aP=Math.atan2(dy,dx);let ax=dx/dd,ay=dy/dd;
   /* un massif entre lui et toi : il suit la carte des distances (flowDir) au lieu de foncer dans la falaise */
   if(G.t%15===e.nk)e.nav=losWall(e.x,e.y,P.x,P.y)?flowDir(e.x,e.y):null;if(e.nav){ax=e.nav[0];ay=e.nav[1];}
-  let tx=0,ty=0,sp=d.spd*(e.alarmT>G.t?SW_SP:1);
+  let tx=0,ty=0,sp=d.spd*(e.alarmT>G.t?SW_SP:1);const vr=viewR();
   e.wob+=.03*tf;
   const fire=()=>(e.cd-=tf)<=0;
   switch(e.t){
     case 'mite':tx=ax+Math.cos(e.wob*3)*.45;ty=ay+Math.sin(e.wob*3)*.45;break;
-    case 'spread':{const s=dd>300?1:dd<220?-1:0;tx=ax*s-ay*.5;ty=ay*s+ax*.5;
+    case 'spread':{const s=dd>Math.min(300,vr-40)?1:dd<Math.min(220,vr-100)?-1:0;tx=ax*s-ay*.5;ty=ay*s+ax*.5;
       if(fire()){e.cd=rr(100,140);for(let k=-1;k<=1;k++)ebulE(e,aP+k*.22,3);SFX.eshot();}break;}
     case 'spike':
       if(e.st===0){tx=ax*.4+Math.cos(e.wob)*.3;ty=ay*.4+Math.sin(e.wob)*.3;if(fire()&&dd<460){e.st=1;e.st2=40;}}
       else if(e.st===1){sp=0;e.ca=aP;if((e.st2-=tf)<=0){e.st=2;e.st2=34;}}
       else{sp=6.2;tx=Math.cos(e.ca);ty=Math.sin(e.ca);if((e.st2-=tf)<=0){e.st=0;e.cd=rr(60,110);}}break;
-    case 'orbit':{if(!e.dir)e.dir=R()<.5?1:-1;if((e.st2-=tf)<=0){e.st2=rr(90,170);e.dir*=-1;}const s=clamp((dd-210)/60,-1,1);tx=ax*s-ay*e.dir;ty=ay*s+ax*e.dir;if(e.st2<30)sp*=.25;
+    case 'orbit':{if(!e.dir)e.dir=R()<.5?1:-1;if((e.st2-=tf)<=0){e.st2=rr(90,170);e.dir*=-1;}const s=clamp((dd-Math.min(210,vr-70))/60,-1,1);tx=ax*s-ay*e.dir;ty=ay*s+ax*e.dir;if(e.st2<30)sp*=.25;
       if(fire()){e.cd=rr(70,95);ebulE(e,aP,3.2);SFX.eshot();}break;}
     case 'ring':tx=ax*.3+Math.cos(e.wob)*.5;ty=ay*.3+Math.sin(e.wob)*.5;
       if(fire()){e.cd=rr(130,160);const n=12,o=R()*TAU,g=R()*TAU;for(let k=0;k<n;k++){const a=o+k*TAU/n;if(Math.abs(angDiff(a,g))<.5)continue;ebulE(e,a,2.2);}SFX.bshot();}break;
-    case 'sniper':{const s=dd>420?1:dd<300?-1:0;tx=ax*s+Math.cos(e.wob)*.3;ty=ay*s+Math.sin(e.wob)*.3;
+    case 'sniper':{const s=dd>vr-20?1:dd<vr-90?-1:0;tx=ax*s+Math.cos(e.wob)*.3;ty=ay*s+Math.sin(e.wob)*.3;
       if(e.tele>0){sp*=.2;e.tele-=tf;e.ta+=angDiff(e.ta,aP)*.045;if(e.tele<=0){e.tele=0;ebulE(e,e.ta,9);SFX.snipe();}}
       else if(fire()){e.cd=rr(150,200);e.tele=60;e.ta=aP;SFX.tele();}break;}
     case 'gatling':tx=ax*.2;ty=ay*.2;
       if(e.st>0){const f=1-e.st/40;if(Math.round(e.st)%5===0)ebulE(e,e.ca-.5+f,3.6);if(Math.round(e.st)%15===0)SFX.eshot();e.st-=tf;if(e.st<=0)e.st=0;}
       else if(fire()){e.cd=rr(140,180);e.st=40;e.ca=aP;}break;
     case 'spawner':tx=Math.cos(e.wob*.7);ty=Math.sin(e.wob*.9);
-      if(fire()){e.cd=rr(170,220);if(e.kids<5&&e.made<8&&G.en.length<40)for(let k=0;k<2;k++){e.made++;const a=R()*TAU;mkEnemy('mite',e.x+Math.cos(a)*e.r,e.y+Math.sin(a)*e.r,{age:0,spawn:10,parent:e});e.kids++;}}break;
+      if(fire()){e.cd=rr(170,220);if(e.kids<4&&e.made<6&&G.en.length<40)for(let k=0;k<2;k++){e.made++;const a=R()*TAU;mkEnemy('mite',e.x+Math.cos(a)*e.r,e.y+Math.sin(a)*e.r,{age:0,spawn:10,parent:e});e.kids++;}}break;
   }
   if(e.sl>0&&e.sn){e.sl--;const n=e.sn,sg=(tx*-n[1]+ty*n[0])>=0?1:-1;tx+=-n[1]*sg*.9;ty+=n[0]*sg*.9;}
   const tl=Math.hypot(tx,ty)||1;
@@ -305,10 +312,11 @@ function updPlayer(){
   P.r=lerp(P.r,P.baseR*(P.gon>0?P.gScale:1)*(P.titan?1.12:1),P.gon>0?.12:.1);
   aimUpdate();playerFire();
 }
+/* seulement ce qui est à l'écran : on ne tire jamais sur un ennemi qu'on ne voit pas */
 function findTarget(x,y,range){
-  let best=null,bd=range*range;
-  for(const e of G.en){if(e.dead||e.spawn>0)continue;let d=dist2(x,y,e.x,e.y);if(e.prey)d*=9;if(d<bd){bd=d;best=e;}}
-  for(const B of BIGS()){const d=Math.max(0,Math.hypot(x-B.x,y-B.y)-B.r*.6);if(d*d<bd){bd=d*d;best=B;}}
+  let best=null,bd=range*range;const hw=W/2/G.zoom,hh=H/2/G.zoom,off=(o,r)=>Math.abs(o.x-G.cx)>hw+r||Math.abs(o.y-G.cy)>hh+r;
+  for(const e of G.en){if(e.dead||e.spawn>0||off(e,-e.r))continue;let d=dist2(x,y,e.x,e.y);if(e.prey)d*=9;if(d<bd){bd=d;best=e;}}
+  for(const B of BIGS()){if(off(B,B.r*.5))continue;const d=Math.max(0,Math.hypot(x-B.x,y-B.y)-B.r*.6);if(d*d<bd){bd=d*d;best=B;}}
   return best;
 }
 function leadAng(sx,sy,tg,spd){let tx=tg.x,ty=tg.y;const vx=tg.vx||0,vy=tg.vy||0;for(let k=0;k<2;k++){const t=Math.min(60,Math.hypot(tx-sx,ty-sy)/spd);tx=tg.x+vx*t;ty=tg.y+vy*t;}return Math.atan2(ty-sy,tx-sx);}

@@ -351,7 +351,9 @@ function wkOn(){if(WK===null){WK=false;const w=WKW&&bakeWorker();if(w){WK={w,wd:
 /* worker en panne : retour a la cuisson sur place, les chunks demandes redeviennent a cuire */
 function wkFail(){if(!WK)return;for(const c of WK.enc)c.wk=0;try{WK.w.terminate();}catch(e){}WK=false;}
 function wkSync(){if(WK.wd===WD)return;if(WK.wd)for(const c of WK.wd.bakes)if(isBm(c.bake))c.bake.close();
-  for(const c of WK.enc)c.wk=0;WK.enc.length=0;WK.wd=WD;WK.g++;WK.m=0;WK.w.postMessage({t:'monde',seed:WD.run,k:WD.isl,g:WK.g});}
+  for(const c of WK.enc)c.wk=0;WK.enc.length=0;WK.wd=WD;WK.g++;WK.m=0;WK.w.postMessage({t:'monde',seed:WD.run,k:WD.isl,g:WK.g,rs:relData()});}
+/* l'image de l'îlot quitté (RELSNAP), en pixels pour le worker : lue une fois par passage */
+function relData(){const s=RELSNAP;if(!s||s.run!==WD.run||s.k!==WD.isl)return null;if(!s.data)s.data=s.img.getContext('2d').getImageData(0,0,s.img.width,s.img.height);return s.data;}
 function wkAsk(c){c.wk=1;WK.enc.push(c);WK.w.postMessage({t:'cuis',cx:c.cx,cy:c.cy});}
 function wkRecv(e){const m=e.data;if(WK)WK.m=0;if(m.t!=='cuis'||!WK)return;const i=m.g===WK.g&&WK.wd===WD?WK.enc.findIndex(c=>c.cx===m.cx&&c.cy===m.cy):-1;
   if(i<0){m.bm&&m.bm.close();return;}const c=WK.enc[i];WK.enc.splice(i,1);c.wk=0;if(!m.bm)return;
