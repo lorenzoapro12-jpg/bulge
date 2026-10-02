@@ -365,7 +365,7 @@ function evictBakes(max){
 }
 /* cache des sprites d'obstacles, indépendant des cuissons */
 const OSPR=[];
-function evictSprites(max){if(OSPR.length<=max)return;OSPR.sort((a,b)=>a.su-b.su);const n=OSPR.length-max;for(let i=0;i<n;i++)OSPR[i].spr=null;OSPR.splice(0,n);}
+function evictSprites(max){if(OSPR.length<=max)return;OSPR.sort((a,b)=>a.su-b.su);const n=OSPR.length-max;for(let i=0;i<n;i++)OSPR[i].spr=OSPR[i].s1=null;OSPR.splice(0,n);}
 /* pré-cuisson autour d'un point (au lancement, sous le fondu d'entrée). Elle cuisait 36 chunks d'un
    bloc (144 787 opérations, mesure du 27/09/2026) : désormais elle ne fait que les mettre en file,
    du centre vers l'extérieur ; streamWorld la vide avec son budget, image après image. */

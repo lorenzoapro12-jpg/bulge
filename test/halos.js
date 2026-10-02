@@ -68,7 +68,8 @@ const check = (name, ok, detail) => checks.push({ name, ok, detail });
      2a. aucun canevas intermediaire n'est compose en plein ecran : pas de drawImage d'une source de la taille de
          l'ecran (ou de son quart) dans le canevas principal pendant la passe basse, et aucun 'screen' ;
      2b. les halos arrivent pourtant a l'ecran, directement dans le canevas principal, en 'lighter' ;
-     2c. en qualite basse aussi (seuls les halos sont dessines) ;
+     2c. en qualite basse (QL 1), la passe des halos est SAUTEE (02/10/2026 : effets retires d'abord quand ca saccade),
+         et rien de plein ecran n'est compose pour autant ;
      2d. a la mort, ils sont attenues a 0,4 (comme #cv.dying+#low), et l'attenuation ne fuit pas hors de la passe ;
      2e. les grands halos (natSpr) sont poses a l'echelle 1, au pixel entier. */
 H.start();
@@ -112,7 +113,7 @@ const ilot = k => call(`G.isl=${k};genIslet(G.seed,${k});islStart();G.state='pla
   ilot(1);
   call('QL=1;applyRes();'); frame();
   const r = frame();
-  check('2c. qualite basse : les halos (seuls dessines) arrivent encore a l\'ecran', r.n > 0 && r.toMain.some(e => e.gco === 'lighter') && r.big.length === 0, desc(r));
+  check('2c. qualite basse : la passe des halos est sautee, rien de plein ecran n\'est compose', r.n === 0 && r.toMain.length === 0 && r.big.length === 0 && r.screen.length === 0, desc(r));
 }
 {
   /* le boss de l'ilot et une explosion (FX de type 4) dans le champ : leurs halos sont presents vivant ET mort (celui du

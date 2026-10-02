@@ -4,7 +4,7 @@
 
    Ce que ce test defend : un mode de qualite MANUEL (« Haute », « Équilibrée », « Performance »)
    est un PLAFOND, pas un interrupteur qui eteint le regulateur.
-     - quand ca saccade, QL puis RES doivent DESCENDRE sous le cran choisi ;
+     - quand ca saccade, QL doit DESCENDRE sous le cran choisi (02/10/2026 : RES ne descend plus, voir PLAN) ;
      - quand ca va mieux, la remontee doit revenir AU cran choisi et S'Y ARRETER, jamais au-dessus ;
      - le mode « Auto » ne doit pas avoir bouge d'un cran (trajectoire comparee a celle de TEMOIN).
    Bloc X (chantier A1) : entrees ABERRANTES — fenetre a 0,4 ms, rafale breve a 8 ms, reprise apres
@@ -58,8 +58,9 @@ const SACCADE = (i) => (i % 5 === 2 ? 33.3 : 16.7);    /* une image sur cinq man
 const IMG = s => Math.round(s * 60);
 
 /* l'invariant de test/qualite.js : l'etat de qualite et la taille reelle du canevas concordent */
+/* 02/10/2026 : PS ne depend plus ni de QL ni du DPR (monde a l'echelle 1, ~720 lignes en paysage, fois RES : g3.js applyRes) */
 function coherent(S) {
-  const ps = Math.min(2, S.QL >= 3 ? 2 : S.QL === 2 ? 1.25 : 1) * S.RES;
+  const ps = 720 / 600 * S.RES;
   return Math.abs(S.w - Math.round(800 * ps)) <= 1 && Math.abs(S.ps - ps) < 1e-9;
 }
 
@@ -68,7 +69,11 @@ const check = (name, ok, detail) => checks.push({ name, ok, detail });
 const J = S => `${S.QL}/${S.RES}`;
 
 const GAME = mkGame(REF);
-const CRAN = { high: [3, 1], mid: [2, 1], low: [1, .8] }, NOM = { high: 'Haute', mid: 'Équilibrée', low: 'Performance' };
+/* PLANCHER du regulateur. Avant le 02/10/2026 : 1/0.8 (la resolution baissait en dernier recours). Le monde est desormais
+   dessine a l'echelle 1 et un monde etire coute ~6x plus par pixel en canevas logiciel (Firefox du proprietaire) : a RES 0,8
+   le jeu RALENTISSAIT. La resolution ne baisse donc plus ; le plancher est 1/1, et « Performance » vaut 1/1. */
+const PLAN = '1/1';
+const CRAN = { high: [3, 1], mid: [2, 1], low: [1, 1] }, NOM = { high: 'Haute', mid: 'Équilibrée', low: 'Performance' };
 
 /* ================= M — pour chaque mode manuel : descente sous saccade, remontee bornee au cran ================= */
 for (const q of ['mid', 'high', 'low']) {
@@ -94,12 +99,12 @@ for (const q of ['mid', 'high', 'low']) {
     : `reference=${B.ref.toFixed(1)} ms`;
   if (q === 'low') {
     /* deja au plancher : rien a retirer, mais le regulateur doit TOURNER (reference mesuree) */
-    check(`${T} : deja au plancher, reste au plancher sous saccade`, B.QL === 1 && B.RES === .8, `apres 30 s de saccade QL/RES=${J(B)}`);
+    check(`${T} : deja au plancher, reste au plancher sous saccade`, J(B) === PLAN, `apres 30 s de saccade QL/RES=${J(B)}`);
   } else {
     check(`${T} : sous saccade, les effets (QL) DESCENDENT`, B.QL < cQL,
       `depart ${J(D)} -> apres 30 s de saccade ${J(B)} (attendu QL < ${cQL}) ; ${cause}`);
-    check(`${T} : sous saccade prolongee, la resolution (RES) DESCEND aussi (dernier recours)`, B.QL === 1 && B.RES < cRES,
-      `depart ${J(D)} -> apres 30 s de saccade ${J(B)} (attendu 1/0.8) ; ${cause}`);
+    check(`${T} : sous saccade prolongee, les effets vont au plancher et la resolution (RES) NE BAISSE PAS (monde a l'echelle 1)`, J(B) === PLAN,
+      `depart ${J(D)} -> apres 30 s de saccade ${J(B)} (attendu ${PLAN}) ; ${cause}`);
   }
   check(`${T} : la reference de periode d'ecran est mesuree (« ref » du compteur ≠ 0)`, R.ref > 15 && R.ref < 19 && B.ref > 15 && B.ref < 19,
     `REFDT=${R.ref.toFixed(1)} ms apres 5 s saines, ${B.ref.toFixed(1)} ms apres la saccade (attendu ~16,7)` + (B.ref === 0 ? ` ; ${cause}` : ''));
@@ -137,28 +142,35 @@ for (const q of ['mid', 'high', 'low']) {
     `fin de partie ${J(A)} -> applyQuality() ${J(B)} (attendu 2/1)`);
 }
 
-/* ================= A — le mode Auto n'a pas bouge : meme trajectoire que TEMOIN, image par image ================= */
+/* ================= A — le mode Auto : meme trajectoire que TEMOIN jusqu'au cran retire, puis invariants =================
+   02/10/2026 : le TEMOIN (cd10e7c) baissait encore la resolution en dernier recours (1/1 -> 1/0.8) ; ce cran est retire
+   (voir PLAN). La trajectoire (QL, REFDT, qAuto[0]) doit rester IDENTIQUE image par image jusqu'a la premiere image ou le
+   TEMOIN touche RES (descente des effets, etablissement de la reference : inchanges) ; ensuite on exige les invariants du
+   nouveau plancher : RES reste 1 a toute image, le plancher 1/1 est atteint, et 90 s saines font remonter a 3/1. */
 {
   const traj = (g) => {
-    const out = [];
-    const vu = (S) => out.push(S.QL + '/' + S.RES + '/' + S.ref.toFixed(3) + '/' + JSON.stringify(S.qa) + '/' + S.w);
+    const out = [], mk = [];
+    const vu = (S) => out.push(S);
     for (const qa of [null, [1, .8]]) {
       g.pose('auto', qa);
-      g.play(IMG(5), SAIN, vu); g.play(IMG(30), SACCADE, vu); g.play(IMG(90), SAIN, vu);
+      g.play(IMG(5), SAIN, vu); g.play(IMG(30), SACCADE, vu); g.play(IMG(90), SAIN, vu); mk.push(out.length - 1);
       g.play(IMG(20), () => 33.3, vu); g.play(IMG(2), SAIN, vu); g.play(IMG(10), (i) => (i % 7 === 3 ? 33.3 : 16.7), vu);
     }
-    return out;
+    return { out, mk };
   };
   let ok = false, detail;
   try {
-    const a = traj(GAME), b = traj(mkGame(TEMOIN));
-    let k = -1; for (let i = 0; i < Math.max(a.length, b.length); i++) if (a[i] !== b[i]) { k = i; break; }
-    const crans = new Set(a.map(s => s.split('/').slice(0, 2).join('/')));
-    ok = k < 0 && crans.has('3/1') && crans.has('1/0.8');
-    detail = k < 0 ? `${a.length} images identiques a ${TEMOIN} (QL/RES/REFDT/qAuto/canvas) ; crans parcourus : ${[...crans].join(' ')}`
-      : `diverge a l'image ${k} : ici ${a[k]} , ${TEMOIN} ${b[k]}`;
+    const A = traj(GAME), B = traj(mkGame(TEMOIN)), a = A.out, b = B.out;
+    const key = S => S.QL + '/' + S.ref.toFixed(3) + '/' + (S.qa ? S.qa[0] : 'null');
+    const fin = b.findIndex(S => S.RES !== 1);
+    let k = -1; for (let i = 0; i < fin; i++) if (key(a[i]) !== key(b[i])) { k = i; break; }
+    const crans = new Set(a.map(S => J(S))), resKo = a.findIndex(S => S.RES !== 1 || !coherent(S)), remonte = A.mk.map(i => J(a[i]));
+    ok = fin > 0 && k < 0 && resKo < 0 && crans.has('3/1') && crans.has(PLAN) && remonte.every(x => x === '3/1');
+    detail = k >= 0 ? `diverge a l'image ${k} (avant le cran retire, image ${fin}) : ici ${key(a[k])} , ${TEMOIN} ${key(b[k])}`
+      : resKo >= 0 ? `image ${resKo} : QL/RES=${J(a[resKo])}, canvas ${a[resKo].w}x${a[resKo].h} (RES doit rester 1, pixels coherents)`
+      : `${fin} images identiques a ${TEMOIN} (QL/REFDT/qAuto) jusqu'au cran retire ; puis ${a.length - fin} images a RES 1 ; crans parcourus : ${[...crans].join(' ')} ; apres 90 s saines : ${remonte.join(', ')}`;
   } catch (e) { detail = `temoin ${TEMOIN} illisible : ${String(e.message || e).split('\n')[0]}`; }
-  check(`Auto : trajectoire identique a ${TEMOIN}, image par image (descente, remontee, qAuto persiste)`, ok, detail);
+  check(`Auto : trajectoire identique a ${TEMOIN} jusqu'au cran de resolution retire, puis plancher ${PLAN} et remontee a 3/1`, ok, detail);
 }
 
 /* ================= X — entrees ABERRANTES (chantier A1, 30/09/2026) =================
@@ -195,7 +207,7 @@ for (const [q, qa, cran] of [['auto', null, '3/1'], ['mid', null, '2/1']]) {
     `pire cran ${R.qMin}, final ${J(R.F)} (le jeu tient 65 ips du debut a la fin)` + cause0(R.refMin));
 }
 
-/* X2 — l'etat du proprietaire : deja au plancher (qAuto 1/0.8 appris), fenetre absurde, puis 90 s saines : il DOIT remonter */
+/* X2 — l'etat du proprietaire : deja au plancher (qAuto 1/0.8 appris avant le 02/10/2026, lu 1/1), fenetre absurde, puis 90 s saines : il DOIT remonter */
 {
   GAME.pose('auto', [1, .8]);
   const R = suivi(GAME, [[IMG(10), S15], [120, ABS], [IMG(90), S15]]);
@@ -234,7 +246,7 @@ for (const [nom, raf] of [['rafale absurde (0,4 ms)', [120, ABS]], ['rafale brev
   GAME.pose('auto', null);
   const R = suivi(GAME, [[IMG(5), SAIN], [120, ABS], [IMG(20), () => 33.3]]);
   check(`auto : apres une fenetre absurde, une vraie lenteur (30 ips sur ecran 60 Hz) fait toujours DESCENDRE`,
-    R.F.QL === 1 && R.F.RES === .8 && R.F.ref > 16 && R.F.ref < 17.5, `final ${J(R.F)} (attendu 1/0.8), REFDT=${R.F.ref.toFixed(2)} ms`);
+    J(R.F) === PLAN && R.F.ref > 16 && R.F.ref < 17.5, `final ${J(R.F)} (attendu ${PLAN}), REFDT=${R.F.ref.toFixed(2)} ms`);
 }
 
 /* ================= R — la reference doit pouvoir REMONTER (chantier R2, 01/10/2026) =================
@@ -276,9 +288,9 @@ for (const [nom, pre, irr] of [
     GAME.pose(q, null);
     const P = suivi(GAME, pre).F;                /* avant l'irregularite : la qualite doit etre AU cran, sinon rien a prouver */
     const R = suivi(GAME, [[IMG(120), irr]]);
-    check(`R2 ${q}, ${nom} pendant 120 s : la descente se declenche (depuis le cran) et la qualite RESTE au plancher 1/0.8`,
-      J(P) === J({ QL: CRAN[q === 'auto' ? 'high' : q][0], RES: 1 }) && J(R.F) === '1/0.8' && R.F.ref > 16 && R.F.ref < 17.5,
-      `avant ${J(P)}, final ${J(R.F)} (attendu 1/0.8), REFDT=${R.F.ref.toFixed(2)} ms (attendu ~16,7 : les pointes ne deviennent pas la reference)` + cliquet(R.F.ref));
+    check(`R2 ${q}, ${nom} pendant 120 s : la descente se declenche (depuis le cran) et la qualite RESTE au plancher ${PLAN}`,
+      J(P) === J({ QL: CRAN[q === 'auto' ? 'high' : q][0], RES: 1 }) && J(R.F) === PLAN && R.F.ref > 16 && R.F.ref < 17.5,
+      `avant ${J(P)}, final ${J(R.F)} (attendu ${PLAN}), REFDT=${R.F.ref.toFixed(2)} ms (attendu ~16,7 : les pointes ne deviennent pas la reference)` + cliquet(R.F.ref));
   }
 }
 
@@ -297,7 +309,7 @@ for (const [nom, pre, irr] of [
   GAME.pose('auto', null);
   const a = suivi(GAME, [[IMG(60), LENT]]);
   check(`R3a auto, 33,3 ms des la premiere image (60 s) : la lenteur est COMBATTUE (descente au plancher, reference 16,7 ms)`,
-    a.qMin === '1/0.8' && a.F.ref > 16 && a.F.ref < 17.5, `pire cran ${a.qMin}, final ${J(a.F)}, REFDT=${a.F.ref.toFixed(2)} ms`
+    a.qMin === PLAN && a.F.ref > 16 && a.F.ref < 17.5, `pire cran ${a.qMin}, final ${J(a.F)}, REFDT=${a.F.ref.toFixed(2)} ms`
     + (a.F.ref > 30 ? ` ; CAUSE : la reference s'est etablie sur la lenteur du debut — aveugle (ancien comportement)` : ''));
   const a2 = suivi(GAME, [[IMG(100), LENT]]);
   check(`R3a auto, puis 100 s de plus a 33,3 ms : lenteur ACCEPTEE (reference 33,3 ms), qualite rendue (3/1)`,
@@ -305,14 +317,14 @@ for (const [nom, pre, irr] of [
   GAME.pose('auto', null);
   const b1 = suivi(GAME, [[IMG(5), SAIN], [IMG(20), LENT]]);
   check(`R3b auto, 5 s saines puis 20 s a 33,3 ms : DESCENTE au plancher, reference toujours 16,7 ms`,
-    J(b1.F) === '1/0.8' && b1.F.ref > 16 && b1.F.ref < 17.5, `final ${J(b1.F)}, REFDT=${b1.F.ref.toFixed(2)} ms`);
+    J(b1.F) === PLAN && b1.F.ref > 16 && b1.F.ref < 17.5, `final ${J(b1.F)}, REFDT=${b1.F.ref.toFixed(2)} ms`);
   /* le delai de revision est BORNE PAR LE BAS : une phase lourde de 25 s (descente ~10 s, puis ~15 s au plancher)
      est encore COMBATTUE — sinon la qualite remonterait au milieu d'une scene chargee. Sans ce point, un seuil
      de 300 images passait toute la garde. */
   GAME.pose('auto', null);
   const c = suivi(GAME, [[IMG(5), SAIN], [IMG(25), LENT]]);
   check(`R3c auto, 5 s saines puis 25 s a 33,3 ms : toujours au plancher, reference NON revisee (pas d'abandon precoce)`,
-    J(c.F) === '1/0.8' && c.F.ref > 16 && c.F.ref < 17.5,
+    J(c.F) === PLAN && c.F.ref > 16 && c.F.ref < 17.5,
     `final ${J(c.F)}, REFDT=${c.F.ref.toFixed(2)} ms` + (c.F.ref > 20 ? ` ; CAUSE : reference revisee apres moins de ~15 s au plancher — la lenteur est acceptee au lieu d'etre combattue` : ''));
   GAME.pose('auto', null);
   GAME.play(IMG(5), SAIN); GAME.play(IMG(20), LENT);

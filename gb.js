@@ -17,7 +17,7 @@ const BOSS=[
 const BOSSCOL='#ff3355';
 function bossCol(B){return B.k===8?BOSSCOL:ET[B.D.t].col;}
 function spawnBoss(){
-  const k=G.isl,D=BOSS[k-1],hp=Math.round(D.hp*Math.pow(GROWD,k-1)*(1+.1*(k-1)));
+  const k=G.isl,D=BOSS[k-1],hp=Math.round(1.3*D.hp*Math.pow(GROWD,k-1)*(1+.14*(k-1)));
   const B={k,D,x:0,y:0,vx:0,vy:0,r:D.r,hp,mhp:hp,phase:1,t:0,st:0,st2:0,ca:0,cn:0,trans:0,spawn:110,flash:0,ang:0,dead:false,gone:false,dieT:0,nodes:[],dir:1,wob:0};
   if(k===8)for(let i=0;i<6;i++){const nh=Math.round(18*Math.pow(GROWD,k-1));B.nodes.push({x:0,y:0,r:15,hp:nh,mhp:nh,dead:false,cd:rr(60,160),flash:0});}
   G.boss=B;G.ph='boss';

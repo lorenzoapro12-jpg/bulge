@@ -115,16 +115,17 @@ function rollCards(){
   return out.slice(0,3);
 }
 function applyCard(ch){const P=G.p;ch.u.f(P);P.cards[ch.u.id]=(P.cards[ch.u.id]||0)+1;G.picks.push(ch.u.id);}
-/* ouverture du choix (arrivée sur un îlot). Simulation : __SIM_PICK choisit, sinon la première carte. */
-function openPick(){
-  G.choices=rollCards();G.pickIsl=G.isl;if(!G.choices.length){arriveBanner();return;}
-  if(SIMF()){applyCard(window.__SIM_PICK?window.__SIM_PICK(G.choices):G.choices[0]);arriveBanner();return;}
+/* ouverture du choix : à l'arrivée sur un îlot, puis (mid) après la vague 2. Simulation : __SIM_PICK choisit, sinon la première carte. */
+function openPick(mid){
+  G.choices=rollCards();G.pkMid=!!mid;if(mid)G.pickMid=G.isl;else G.pickIsl=G.isl;if(!G.choices.length){pickDone();return;}
+  if(SIMF()){applyCard(window.__SIM_PICK?window.__SIM_PICK(G.choices):G.choices[0]);pickDone();return;}
   G.state='pick';renderPick();show('ov-evo');
 }
+function pickDone(){if(G.pkMid){G.pkMid=false;banner('Vague finale','puis le gardien de l’îlot',BIO[G.biome].a,110);}else arriveBanner();}
 function pickCard(i){
   if(!G||G.state!=='pick')return;const ch=G.choices[i];if(!ch)return;
   applyCard(ch);G.state='play';show(null);SFX.evo();
   const P=G.p,c=ch.k==='f'?COL.gd:ch.k==='p'?COL.rd:COL.cy;ringFX(P.x,P.y,P.r,P.r*4,c,24,4);sparks(P.x,P.y,c,20,5);
-  arriveBanner();
+  pickDone();
 }
 function reroll(){if(!G||G.state!=='pick'||G.rerolls<=0)return;G.rerolls--;G.choices=rollCards();renderPick();SFX.ui();}

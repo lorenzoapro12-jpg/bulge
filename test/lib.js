@@ -184,6 +184,10 @@ window.__SIM_INPUT = function(){
   if (tgt) { const dx = tgt.x - P.x, dy = tgt.y - P.y, d = Math.hypot(dx, dy) || 1; vx += dx / d * .9; vy += dy / d * .9; }
   const r = Math.hypot(P.x, P.y) || 1; if (r > PR - 260) { vx -= P.x / r * (r - PR + 260) / 90; vy -= P.y / r * (r - PR + 260) / 90; }
   vx += -P.y / r * .25; vy += P.x / r * .25;
+  /* coincé (poche entre deux rochers : le champ de forces y a un point d'équilibre) : 1,5 s sans bouger de 12 px alors
+     qu'il veut avancer -> 3/4 s d'échappée vers le centre, de biais. Sans cela une partie pouvait rester figée 40 min. */
+  if (G.t % 90 === 0) { if (P.__sx !== undefined && Math.hypot(P.x - P.__sx, P.y - P.__sy) < 12 && Math.hypot(vx, vy) > .05) P.__esc = 45; P.__sx = P.x; P.__sy = P.y; }
+  if (P.__esc > 0) { P.__esc--; const a = Math.atan2(-P.y, -P.x) + ((G.t / 90 | 0) % 2 ? 1.1 : -1.1); vx = Math.cos(a); vy = Math.sin(a); }
   const l = Math.hypot(vx, vy); G.inX = l > .05 ? vx / l : 0; G.inY = l > .05 ? vy / l : 0; G.aimMan = false;
   let near = 0; for (const b of G.eb) if ((b.x - P.x) ** 2 + (b.y - P.y) ** 2 < 60 * 60) near++;
   if (near >= 2 && P.dashT <= 0) tryDash();
