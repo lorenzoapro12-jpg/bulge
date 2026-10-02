@@ -88,7 +88,7 @@ function drawLowGlows(){
 function chunksCover(){const c0=Math.floor(VL/CH),c1=Math.floor(VR/CH),r0=Math.floor(VT/CH),r1=Math.floor(VB/CH);
   for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(!c||!c.bake&&!c.bk)return false;}return true;}
 /* Niveau de degradation decide par la boucle (g4.js) : 0 = tout dessiner, 1 = les postes
-   decoratifs cedent, 2 = en plus les halos et la mini-carte. Le jeu n'a aucun budget global
+   decoratifs cedent, 2 = en plus les halos. Le jeu n'a aucun budget global
    par image : seule la cuisson en avait un. Quand l'image ne tient pas dans son budget, ce
    sont les postes dont l'absence ne se voit pas qui doivent ceder, pas le monde ni le joueur.
    Le test typeof est volontaire : si la boucle n'expose pas SKIPD, on dessine tout (aucune
@@ -801,7 +801,8 @@ function drawHUD(){
       c.fillStyle='#fff';c.fillText('◉',gb.x,gb.y);c.globalAlpha=1;}
     else if(P.gauge>=1&&P.gon<=0){c.textAlign='center';c.textBaseline='bottom';c.font='700 14px '+FD;c.globalAlpha=.7+.3*Math.sin(RT*.2);c.fillStyle='#ffffff';c.fillText('E ou clic droit : gonfler',W/2,H-pad);c.globalAlpha=1;}
   }
-  if(meta.fps){c.textAlign='left';c.textBaseline='bottom';c.fillStyle='#8f89b3';
+  /* jusqu'à la copie de l'écran (trSnap), le compteur se tait aussi : sinon il s'imprime dans la relique de l'îlot suivant */
+  if(meta.fps&&!(G.state==='trans'&&G.tr&&G.tr.t<=TR_SNAP)){c.textAlign='left';c.textBaseline='bottom';c.fillStyle='#8f89b3';
     /* ---- Compteur de diagnostic : TOUT doit tenir dans la largeur du canvas -----------------
        Mesure sur Galaxy S22 (29/09/2026) : canvas de 617 px de large pour 411 px de largeur de
        DESSIN (PS 1.50). Les lignes « PS … marge audio » et « ou : … » debordaient des DEUX cotes

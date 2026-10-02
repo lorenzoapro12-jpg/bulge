@@ -3,7 +3,7 @@
    Chaque îlot est généré dans SON repère : même rayon WR pour tous, la croissance (×1,4 par îlot)
    est portée par le jeu (g2.js : tailles des ennemis selon leur âge) et par la cinématique de
    passage (g3.js). Le sol garde donc la même résolution d'un îlot à l'autre : jamais plus de
-   ~25 chunks cuits, quel que soit l'îlot. Pur (mkRng/hash2 seulement) : le worker (gk.js) le
+   NC² = 81 chunks cuits (512², ~1 Mo chacun), quel que soit l'îlot. Pur (mkRng/hash2 seulement) : le worker (gk.js) le
    régénère à l'identique à partir de la graine de partie et du numéro d'îlot.
    ========================================================= */
 const WR=1050,CH=512,NC=Math.ceil(2*WR/CH)+4,COFF=NC>>1;

@@ -434,7 +434,9 @@ function streamWorld(budget){
   while(Q&&Q.length&&performance.now()-t0<budget){const c=Q[0];if(!c.bake){if(W)break;bakeStep(c);continue;}let k=0;
     for(const o of c.obs){if(o.wall||o.spr)continue;if(performance.now()-t0>=budget){k=1;break;}obsSprite(o);o.su=1e9;OSPR.push(o);}
     if(!k)Q.shift();}
-  evictBakes(Math.max(60,n+8));evictSprites(Math.max(360,OSPR.length>600?360:600));BKMS=performance.now()-t0;
+  /* un îlot n'a que NC² chunks (81) : tous restent cuits jusqu'au passage. Plafonné à 60, il en évinçait puis en recuisait
+     la moitié (mesure test/cuisson.js du 02/10/2026 : 52 % du temps de cuisson en recuissons, surtout hors de l'îlot) */
+  evictBakes(Math.max(NC*NC,n+8));evictSprites(Math.max(360,OSPR.length>600?360:600));BKMS=performance.now()-t0;
 }
 
 /* ---------- obstacles : sprites illustrés avec ombre portée ---------- */

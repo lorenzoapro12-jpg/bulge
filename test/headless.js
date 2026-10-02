@@ -206,6 +206,19 @@ scenario('passage d’îlot : îlot suivant généré, relique au centre, ennemi
   const r = JSON.parse(H.call('JSON.stringify({isl:G.isl,wd:WD.isl,st:G.state,rel:!!WD.relic,en:G.en.length,eb:G.eb.length,pus:G.pus.length,dmg:G.p.dmg,biome:G.biome})'));
   return { ok: mid === 'trans' && r.isl === 2 && r.wd === 2 && r.st === 'play' && r.rel && !r.en && !r.eb && Math.abs(r.dmg / d0 - 1.2) < 1e-9 && r.biome === 'floral', detail: 'pendant=' + mid + ' ' + JSON.stringify(r) };
 });
+scenario('passage d’îlot : ni le compteur de diagnostic ni la météo de l’îlot quitté ne passent dans le suivant', H => {
+  H.start(); H.call('meta.fps=true;G.p.inv=1e9;'); H.steps(30); H.call('render();G.en=[];G.eb=[];G.boss=null;islClear();');
+  H.call('var __TX=[];(()=>{const f=ctx.fillText;ctx.fillText=function(t){__TX.push(String(t));return f.apply(this,arguments);};})();');
+  const txt = () => H.call('(()=>{const r=__TX.join("\\n");__TX.length=0;return r;})()');
+  /* juste avant la copie (trSnap à TR_SNAP), puis une fois la copie faite */
+  H.steps(500, () => H.call('G.state==="trans"&&G.tr.t===TR_SNAP-1')); txt(); H.call('render()'); const avant = txt();
+  const w1 = H.call('WEA.filter(p=>p.t).map(p=>p.t).join()');
+  H.steps(40, () => H.call('G.tr&&G.tr.t>TR_SNAP+20')); txt(); H.call('render()'); const apres = txt();
+  H.steps(300, () => H.call('G.state==="play"&&G.isl===2')); H.call('render()');
+  const w2 = JSON.parse(H.call('JSON.stringify(WEA.filter(p=>p.t).map(p=>p.t))')), fl = H.call('BIO.floral.wea'), reste = w2.filter(t => t !== fl).length;
+  return { ok: !/DPR /.test(avant) && /DPR /.test(apres) && /pollen/.test(w1) && w2.length > 0 && reste === 0,
+    detail: 'compteur avant la copie : ' + /DPR /.test(avant) + ', après : ' + /DPR /.test(apres) + ' ; météo îlot 2 : ' + reste + '/' + w2.length + ' d’un autre îlot' };
+});
 scenario('îlots : genIslet est déterministe et ne dépend ni de Math.random ni de l’algorithme de tri', H => {
   const dg = `(k=>{genIslet(777,k);const h=[WD.seed,WD.wall.join('')];for(let cx=-COFF;cx<COFF;cx++)for(let cy=-COFF;cy<COFF;cy++){const c=getChunk(cx,cy);if(!c)continue;for(const o of c.obs)h.push([o.k,Math.round(o.x),Math.round(o.y),Math.round(o.r||o.w),o.brk||0,o.pu?1:0].join(','));h.push(c.live.length);}
     let s=0;const t=h.join(';');for(let i=0;i<t.length;i++)s=(Math.imul(s,31)+t.charCodeAt(i))|0;return s;})`;

@@ -50,7 +50,7 @@ function newRun(){
 }
 /* WD vient d'être généré pour l'îlot G.isl : on vide l'arène et on y pose la bulle, au centre (sur la relique) */
 function islStart(){
-  const k=G.isl,P=G.p;G.biome=ISL[k-1];setBiome(G.biome);
+  const k=G.isl,P=G.p;G.biome=ISL[k-1];setBiome(G.biome);if(typeof drawWeather==='function'){WEA.length=0;WCX=null;}
   G.ph='arrive';G.phT=0;G.islT=0;G.wave=0;G.wq=null;G.en=[];G.eb=[];G.pb=[];G.pus=[];G.tele=[];G.marks=[];G.mines=[];G.trails=[];G.boss=null;G.wbn=null;
   G.dec=decor0();G.courant=null;if(G.biome==='sea'){const d=siteDir(0,0x5EA);G.courant={x:d[0],y:d[1]};}
   P.x=P.y=0;P.vx=P.vy=0;P.secUsed=false;P.dashing=0;G.cx=G.cy=0;G.zoom=zoomTarget();G.pcx=G.pcy=G.pzoom=null;G.lvx=G.lvy=0;
