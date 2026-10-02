@@ -391,7 +391,11 @@ let FWK=-1,FDT=0,BKMS=0;const BMIN=1.5,BURG=4;
    JS max variait de 462 a 98 ms AVEC LE MEME CODE. La variance du banc depasse l'effet : le
    plafonnement n'est pas demontre, il est annule. Lecon : sur ce banc, un A/B d'un seul run ne
    prouve rien — les pics se baladent d'un facteur 5. */
-function bakeBudget(){const jouable=!!G&&(G.state==='play'||G.state==='dying'||G.state==='victory');if(!jouable)return 0;if(FWK<0)return 3;const P=REFDT||16.7,J=P*.6;let b=clamp(J-FWK,BMIN,J);if(FDT>P*1.5)b=Math.max(BMIN,b/2);return b;}
+/* Exception : le choix d'un bonus (« pick ») et la cinématique de passage (« trans ») ouvrent un îlot NEUF ; sa file de
+   prewarm doit avancer, sans quoi chaque îlot démarrerait sur le sol de secours. Au choix, l'écran est figé : la cuisson y
+   est plafonnée à BPICK ms, pour que les cartes (interface) restent fluides. */
+const BPICK=4;
+function bakeBudget(){const st=G&&G.state,jouable=st==='play'||st==='dying'||st==='trans'||st==='pick';if(!jouable)return 0;if(FWK<0)return 3;const P=REFDT||16.7,J=P*.6;let b=clamp(J-FWK,BMIN,J);if(FDT>P*1.5)b=Math.max(BMIN,b/2);return st==='pick'?Math.min(b,BPICK):b;}
 /* streaming : cuit en avance dans la direction du mouvement, avec un budget de temps par frame */
 const STRM={x:0,y:0,vx:0,vy:0},GENK=2;
 function streamWorld(budget){

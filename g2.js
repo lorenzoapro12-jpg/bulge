@@ -359,7 +359,7 @@ function explode(b){
 }
 
 /* ---------- décor cassable : les obstacles moyens (o.brk, gw.js) cèdent sous tes tirs ---------- */
-function hitObs(o,d){if(o.gone)return;o.hp-=d*(G.p.demol?3:1);o.flash=4;if(o.hp<=0)breakObs(o);else if(G.t-(o.ht||-9)>8){o.ht=G.t;sparks(o.cx,o.cy,'#ffffff',3,2,12);}}
+function hitObs(o,d){if(o.gone)return;o.hp-=d*(G.p.demol?3:1);o.hf=G.t;if(o.hp<=0)breakObs(o);else if(G.t-(o.ht||-9)>8){o.ht=G.t;sparks(o.cx,o.cy,'#ffffff',3,2,12);}}
 function breakObs(o){
   dropObs(o);const i=OSPR.indexOf(o);if(i>=0)OSPR.splice(i,1);o.spr=null;
   const col=BIO[o.b]?BIO[o.b].a:'#ffffff';shards(o.cx,o.cy,col,10+(o.R/4|0),4,o.R*.5);ringFX(o.cx,o.cy,o.R*.6,o.R*1.6,col,18,3);SFX.brk();shake(.12);G.score+=20;
@@ -369,7 +369,7 @@ function breakObs(o){
 /* nœuds du Cœur : ils protègent les ennemis proches (relais) ; tes tirs les brisent */
 function nodeHit(b){const c=getChunk(Math.floor(b.x/CH),Math.floor(b.y/CH));if(!c)return false;
   for(let i=0;i<c.live.length;i++){const it=c.live[i];if(it.t!=='node'||dist2(it.x,it.y,b.x,b.y)>=(16+b.r)**2)continue;
-    if(it.hp==null)it.hp=it.mhp=Math.round(9*HPM());it.hp-=b.dmg;it.flash=4;
+    if(it.hp==null)it.hp=it.mhp=Math.round(9*HPM());it.hp-=b.dmg;it.hf=G.t;
     if(it.hp<=0){c.live.splice(i,1);shards(it.x,it.y,'#ff3355',12,4,14);ringFX(it.x,it.y,10,90,'#ff3355',20,4);SFX.brk();G.score+=40;}
     return true;}
   return false;}
