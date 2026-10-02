@@ -1,6 +1,10 @@
 # BULGE — contexte projet
 
 Roguelike d'absorption, Canvas 2D, jeu de navigateur **en français**, desktop + mobile.
+Depuis la refonte d'octobre 2026 : **huit îlots = huit niveaux**. Chaque îlot est une arène ronde
+(trois vagues puis un boss), apporte son type d'ennemi, et à l'arrivée on choisit un bonus parmi trois.
+Les anciens types rapetissent d'îlot en îlot (÷1,4), deviennent des proies à avaler, puis disparaissent ;
+au centre de chaque îlot, la relique est l'îlot quitté, en miniature. Rien ne se garde d'une partie à l'autre.
 Aucune dépendance : pas de framework, pas de bundler, pas de npm. Tout tient dans un
 seul fichier HTML autonome qui doit tourner en `file://` comme sur github.io.
 
@@ -15,10 +19,11 @@ bash build.sh          # génère bulge.html depuis les modules + shell
 L'ordre de concaténation est exact et figé (voir `build.sh`) :
 
 ```
-g1.js gw.js gw2.js g2.js gs.js gc.js gi.js gx.js gt.js gv.js g3.js g4.js
+g1.js gw.js gw2.js g2.js gp.js gb.js g3.js g4.js
 ```
 
-puis `shell_head.html` + `game.js` + `shell_tail.html`.
+puis `shell_head.html` + `game.js` + `shell_tail.html`. Le worker de cuisson (bloc `wk-src`) reçoit
+`g1.js gw.js gw2.js`, les 4 lignes de sprites de `g3.js` (`SPR`, `spr`, `softSpr`, `shadowSpr`) et `gk.js`.
 
 `build.sh` **vérifie** que le résultat est identique octet pour octet à l'empreinte
 attendue et **échoue** sinon. Après toute modification : `bash build.sh` doit passer.
@@ -31,18 +36,15 @@ Si une modification change légitimement la sortie, mettre à jour l'empreinte d
 |---|---|
 | `shell_head.html` | `<head>`, styles, balisage HTML (HUD, menus, écrans) jusqu'à `<script>` |
 | `shell_tail.html` | `</script></body></html>` |
-| `g1.js` | Utilitaires, sauvegarde, données, audio et musique adaptative |
-| `gw.js` | Monde continu : biomes, obstacles, relief, sentiers, falaises, monuments |
-| `gw2.js` | Art du monde : décor, sprites d'obstacles, parallaxe, météo |
-| `g2.js` | Logique de jeu : joueur, ennemis, cœurs, boss, projectiles, fin de partie |
-| `gs.js` | Histoire, éclats, sanctuaire, missions, série |
-| `gc.js` | Compétences, ultimes, monde semi-ouvert |
-| `gi.js` | Tank, pilote, équipement, butin, hangar |
-| `gx.js` | Souvenirs d'Iris (scènes) et duel tactique |
-| `gt.js` | Prologue jouable |
-| `gv.js` | Décors lointains du rêve |
-| `g3.js` | Rendu |
-| `g4.js` | Entrées, interface, boucle principale |
+| `g1.js` | Utilitaires, sauvegarde (`bulge3_*`), types d'ennemis (`ET`), audio et musique adaptative |
+| `gw.js` | Îlots : `genIslet(graine, k)`, biome de l'îlot, falaises, obstacles (dont cassables), relique |
+| `gw2.js` | Art du monde : cuisson des chunks (sur place ou worker), décor, sprites d'obstacles, météo |
+| `g2.js` | Partie : déroulé d'un îlot (vagues, boss, passage), bulle, ennemis, tirs, terrain, fin |
+| `gp.js` | Pouvoirs : power-ups temporaires, bonus permanents, fusions, pactes, écran de choix |
+| `gb.js` | Les 8 boss et leurs attaques annoncées (télégraphes) |
+| `g3.js` | Rendu (monde, entités, HUD) et cinématique de passage d'îlot |
+| `g4.js` | Entrées, interface, boucle principale, régulation de qualité |
+| `gk.js` | Entrée du worker de cuisson (hors page : `build.sh` le place dans `wk-src`) |
 
 Le code est volontairement **dense** (lignes longues, pas d'espaces superflus,
 identifiants courts). Conserver ce style : ne pas reformater, ne pas « nettoyer »
@@ -51,7 +53,7 @@ un fichier qu'on ne modifie pas fonctionnellement.
 ## Interdits
 
 - **Ne pas casser les hooks de simulation** : `SIMF()` (`g1.js`), `window.__SIM`,
-  `window.__SIM_END`, `window.__SIM_PICK`, `window.__SIM_INPUT` (`g2.js`). Le harnais de
+  `window.__SIM_END`, `window.__SIM_INPUT` (`g2.js`), `window.__SIM_PICK` (`gp.js`, choix du bonus). Le harnais de
   test headless en dépend — c'est le seul moyen de faire tourner le jeu sur un serveur
   sans navigateur. Toute nouvelle interaction joueur doit avoir sa branche `SIMF()`.
 - **Pas de dépendance externe nouvelle.** La seule existante est Google Fonts
@@ -75,14 +77,21 @@ n'est pas un correctif vérifié.
 
 Outils complémentaires :
 
-- `node test/trace.js` — empreintes d'état (simulation, monde, rendu), chronométrage.
-  `--ref=HEAD` compare à un commit. Sert à **prouver qu'un changement n'a pas d'effet**
+- `test/lib.js` — socle commun des bancs : `ordre(ref)` lit l'ordre de `build.sh` (ne jamais le recopier
+  dans un test), `mkGame()` monte une partie dans un `vm` (horloge virtuelle, `Math.random` à graine,
+  `steps()`, `start()`), `AI` est le pilote de partie (`__SIM_GOD`, `__SIM_BOOST` pour les parties
+  assistées). Tout nouveau banc part de là. `--sans-gardes` sur headless.js saute les sous-bancs.
+- `node test/trace.js` — empreintes d'état (simulation, génération des 8 îlots, rendu), chronométrage.
+  `--ref=HEAD` compare à un commit ; un commit d'avant la refonte en îlots est refusé (« API différente »). Sert à **prouver qu'un changement n'a pas d'effet**
   (élagage, refactorisation) : les empreintes doivent être identiques.
 - `node test/cuisson.js` — garde-fou de la cuisson du monde (horloge virtuelle « téléphone »,
   vraie boucle `frame()`) : aucun chunk entier hors budget, travail continu et unité indivisible
   plafonnés. `--ref=` pour l'ancien code, `--k=` pour le coût d'une opération. Appelé par headless.js.
-- `node test/art.js` — séquence BRUTE des opérations canvas de 378 chunks comparée à `e3a2c93` (chemin principal ; avant : `93b8cfe`,
-  avant PERF-2) : toute modification de l'art du monde échoue. Appelé par headless.js.
+- `node test/art.js` — séquence BRUTE des opérations canvas (1863 chunks, 23 cartes d'îlot, 384 sprites d'obstacles,
+  îlots 1 à 8 de plusieurs graines) comparée à `2f4ce87` (avant : `e3a2c93`, puis `93b8cfe` avant PERF-2) : toute
+  modification de l'art du monde échoue ; `--perim=<biome>` autorise un changement voulu sur un biome. Appelé par headless.js.
+- `node test/navigateur.js` — porte navigateur (vrai Chromium) : empreinte du build, `test/worker.js` (le worker cuit
+  octet pour octet comme la page, relique comprise), `test/sol.js`, `test/pire-navigateur.js`, `?wk=0`, compteur.
 - `node test/regule.js` — garde-fou du **régulateur de qualité** (`perf()` : référence `REFDT`, crans,
   plafond manuel). Il compte les **images dégradées**, pas seulement l'état final : c'est ce chiffre qui a
   réfuté une première correction (elle rendait la qualité, au prix de 64 s de jeu dégradé). `--ref=` pour

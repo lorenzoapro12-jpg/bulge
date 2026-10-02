@@ -25,84 +25,30 @@
    node test/regule.js --temoin=X   commit de reference du mode Auto (defaut cd10e7c, avant le chantier)
    Code de sortie : 0 si tout passe, 1 sinon.
    ========================================================= */
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
-const cp = require('child_process');
+/* Refonte en îlots (02/10/2026) : chaque instance passe par le socle commun (test/lib.js) — modules lus dans le
+   build.sh DE CE COMMIT (L.ordre) et début de partie propre à ce commit (L.startCode). Le TEMOIN (cd10e7c) est
+   d'avant la refonte : il garde ses douze modules et son newRun('bal',false)+RunStart, la trajectoire Auto reste
+   comparable image par image. Aucun critère retiré : perf() n'a pas changé de sujet. */
+const L = require('./lib');
+const REF = L.ARG('ref'), TEMOIN = L.ARG('temoin') || 'cd10e7c';
 
-const ROOT = path.resolve(__dirname, '..');
-const ARG = k => { const a = process.argv.find(x => x === '--' + k || x.startsWith('--' + k + '=')); return a ? (a.split('=')[1] || true) : null; };
-const REF = ARG('ref'), TEMOIN = ARG('temoin') || 'cd10e7c';
-const ORDER = ['g1.js', 'gw.js', 'gw2.js', 'g2.js', 'gs.js', 'gc.js', 'gi.js', 'gx.js', 'gt.js', 'gv.js', 'g3.js', 'g4.js'];
-const readModule = (ref, f) => ref ? cp.execFileSync('git', ['show', ref + ':' + f], { cwd: ROOT, encoding: 'utf8' }) : fs.readFileSync(path.join(ROOT, f), 'utf8');
-
-/* ---------- une instance du jeu (stubs repris de test/qualite.js), horloge virtuelle propre ---------- */
+/* ---------- une instance du jeu (socle test/lib.js), horloge virtuelle propre ---------- */
 function mkGame(ref) {
-  let CLOCK = 0, TID = 0;
-  const TIMERS = [];
-  function mkCtx() {
-    const grad = { addColorStop() {} };
-    const base = {
-      createImageData: (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
-      getImageData: (x, y, w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
-      createRadialGradient: () => grad, createLinearGradient: () => grad,
-      createPattern: () => ({}), measureText: (s) => ({ width: (s || '').length * 7 }),
-    };
-    return new Proxy(base, { get: (t, p) => (p in t ? t[p] : () => {}), set: (t, p, v) => (t[p] = v, true) });
-  }
-  function mkStyle() { const s = {}; Object.defineProperties(s, { setProperty: { value: (k, v) => { s[k] = String(v); } }, removeProperty: { value: (k) => { const v = s[k]; delete s[k]; return v || ''; } }, getPropertyValue: { value: (k) => (s[k] || '') } }); return s; }
-  function mkClassList() { const set = new Set(); return { add: (...c) => c.forEach(x => set.add(x)), remove: (...c) => c.forEach(x => set.delete(x)), toggle: (c, f) => { const on = f === undefined ? !set.has(c) : !!f; if (on) set.add(c); else set.delete(c); return on; }, contains: (c) => set.has(c) }; }
-  function mkListeners() { const L = {}; return { add: (t, fn) => (L[t] = L[t] || []).push(fn), fire: (t, e) => (L[t] || []).forEach(fn => fn(e)), has: (t) => !!(L[t] && L[t].length) }; }
-  const doc = { activeElement: null };
-  function mkEl(id, tag) {
-    const L = mkListeners(), attrs = {};
-    return {
-      id: id || '', tagName: (tag || 'div').toUpperCase(), style: mkStyle(), classList: mkClassList(), dataset: {},
-      hidden: false, disabled: false, innerHTML: '', textContent: '', value: '', className: '', offsetWidth: 0, offsetHeight: 0, parentElement: null,
-      getBoundingClientRect: () => ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600, x: 0, y: 0 }),
-      setAttribute: (k, v) => { attrs[k] = String(v); }, getAttribute: (k) => (k in attrs ? attrs[k] : null),
-      closest: () => null, focus: () => {}, blur() {}, querySelector: () => null, querySelectorAll: () => [],
-      addEventListener: (t, fn) => L.add(t, fn), removeEventListener() {}, _fire: L.fire, _has: L.has,
-      after() {}, appendChild: (c) => c, setPointerCapture() {}, releasePointerCapture() {},
-    };
-  }
-  function mkCanvasEl(w, h, id) { const el = mkEl(id, 'canvas'); el.width = w || 300; el.height = h || 150; el.getContext = () => mkCtx(); return el; }
-  const stash = new Map();
-  Object.assign(doc, {
-    hidden: false,
-    getElementById(id) { if (!stash.has(id)) { const el = (id === 'cv' || id === 'low' || id === 'hgPrev') ? mkCanvasEl(800, 600, id) : mkEl(id); if (id === 'cv') el.parentElement = mkEl('stage'); stash.set(id, el); } return stash.get(id); },
-    createElement: (t) => (t === 'canvas' ? mkCanvasEl() : mkEl('', t)),
-    querySelectorAll: () => [], querySelector: () => null, body: mkEl('body', 'body'),
-  });
-  const DOCL = mkListeners(); doc.addEventListener = DOCL.add;
-  const WINL = mkListeners();
-  const win = { __SIM: true, devicePixelRatio: 1, requestAnimationFrame: () => 0, addEventListener: WINL.add, removeEventListener() {} };
-  const sandbox = {
-    window: win, document: doc, console, matchMedia: () => ({ matches: false }),
-    localStorage: { getItem: () => null, setItem() {} },
-    performance: { now: () => CLOCK }, requestAnimationFrame: win.requestAnimationFrame,
-    setTimeout: (fn, ms) => { TIMERS.push({ fn, at: CLOCK + (ms || 0), id: ++TID }); return TID; },
-    clearTimeout: (id) => { const k = TIMERS.findIndex(t => t.id === id); if (k >= 0) TIMERS.splice(k, 1); },
-    setInterval: () => 0, clearInterval() {},
-    getComputedStyle: () => ({ paddingTop: '0px', paddingBottom: '0px', paddingLeft: '0px', paddingRight: '0px' }),
-    addEventListener: WINL.add, removeEventListener() {},
-    Date: Object.assign(function () { return new Date(0); }, { now: () => CLOCK }),   /* pas de temps reel dans le bac */
-  };
-  sandbox.globalThis = sandbox;
-  const ctx = vm.createContext(sandbox);
-  const call = (e) => vm.runInContext(e, ctx);
-  call(`(function(){let s=1;Math.__seed=v=>{s=(v>>>0)||1;};Math.random=function(){s=(s+0x6D2B79F5)>>>0;let t=s;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};})()`);
-  vm.runInContext(ORDER.map(f => readModule(ref, f)).join('\n'), ctx, { filename: 'game.js' });
+  let clk = () => 0;
+  /* pas de temps reel dans le bac */
+  const H = L.mkGame({ ref, w: 800, h: 600, sandbox: { Date: Object.assign(function () { return new Date(0); }, { now: () => clk() }) } });
+  clk = H.clock;
+  const call = H.call;
   const PERF = call('(function(dt){perf(dt);})');
   const STATE = call('(function(){return JSON.stringify({QL:QL,RES:RES,ref:REFDT,q:meta.q||"auto",qa:meta.qAuto||null,w:cv.width,h:cv.height,ps:PS});})');
   const st = () => JSON.parse(STATE());
   /* DPR=2 (telephone) : sans cela PS vaut 1 a tous les crans et la coherence cran <-> pixels est invisible */
   call('DPR=2');
-  call(`newRun('bal',false);gsRunStart();gcRunStart();giRunStart();gxRunStart();gtRunStart();gvRunStart();`);
+  H.start();
   /* pose une qualite comme le fait le bouton « Qualité » puis startGame : meta.q, applyQuality(), refReset() */
   const pose = (q, qAuto) => call(`G.state='play';meta.q=${JSON.stringify(q)};meta.qAuto=${qAuto ? JSON.stringify(qAuto) : 'null'};applyQuality();refReset();`);
   /* joue n images ; dtOf(i) fabrique l'intervalle ; vu(S) est appele apres CHAQUE image */
-  const play = (n, dtOf, vu) => { for (let i = 0; i < n; i++) { const dt = dtOf(i); CLOCK += dt; PERF(dt); if (vu) vu(st()); } };
+  const play = (n, dtOf, vu) => { for (let i = 0; i < n; i++) { const dt = dtOf(i); H.advance(dt); PERF(dt); if (vu) vu(st()); } };
   return { call, st, pose, play };
 }
 

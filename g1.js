@@ -25,90 +25,33 @@ function fmt(n){return Math.round(n).toLocaleString('fr-FR');}
 function mmss(f){const s=Math.floor(f/60);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
 
 /* ---------- sauvegarde ---------- */
+/* préfixe bulge3_ : la refonte en îlots repart d'une sauvegarde neuve (rien ne se garde d'une partie à l'autre, sauf les records et les réglages) */
 const store={
-  get(k,d){try{const v=localStorage.getItem('bulge2_'+k);return v==null?d:JSON.parse(v);}catch(e){return d;}},
-  set(k,v){try{localStorage.setItem('bulge2_'+k,JSON.stringify(v));}catch(e){}}
+  get(k,d){try{const v=localStorage.getItem('bulge3_'+k);return v==null?d:JSON.parse(v);}catch(e){return d;}},
+  set(k,v){try{localStorage.setItem('bulge3_'+k,JSON.stringify(v));}catch(e){}}
 };
-let meta=Object.assign({runs:0,wins:0,arts:{},ach:{},best:0,lb:[],daily:{},mute:false,kills:0,seenHelp:false},store.get('meta',{})||{});
+const META0=()=>({runs:0,wins:0,best:0,bestIsl:0,lb:[],mute:false,kills:0,eats:0,seenHelp:false});
+/* une sauvegarde abîmée (ou d'une autre version) ne doit jamais casser le menu : on ne garde que des champs du bon type */
+let meta=(()=>{const m=META0(),s=store.get('meta',{});if(s&&typeof s==='object')for(const k in m)if(s[k]!=null&&typeof s[k]===typeof m[k]&&Array.isArray(s[k])===Array.isArray(m[k]))m[k]=s[k];
+  for(const k of ['fps','q','qAuto'])if(s&&s[k]!=null)m[k]=s[k];m.lb=m.lb.filter(e=>e&&typeof e.s==='number');return m;})();
 function saveMeta(){store.set('meta',meta);}
-let ARTS_ON=true;
-function art(k){return ARTS_ON?(meta.arts[k]||0):0;}
-function artCount(){let n=0;for(const k in meta.arts)n+=meta.arts[k];return n;}
 
 /* ---------- données ---------- */
-const ARTS={
-  dmg:{n:'Noyau dense',d:'+12 % de dégâts',ic:'◆',max:10},
-  rate:{n:'Surcadence',d:'+8 % de cadence de tir',ic:'≫',max:10},
-  spd:{n:'Propulseurs',d:'+6 % de vitesse',ic:'➤',max:8},
-  hp:{n:'Membrane épaisse',d:'+6 bulles au départ',ic:'◯',max:10},
-  armor:{n:'Résilience',d:'-7 % de dégâts subis',ic:'⬡',max:8},
-  greed:{n:'Avidité',d:'+12 % de bulles lâchées',ic:'✦',max:10},
-  magnet:{n:'Champ magnétique',d:'+25 % de rayon de collecte',ic:'⊙',max:6},
-  reroll:{n:'Chance',d:'+1 relance d\'évolution par partie',ic:'↻',max:5},
-  echo:{n:'Écho',d:'L\'onde de niveau grandit et blesse',ic:'◎',max:5},
-  dash:{n:'Surcharge',d:'-12 % de recharge du dash',ic:'⚡',max:5},
-  crit:{n:'Fracture',d:'+6 % de chance de critique',ic:'✕',max:8},
-};
-const PROF={
-  scout:{n:'Éclaireur',d:'Petit, rapide, fragile. Dash qui recharge vite.',spd:4.1,rate:1.15,dmg:.85,size:.85,bub:7,armor:1.1,dash:.7,col:'#7dff4a',ic:'➤'},
-  bal:{n:'Équilibré',d:'Rien d\'extrême. Le choix sûr pour apprendre.',spd:3.4,rate:1,dmg:1,size:1,bub:10,armor:1,dash:1,col:'#2de2ff',ic:'◯'},
-  tank:{n:'Colosse',d:'Lent et très blindé. Tir plus lent mais plus lourd.',spd:2.8,rate:.9,dmg:1.12,size:1.15,bub:16,armor:.67,dash:1.25,col:'#ffc93c',ic:'⬤'},
-};
-const UPG=[
-  {id:'twin',n:'Canons jumeaux',d:'+1 canon, tir en éventail.',c:'Arme',ic:'⋔',max:3,f:p=>{p.turrets++;}},
-  {id:'heavy',n:'Obus lourds',d:'Dégâts ×1,4, projectiles plus gros, cadence -10 %.',c:'Arme',ic:'●',max:4,f:p=>{p.dmg*=1.4;p.bsize+=1.6;p.fireI*=1.1;}},
-  {id:'rapid',n:'Surcadence',d:'Cadence de tir +25 %.',c:'Arme',ic:'≫',max:5,f:p=>{p.fireI/=1.25;}},
-  {id:'rail',n:'Rail',d:'Vitesse et portée +30 %, traverse +1 ennemi.',c:'Arme',ic:'━',max:3,f:p=>{p.bspd*=1.3;p.blife*=1.15;p.pierce++;}},
-  {id:'homing',n:'Tête chercheuse',d:'Les tirs dévient vers les ennemis. Chaque cran accentue la déviation.',c:'Arme',ic:'↝',max:3,f:p=>{p.homing+=.07;}},
-  {id:'rico',n:'Ricochet',d:'Les tirs rebondissent sur la membrane. +1 rebond par cran.',c:'Arme',ic:'↯',max:3,f:p=>{p.rico++;}},
-  {id:'split',n:'Fragmentation',d:'Chaque impact projette des éclats. +1 éclat par cran.',c:'Arme',ic:'✺',max:2,f:p=>{p.split++;}},
-  {id:'aura',n:'Champ de mort',d:'Une aura ronge les ennemis proches. Chaque cran élargit le rayon et renforce les dégâts.',c:'Module',ic:'◌',max:4,f:p=>{p.aura++;}},
-  {id:'orbs',n:'Satellites',d:'+2 sphères orbitales qui tranchent et bloquent les tirs.',c:'Module',ic:'∘',max:3,f:p=>{p.orbs+=2;}},
-  {id:'drone',n:'Essaim',d:'+1 drone-bulle qui tire tout seul.',c:'Module',ic:'⊛',max:3,f:p=>{p.drones++;}},
-  {id:'missile',n:'Missiles',d:'Salve régulière de missiles explosifs. +1 missile par salve et par cran.',c:'Module',ic:'➶',max:4,f:p=>{p.missile++;}},
-  {id:'speed',n:'Hyperdrive',d:'Vitesse +12 %.',c:'Corps',ic:'➤',max:4,f:p=>{p.spd*=1.12;}},
-  {id:'armor',n:'Blindage',d:'Dégâts subis -15 %.',c:'Corps',ic:'⬡',max:4,f:p=>{p.armor*=.85;}},
-  {id:'magnet',n:'Aimant',d:'Rayon de collecte +50 %.',c:'Corps',ic:'⊙',max:3,f:p=>{p.magnet*=1.5;}},
-  {id:'regen',n:'Mitose',d:'Tu génères une bulle toutes les 1,5 s. Chaque cran raccourcit le délai : 0,75 s, puis 0,5 s.',c:'Corps',ic:'✚',max:3,f:p=>{p.regen++;}},
-  {id:'crit',n:'Point faible',d:'+10 % de chance de critique (×2,5).',c:'Corps',ic:'✕',max:3,f:p=>{p.crit+=.1;}},
-  {id:'spur',n:'Éperon',d:'Dash rechargé 20 % plus vite, et il blesse.',c:'Corps',ic:'⚡',max:3,f:p=>{p.dashMax*=.8;p.dashDmg+=3;}},
-  {id:'greed',n:'Symbiose',d:'+20 % de bulles lâchées.',c:'Corps',ic:'✦',max:3,f:p=>{p.greed*=1.2;}},
-];
-const MUT=[
-  {id:'hydra',n:'Hydre',d:'+2 canons et cadence +20 %. Trois têtes valent mieux qu\'une.',ic:'⋔',f:p=>{p.turrets+=2;p.fireI/=1.2;p.spreadW=.22;}},
-  {id:'titan',n:'Titan',d:'Dégâts ×1,8, taille ×1,25, obus énormes. Vitesse -10 %.',ic:'⬤',f:p=>{p.dmg*=1.8;p.titan=true;p.bsize+=3;p.spd*=.9;}},
-  {id:'nova',n:'Nova',d:'Toutes les 3 s, une onde de choc pulvérise les tirs ennemis.',ic:'✹',f:p=>{p.nova++;}},
-  {id:'vortex',n:'Vortex',d:'Les tirs ennemis ralentissent près de toi. Aimant ×2.',ic:'@',f:p=>{p.vortex=true;p.magnet*=2;}},
-  {id:'queen',n:'Reine',d:'+3 drones à tête chercheuse.',ic:'♛',f:p=>{p.drones+=3;p.dronesHome=true;}},
-  {id:'ghost',n:'Fantôme',d:'Dash deux fois plus fréquent, laisse une traînée mortelle.',ic:'◐',f:p=>{p.dashMax*=.5;p.ghost=true;p.dashDmg+=4;}},
-  {id:'prism',n:'Prisme',d:'Chaque impact se fragmente, les tirs traversent +2.',ic:'◇',f:p=>{p.split+=2;p.pierce+=2;}},
-  {id:'fury',n:'Surchauffe',d:'Cadence ×1,6, dispersion aléatoire.',ic:'♨',f:p=>{p.fireI/=1.6;p.jitter=true;p.fury=true;}},
-];
+/* Ennemis : un type par îlot (isl), une forme = un comportement (dessin : g3.js drawEnemy).
+   r = rayon à l'îlot d'arrivée. Chaque îlot plus loin, le type paraît 1,4× plus petit (g2.js mkEnemy) :
+   à 2 îlots d'écart il devient une PROIE (pâle, inoffensif, il fuit), à 4 il quitte le jeu.
+   Couleurs RÉSERVÉES aux ennemis : rouge, magenta, orange ; jamais cyan (toi) ni vert-jaune (power-ups). */
 const ET={
-  mite:{n:'Mite',r:9,hp:1.5,spd:2.3,bub:1,col:COL.vi,cost:.7,min:1,dmg:4},
-  pop:{n:'Bulleur',r:14,hp:4,spd:.8,bub:3,col:COL.mg,cost:1.5,min:1,dmg:3},
-  spread:{n:'Tireur',r:16,hp:6,spd:1.1,bub:4,col:COL.or,cost:2.5,min:2,dmg:3},
-  spike:{n:'Épine',r:15,hp:5,spd:1,bub:3,col:COL.rd,cost:2,min:2,dmg:7},
-  orbit:{n:'Orbiteur',r:14,hp:5,spd:2,bub:4,col:COL.bl,cost:2.5,min:3,dmg:3},
-  ring:{n:'Pulsar',r:20,hp:11,spd:.55,bub:6,col:COL.gd,cost:3.5,min:3,dmg:3},
-  sniper:{n:'Tireur d\'élite',r:13,hp:4,spd:1.2,bub:4,col:COL.ac,cost:2.5,min:4,dmg:6},
-  gatling:{n:'Gatling',r:18,hp:9,spd:.4,bub:6,col:COL.or,cost:3.5,min:5,dmg:2.5},
-  spawner:{n:'Porteur',r:26,hp:18,spd:.45,bub:10,col:COL.vi,cost:5,min:4,dmg:0},
-  cache:{n:'Grappe',r:18,hp:3,spd:0,bub:9,col:COL.pk,cost:0,min:99,dmg:0},
-  life:{n:'Porteur de vie',r:22,hp:6,spd:1.6,bub:16,col:COL.lm,cost:0,min:99,dmg:0},
+  mite:{n:'Mite',isl:1,r:10,hp:1.6,spd:2.5,col:'#ff2d95',sc:20},
+  spike:{n:'Épine',isl:2,r:15,hp:5,spd:1.1,col:'#ff3355',sc:40},
+  spread:{n:'Tireur',isl:3,r:16,hp:6,spd:1.15,col:'#ff8a2d',sc:50},
+  sniper:{n:'Tireur d\'élite',isl:4,r:13,hp:4.5,spd:1.25,col:'#ff5a36',sc:60},
+  orbit:{n:'Orbiteur',isl:5,r:14,hp:6,spd:2.1,col:'#ff4fd8',sc:60},
+  gatling:{n:'Gatling',isl:6,r:19,hp:9,spd:.5,col:'#ffa22d',sc:80},
+  ring:{n:'Pulsar',isl:7,r:21,hp:10,spd:.6,col:'#ff6a5a',sc:90},
+  spawner:{n:'Porteur',isl:8,r:27,hp:16,spd:.5,col:'#e040ff',sc:120},
 };
-const ACH=[
-  {id:'boss',n:'Brise-noyau',d:'Vaincre l\'Hypernoyau'},
-  {id:'lvl10',n:'Géant',d:'Atteindre le niveau 10'},
-  {id:'combo25',n:'Réaction en chaîne',d:'Enchaîner un combo ×25'},
-  {id:'nohit',n:'Intouchable',d:'Briser un cœur sans être touché pendant son combat'},
-  {id:'scout',n:'Fil du rasoir',d:'Gagner en Éclaireur'},
-  {id:'tank',n:'Forteresse',d:'Gagner en Colosse'},
-  {id:'fast',n:'Éclair',d:'Gagner en moins de 5 min'},
-  {id:'explorer',n:'Explorateur',d:'Traverser les 8 biomes en une partie'},
-  {id:'kills',n:'Fléau',d:'Absorber 1 000 ennemis au total'},
-  {id:'daily',n:'Rituel',d:'Terminer un défi du jour'},
-];
+const ETL=['mite','spike','spread','sniper','orbit','gatling','ring','spawner'];
 
 /* ---------- audio synthétisé ---------- */
 const AU={ac:null,master:null,sfx:null,mus:null,musF:null,dly:null,nb:null,last:{},step:0,next:0,layer:0};
@@ -135,9 +78,7 @@ const SFX={
   shoot(){if(!can('sh',75))return;const t=AU.ac.currentTime;osc(AU.sfx,'square',900+Math.random()*250,420,t,.05,.010);},
   hit(){if(!can('hit',40))return;const t=AU.ac.currentTime;osc(AU.sfx,'triangle',620,260,t,.05,.026);},
   pop(big){if(!can(big?'popb':'pop',big?60:28))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',big?340:720,big?55:140,t,big?.3:.13,big?.16:.075);nz(AU.sfx,t,big?.35:.09,big?.14:.045,'bandpass',big?700:2600,1.4);},
-  pick(i){if(!can('pk',30))return;const t=AU.ac.currentTime,f=note(Math.min(i,24),330);osc(AU.sfx,'sine',f,f,t,.16,.04);osc(AU.sfx,'triangle',f*2,f*2,t,.07,.012);},
   lvl(){if(!can('lv',250))return;const t=AU.ac.currentTime;[0,4,7,12,16,19].forEach((s,k)=>osc(AU.sfx,'square',330*Math.pow(2,s/12),0,t+k*.045,.2,.03));nz(AU.sfx,t,.5,.06,'highpass',4000);osc(AU.sfx,'sine',110,440,t,.4,.08);},
-  delvl(){if(!can('dl',250))return;const t=AU.ac.currentTime;[12,7,3,0].forEach((s,k)=>osc(AU.sfx,'sawtooth',220*Math.pow(2,s/12),0,t+k*.06,.16,.03));},
   evo(){if(!can('ev',100))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',220,880,t,.35,.07);nz(AU.sfx,t,.3,.05,'bandpass',3000,2);},
   hurt(){if(!can('hu',90))return;const t=AU.ac.currentTime;nz(AU.sfx,t,.28,.25,'lowpass',1000);osc(AU.sfx,'sawtooth',200,55,t,.32,.09);},
   dash(){if(!can('da',100))return;const t=AU.ac.currentTime;nz(AU.sfx,t,.22,.12,'bandpass',1800,.8);osc(AU.sfx,'sine',300,900,t,.14,.04);},
@@ -153,6 +94,17 @@ const SFX={
   ach(){if(!can('ac',300))return;const t=AU.ac.currentTime;[0,4,7,11,14].forEach((s,k)=>osc(AU.sfx,'triangle',523*Math.pow(2,s/12),0,t+k*.06,.35,.04));},
   death(){if(!can('de',500))return;const t=AU.ac.currentTime;osc(AU.sfx,'sawtooth',300,30,t,1.4,.15);nz(AU.sfx,t,1.2,.25,'lowpass',1200);},
   ui(){if(!can('ui',60))return;const t=AU.ac.currentTime;osc(AU.sfx,'triangle',880,1320,t,.06,.03);},
+  absorb(){if(!can('ab',45))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',260,780,t,.12,.07);osc(AU.sfx,'triangle',520,1560,t+.03,.08,.02);},
+  gonfle(){if(!can('go',400))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',70,240,t,.7,.2,.08);osc(AU.sfx,'sawtooth',110,330,t,.6,.05,.1);nz(AU.sfx,t,.7,.08,'bandpass',600,.6);},
+  burst(){if(!can('bu',200))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',180,30,t,.7,.25);nz(AU.sfx,t,.6,.2,'lowpass',1400);osc(AU.sfx,'triangle',1400,200,t,.25,.05);},
+  power(){if(!can('pw',120))return;const t=AU.ac.currentTime;[0,7,12,19].forEach((s,k)=>osc(AU.sfx,'triangle',440*Math.pow(2,s/12),0,t+k*.05,.18,.05));},
+  wave(){if(!can('wv',500))return;const t=AU.ac.currentTime;osc(AU.sfx,'sawtooth',110,110,t,.5,.06,.05);osc(AU.sfx,'square',165,165,t+.12,.45,.04,.05);nz(AU.sfx,t,.4,.04,'bandpass',900,1);},
+  grow(){if(!can('gr',1000))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',55,440,t,2.4,.18,.6);osc(AU.sfx,'triangle',110,880,t+.2,2.2,.05,.6);swell(t,2.5,.1,true);},
+  shield(){if(!can('sd',150))return;const t=AU.ac.currentTime;osc(AU.sfx,'square',900,300,t,.18,.05);nz(AU.sfx,t,.2,.08,'highpass',3000);},
+  brk(){if(!can('bk',60))return;const t=AU.ac.currentTime;nz(AU.sfx,t,.22,.16,'lowpass',900);osc(AU.sfx,'triangle',240,80,t,.16,.06);},
+  seg(){if(!can('sg',200))return;const t=AU.ac.currentTime;[0,4,7,12].forEach((s,k)=>osc(AU.sfx,'sine',523*Math.pow(2,s/12),0,t+k*.07,.3,.05));},
+  warn(){if(!can('wn',160))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',880,880,t,.12,.03);osc(AU.sfx,'sine',880,880,t+.16,.12,.03);},
+  beam(){if(!can('bm',200))return;const t=AU.ac.currentTime;osc(AU.sfx,'sawtooth',90,60,t,.5,.1);nz(AU.sfx,t,.5,.12,'bandpass',2400,2);},
 };
 /* musique : Am - F - C - G, couches selon l'intensité */
 /* =========================================================
@@ -252,12 +204,12 @@ function musState(){
   if(typeof G==='undefined'||!G||!G.p||AU.layer===0)return{tier:-1};
   const P=G.p,st=G.state;
   if(st==='dying'||P.dead)return{tier:0,dead:true};
-  if(G.gv&&G.gv.k>.3)return{tier:-2};
+  /* arrivée, choix de bonus, croissance : la respiration entre deux îlots */
+  if(st==='trans'||G.ph==='arrive'||G.ph==='clear')return{tier:-2,pause:st==='pick'};
   let tier=0;
-  if((G.boss&&!G.boss.dead)||G.arena||st==='duel')tier=3;
-  else if(G.gx&&G.gx.scene)tier=2;
-  else{let n=0;for(const e of G.en)if(!e.dead&&e.aggro&&e.spawn<=0&&e.t!=='cache'&&e.t!=='life'&&dist2(e.x,e.y,P.x,P.y)<760*760)n++;tier=n>=5?2:n>=1?1:0;}
-  return{tier,low:P.lvl===1&&P.bub<6,pause:st==='pause'||st==='evo',duel:st==='duel'};
+  if(G.boss&&!G.boss.dead||G.ph==='preboss')tier=3;
+  else{let n=0;for(const e of G.en)if(!e.dead&&!e.prey&&e.spawn<=0)n++;tier=n>=6?2:n>=1?1:0;}
+  return{tier,low:P.seg<=1&&P.segMax>1,pause:st==='pause'||st==='pick'};
 }
 const MIXES=[[.9,.6,.55,.6,.4,.7],[.75,.8,.7,.6,.8,.55],[.65,1,.8,.75,1,.35],[.7,1,.9,.85,1.05,.25]]; /* pad bass arp lead drums amb */
 const MIX_MENU=[1,.3,.8,.6,0,.5],MIX_CALM=[1,.15,.7,.5,0,.9];
@@ -330,7 +282,6 @@ function schedStep(s,t){
     const D=P.dr;
     if(brk){if(st===0)dKick(t,.4);if(st%4===2)dHat(ts,.04,false);}
     else if(T===0){if(st===0&&bar%2===0)dKick(t,.35);if(st===8)dHat(ts,.025,false);}
-    else if(S.duel){if(st===0||st===6||st===10)dTom(t,st===10?120:90,.5);if(st===0||st===8)dKick(t,.8);if(st===4||st===12)dClap(t,.18);if(st%2===0)dHat(t,.035*vel);}
     else if(D==='four'){if(T>=1&&st%4===0)dKick(t,.9);if(T===0&&(st===0||st===8))dKick(t,.55);if(T>=1&&(st===4||st===12))dClap(t,.2);if(st%4===2)dHat(ts,T?.07:.04,true);}
     else if(D==='break'){if(st===0||st===10||(T>=2&&st===7))dKick(t,T?.85:.5);if(T>=1&&(st===4||st===12))dSnare(t,.22);if(T>=2&&(st===14||st===9))dSnare(t,.06);if(st%4===2)dHat(ts,.05*vel);}
     else{if(st===0||(T>=1&&st===8)||(T>=2&&st===10))dKick(t,T?.8:.45);if(T>=1&&(st===4||st===12))dSnare(t,T>=2?.2:.12);if(st%4===2)dHat(ts,.04*vel);}

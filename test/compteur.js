@@ -13,10 +13,11 @@
      4. **Le compteur ne chevauche AUCUN bouton** (S7). Constat du 30/09/2026 sur capture : avec 5
         lignes, « worker 558 », « marge audio » et « soft » passaient PAR-DESSUS le bouton AUTEL.
         L'ancre d'avant (H-132) ne connaissait que le bouton de dash ; les emplacements de
-        competence de gcSlots() (gc.js) montent jusqu'a H-207. Le critere est geometrique et
+        competence de gcSlots() (gc.js) montaient jusqu'a H-207. Le critere est geometrique et
         independant du code teste : rectangle de chaque ligne (et du bandeau) contre le DISQUE de
         toucher de chaque bouton (rayon + 10, touchBtnAt de g4.js), positions lues dans les VRAIES
-        dashBtn() et gcSlots(). Et rien ne doit avoir disparu pour y arriver.
+        dashBtn() et gonBtn() ; sur poste fixe (aucun bouton), contre le rectangle du rappel « E ou
+        clic droit : gonfler » tel que drawHUD l'ECRIT. Et rien ne doit avoir disparu pour y arriver.
      5. **L'etat de la regulation est affiche** (S8) : « régul auto » ou « régul plafond <reglage> »,
         avec QL et RES reels, et « ↓ » quand la qualite est descendue SOUS son plafond. Un reglage qui
         n'adapte plus doit se LIRE — c'est le defaut que ce mot corrige (voir la note du S8).
@@ -27,38 +28,46 @@
      3. **La lisibilite ne coute pas la mesure** : la ligne « ou : » garde TOUJOURS ses postes
         les plus couteux (le tri est decroissant, on retire par la fin).
 
-   On execute la VRAIE `drawHUD()` : modules charges dans un DOM stube, on appelle drawHUD(),
+   On execute la VRAIE `drawHUD()` : modules charges dans un DOM stube (test/lib.js), on appelle drawHUD(),
    et on controle ce qui a REELLEMENT ete ecrit. Aucune copie du code du jeu.
+
+   Refonte en ilots (02/10/2026) — memes criteres, sujets equivalents :
+     - les boutons tactiles sont dashBtn() et gonBtn() (g3.js) : les emplacements de competence et l'AUTEL (gcSlots,
+       gc.js) ont disparu. Les zones evitees par le bloc (ZB de drawHUD) sont les disques de ces deux boutons ;
+     - le texte « Dash pret (Espace) » du poste fixe a disparu ; a sa place, en bas et au centre, le rappel « E ou clic
+       droit : gonfler » quand la jauge est pleine. S4 et S7 (poste fixe) le gardent : le bloc reste au-dessus de y = H-pad
+       ET ne coupe pas le rectangle du rappel reellement ecrit (jauge pleine pendant ces situations) ;
+     - S9 : l'ilot n'a que 9×9 chunks, tous dans la fenetre que streamWorld habille de sprites ; il n'y a plus
+       d'obstacle sans sprite « loin de la camera ». Les deux sprites du pic sont donc ceux de COPIES de deux vrais
+       obstacles (o.spr vide), hors de tout chunk : ni le rendu ni le streaming ne les touchent avant ou apres.
+     - « saut » (filet de budget, SKIPD) fait desormais partie de ce qui ne doit pas disparaitre (S7).
+     Aucun critere retire.
 
    Le stub de canvas mesure le texte proportionnellement a la taille de police (le stub des
    autres tests ignore la police, ce qui rendrait ce garde-fou aveugle) et on fait tourner
    chaque situation avec une police etroite (0,50 em par caractere) ET large (0,68 em), pour
    que l'invariant ne depende pas des metriques de la police.
 
-   node test/compteur.js              arbre de travail
-   node test/compteur.js --ref=HEAD   code d'origine (doit ECHOUER : temoin)
+   node test/compteur.js                arbre de travail
+   node test/compteur.js --ref=<commit> un autre commit, de la refonte en ilots ou plus recent (modules et debut de
+                                        partie : test/lib.js). Avant la refonte les emplacements gcSlots() comptent
+                                        comme boutons, mais le poste fixe echoue : pas de rappel « gonfler », et le
+                                        texte « Dash pret (Espace) », pose en x=pad, est pris pour une ligne du bloc.
    Code de sortie : 0 si tout passe, 1 sinon.
    ========================================================= */
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
-const cp = require('child_process');
+const L = require('./lib');
+const REF = L.ARG('ref');
 
-const ROOT = path.resolve(__dirname, '..');
-const ARG = k => { const a = process.argv.find(x => x === '--' + k || x.startsWith('--' + k + '=')); return a ? (a.split('=')[1] || true) : null; };
-const REF = ARG('ref');
-const ORDER = ['g1.js', 'gw.js', 'gw2.js', 'g2.js', 'gs.js', 'gc.js', 'gi.js', 'gx.js', 'gt.js', 'gv.js', 'g3.js', 'g4.js'];
-const readModule = f => REF ? cp.execFileSync('git', ['show', REF + ':' + f], { cwd: ROOT, encoding: 'utf8' }) : fs.readFileSync(path.join(ROOT, f), 'utf8');
-
-let CLOCK = 0, TID = 0;
-const TIMERS = [];
+/* horloge de performance.now() propre a ce test (S9, S10 la reglent : __tick, __horloge) */
+let CLOCK = 0;
 /* avance moyenne d'un caractere, en em. 0,50 : police etroite ; 0,68 : police large. */
 let EM = 0.50;
 const FILLS = [];
 const RECTS = [];
 
 const pxOf = f => { const m = /(\d+(?:\.\d+)?)px/.exec(String(f || '')); return m ? parseFloat(m[1]) : 12; };
-function mkCtx() {
+function mkCtx(el) {
+  if (el.__ctx) return el.__ctx;
   const grad = { addColorStop() {} };
   const base = {
     createImageData: (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
@@ -66,94 +75,56 @@ function mkCtx() {
     createRadialGradient: () => grad, createLinearGradient: () => grad, createPattern: () => ({}),
     font: '12px x', textAlign: 'left', textBaseline: 'top', globalAlpha: 1, fillStyle: '#000',
     measureText: s => ({ width: String(s || '').length * EM * pxOf(base.font) }),
-    fillText: (s, x, y) => { const t = String(s); FILLS.push({ s: t, x, y, w: t.length * EM * pxOf(base.font), px: pxOf(base.font), bl: base.textBaseline }); },
+    fillText: (s, x, y) => { const t = String(s); FILLS.push({ s: t, x, y, w: t.length * EM * pxOf(base.font), px: pxOf(base.font), bl: base.textBaseline, al: base.textAlign }); },
     strokeText: (s, x, y) => { const t = String(s); FILLS.push({ s: t, x, y, w: t.length * EM * pxOf(base.font) }); },
     fillRect: (x, y, w, h) => { RECTS.push({ x, y, w, h, fill: String(base.fillStyle) }); },
   };
-  return new Proxy(base, { get: (t, p) => (p in t ? t[p] : () => {}), set: (t, p, v) => (t[p] = v, true) });
+  const c = new Proxy(base, { get: (t, p) => (p in t ? t[p] : () => {}), set: (t, p, v) => (t[p] = v, true) });
+  el.__ctx = c;
+  return c;
 }
-function mkStyle() { const s = {}; Object.defineProperties(s, { setProperty: { value: (k, v) => { s[k] = String(v); } }, removeProperty: { value: (k) => { const v = s[k]; delete s[k]; return v || ''; } }, getPropertyValue: { value: (k) => (s[k] || '') } }); return s; }
-function mkClassList() { const set = new Set(); return { add: (...c) => c.forEach(x => set.add(x)), remove: (...c) => c.forEach(x => set.delete(x)), toggle: () => false, contains: (c) => set.has(c) }; }
-function mkListeners() { const L = {}; return { add: (t, fn) => (L[t] = L[t] || []).push(fn), fire: (t, e) => (L[t] || []).forEach(fn => fn(e)), has: (t) => !!(L[t] && L[t].length) }; }
-const doc = { activeElement: null };
-function mkEl(id, tag) {
-  const L = mkListeners(), attrs = {};
-  return {
-    id: id || '', tagName: (tag || 'div').toUpperCase(), style: mkStyle(), classList: mkClassList(), dataset: {},
-    hidden: false, disabled: false, innerHTML: '', textContent: '', value: '', className: '', offsetWidth: 0, offsetHeight: 0, parentElement: null,
-    getBoundingClientRect: () => ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600, x: 0, y: 0 }),
-    setAttribute: (k, v) => { attrs[k] = String(v); }, getAttribute: (k) => (k in attrs ? attrs[k] : null),
-    closest: () => null, focus: () => {}, blur() {}, querySelector: () => null, querySelectorAll: () => [],
-    addEventListener: (t, fn) => L.add(t, fn), removeEventListener() {}, _fire: L.fire, _has: L.has,
-    after() {}, appendChild: (c) => c, setPointerCapture() {}, releasePointerCapture() {},
-  };
-}
-function mkCanvasEl(w, h, id) { const el = mkEl(id, 'canvas'); el.width = w || 300; el.height = h || 150; el.getContext = () => mkCtx(); return el; }
-const stash = new Map();
-Object.assign(doc, {
-  hidden: false,
-  getElementById(id) { if (!stash.has(id)) { const el = (id === 'cv' || id === 'low' || id === 'hgPrev') ? mkCanvasEl(800, 600, id) : mkEl(id); if (id === 'cv') el.parentElement = mkEl('stage'); stash.set(id, el); } return stash.get(id); },
-  createElement: (t) => (t === 'canvas' ? mkCanvasEl() : mkEl('', t)),
-  querySelectorAll: () => [], querySelector: () => null, body: mkEl('body', 'body'),
-});
-const DOCL = mkListeners(); doc.addEventListener = DOCL.add;
-const WINL = mkListeners();
-const win = { __SIM: true, devicePixelRatio: 1, requestAnimationFrame: () => 0, addEventListener: WINL.add, removeEventListener() {} };
-const sandbox = {
-  window: win, document: doc, console, matchMedia: () => ({ matches: false }),
-  localStorage: { getItem: () => null, setItem() {} },
-  performance: { now: () => CLOCK }, requestAnimationFrame: win.requestAnimationFrame,
-  setTimeout: (fn, ms) => { TIMERS.push({ fn, at: CLOCK + (ms || 0), id: ++TID }); return TID; },
-  clearTimeout: (id) => { const k = TIMERS.findIndex(t => t.id === id); if (k >= 0) TIMERS.splice(k, 1); },
-  setInterval: () => 0, clearInterval() {},
-  getComputedStyle: () => ({ paddingTop: '0px', paddingBottom: '0px', paddingLeft: '0px', paddingRight: '0px' }),
-  addEventListener: WINL.add, removeEventListener() {},
-};
-sandbox.globalThis = sandbox;
-
-const code = ORDER.map(readModule).join('\n');
-const vctx = vm.createContext(sandbox);
-const call = e => vm.runInContext(e, vctx);
-call(`(function(){let s=1;Math.__seed=v=>{s=(v>>>0)||1;};Math.random=function(){s=(s+0x6D2B79F5)>>>0;let t=s;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};})()`);
-vm.runInContext(code, vctx, { filename: 'game.js' });
+const H = L.mkGame({ ref: REF, mkCtx, sandbox: { performance: { now: () => CLOCK } } });
+const sandbox = H.ctx;
+const call = H.call;
 
 const checks = [];
 const check = (name, ok, detail) => { checks.push({ name, ok, detail }); };
 const PAD = 14;   /* `pad` de drawHUD, g3.js */
 
-call(`newRun('bal',false);gsRunStart();gcRunStart();giRunStart();gxRunStart();gtRunStart();gvRunStart();G.state='play';meta.fps=true;inp.touch=true;`);
+H.start();
+call(`G.state='play';meta.fps=true;inp.touch=true;`);
 
 /* Joue le compteur dans une situation donnee et rend TOUTES les lignes ecrites par le bloc.
-   Le bloc dessine a x=pad, sous la moitie de l'ecran (le texte du dash, lui, n'existe pas en
-   mode tactile). Les autres textes en x=pad sont ailleurs (Niv. en haut). */
+   Le bloc dessine a x=pad, en bas a gauche ; c'est le seul texte du HUD pose en x=pad avec la ligne de
+   base « bottom » (ilots, vagues, boss, rappel « gonfler », bandeaux : centres ; score : a droite).
+   o.jauge : jauge pleine (sur poste fixe, le rappel « E ou clic droit : gonfler » est alors ecrit, en bas). */
 function drawBlock(o) {
-  /* W/H sont les unites de DESSIN de l'interface (screenTf, g3.js:49 : setTransform(PS,0,0,PS,0,0)) ;
+  /* W/H sont les unites de DESSIN de l'interface (screenTf, g3.js : setTransform(PS,0,0,PS,0,0)) ;
      cv.width/height sont la surface reelle, PS fois plus grande. On reproduit exactement le S22 :
      617x1351 de surface pour 411x900 de dessin, donc PS 1.50. */
   call(`W=${o.W};H=${o.H};PS=${o.PS == null ? 1 : o.PS};cv.width=${o.cw || o.W};cv.height=${o.ch || o.H};`);
   call(`JSPROFTOP=${JSON.stringify(o.top || [])};FPSV=${o.ips == null ? 53 : o.ips};DIAG_DT=${o.dt == null ? 18.6 : o.dt};DIAG_JS=${o.js == null ? 6.6 : o.js};DIAG_PEAK=${o.peak == null ? 34 : o.peak};DIAG_MARGIN=${o.margin == null ? 0.89 : o.margin};`);
   /* la pire image (S9) est PRESENTE par defaut dans toutes les situations : c'est la mise en page la
      plus haute, donc celle que les criteres de largeur et de chevauchement (S1-S8) doivent defendre.
-     `worst: null` = rien de publie. Sur --ref=HEAD cette affectation cree une globale que rien ne lit. */
+     `worst: null` = rien de publie. Sur un commit d'avant J0 cette affectation cree une globale que rien ne lit. */
   call(`DIAG_WORST=${JSON.stringify(o.worst === undefined ? WORST : o.worst)};`);
-  call(`inp.touch=${o.deskt ? 'false' : 'true'};`);
+  call(`inp.touch=${o.deskt ? 'false' : 'true'};G.p.gauge=${o.jauge ? 1 : 0};G.p.gon=0;`);
   call(o.wk ? `WK={w:1};WKN=${o.wkn == null ? 37 : o.wkn};` : `WK=false;WKN=0;`);
   if (o.noWk) call(`WK=null;WKN=0;`);
   const before = FILLS.length;
   const rbefore = RECTS.length;
   call('drawHUD()');
-  const H = o.H;
-  /* sur poste fixe le texte « Dash pret (Espace) » est lui aussi pose a x = pad, tout en bas :
-     ce n'est pas une ligne du bloc de diagnostic, on l'ecarte par son prefixe. */
-  const lines = FILLS.slice(before).filter(f => f.x === PAD && f.bl === 'bottom' && !/^Dash /.test(f.s));
+  const lines = FILLS.slice(before).filter(f => f.x === PAD && f.bl === 'bottom');
   lines.rects = RECTS.slice(rbefore);
+  /* le rappel « gonfler » du poste fixe, tel qu'il a ete ECRIT (centre, ligne de base « bottom ») */
+  lines.rappel = FILLS.slice(before).filter(f => /gonfler/.test(f.s) && f.al === 'center').map(f => ({ s: f.s, x0: f.x - f.w / 2, x1: f.x + f.w / 2, y0: f.y - f.px, y1: f.y }));
   return lines;
 }
 const fits = (l, o) => l.x + l.w <= o.W - PAD + 0.5;
 /* [intervalle, JS, genChunk, sprites, recus du worker, colles] — voir DIAG_W, g4.js */
 const WORST =[34, 21.3, 2, 14, 1, 2];
 const WKSTATE = 'worker 37';
-/* Zone interdite du bouton de dash (g3.js:434) : centre (W-62, H-92), rayon 34. */
+/* Zone interdite du bouton de dash (dashBtn, g3.js) : centre (W-62, H-92), rayon 34. */
 const dansDash = (l, o) => (l.x + l.w > o.W - 96) && (l.y > o.H - 126);
 const fond = (L, o) => L.rects.find(r => /rgba\(8,5,18/.test(r.fill) && r.w >= Math.max(...L.map(l => l.w)) - 1 && r.y < Math.min(...L.map(l => l.y)));
 
@@ -206,15 +177,20 @@ const TOP = [['render', 6.06, 12], ['glow', 1.28, 4], ['drawHUD', 1.09, 5], ['dr
 
 /* ================= S4 — PC large : rien ne doit avoir ete casse ================= */
 {
-  const o = { W: 1536, H: 864, DPR: 1, COARSE: false, top: TOP, wk: true };
+  const o = { W: 1536, H: 864, DPR: 1, COARSE: false, top: TOP, wk: true, jauge: true };
   o.deskt = true;
   const L = drawBlock(o);
   check('PC 1536 px : aucune ligne ne depasse', L.every(l => fits(l, o)),
     L.map(l => (l.x + l.w).toFixed(0) + '/' + (o.W - PAD)).join(' '));
   check('PC 1536 px : le bloc reste compact (au plus 4 lignes)', L.length <= 4, L.length + ' lignes');
   check('PC 1536 px : la ligne « où » garde ses 6 postes', L.some(f => f.s.indexOf('drawLabels 0.71/2') > 0), L.map(f => f.s).find(s => s.startsWith('où : ')) || 'absente');
-  check('PC 1536 px : le bloc ne se superpose pas à « Dash prêt (Espace) » (y = H-pad)',
+  check('PC 1536 px : le bloc reste au-dessus de la ligne du rappel « gonfler » (y = H-pad)',
     L.every(l => l.y <= o.H - PAD - 19.5), 'y max ' + Math.max(...L.map(l => l.y)) + ' / limite ' + (o.H - PAD - 20));
+  const rp = L.rappel[0], bd = L.rects.filter(r => /rgba\(8,5,18/.test(r.fill));
+  const coupeR = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+  const pb = rp ? L.map(l => ({ s: l.s, x0: l.x, x1: l.x + l.w, y0: l.y - l.px, y1: l.y })).concat(bd.map(r => ({ s: 'bandeau', x0: r.x, x1: r.x + r.w, y0: r.y, y1: r.y + r.h }))).filter(r => coupeR(r, rp)) : [];
+  check('PC 1536 px, jauge pleine : le bloc (et son bandeau) ne coupe pas le rappel « E ou clic droit : gonfler » ecrit en bas',
+    !!rp && pb.length === 0, !rp ? 'rappel non ecrit' : pb.length ? pb.length + ' chevauchement(s) : ' + pb.map(r => '« ' + r.s.slice(0, 20) + ' »').join(', ') : '« ' + rp.s + ' » en y ' + rp.y0 + '..' + rp.y1 + ' ; bloc jusqu\'a y ' + Math.max(...L.map(l => l.y), ...bd.map(r => r.y + r.h)).toFixed(0));
 }
 
 /* ================= S5 — la cuisson sur place est dite, et non pas supposee ================= */
@@ -264,35 +240,41 @@ const TOP = [['render', 6.06, 12], ['glow', 1.28, 4], ['drawHUD', 1.09, 5], ['dr
 }
 
 /* ================= S7 — le bloc ne chevauche AUCUN bouton =================
-   Boutons : dash (tactile seulement) et les trois emplacements de competence — lus dans le jeu.
-   Une ligne occupe [x, x+w] × [y-px, y] (ligne de base « bottom ») ; le bandeau est son rectangle. */
+   Boutons tactiles : dash et gonfler — lus dans le jeu (dashBtn, gonBtn ; avant la refonte, les emplacements de
+   gcSlots). Sur poste fixe il n'y a pas de bouton : la zone a eviter est le rappel « gonfler » (jauge pleine),
+   rectangle lu dans ce que drawHUD a ecrit. Une ligne occupe [x, x+w] × [y-px, y] (ligne de base « bottom ») ;
+   le bandeau est son rectangle. */
 {
-  const boutons = o => { call(`W=${o.W};H=${o.H};inp.touch=${o.deskt ? 'false' : 'true'};`);
-    const S = JSON.parse(call('JSON.stringify({d:dashBtn(),s:gcSlots()})'));
+  const boutons = (o, L) => { call(`W=${o.W};H=${o.H};inp.touch=${o.deskt ? 'false' : 'true'};`);
+    if (o.deskt) return L.rappel.map(r => ({ rect: r, n: 'rappel « ' + r.s + ' » (y=H-' + Math.round(o.H - r.y0) + '..H-' + Math.round(o.H - r.y1) + ')' }));
+    const S = JSON.parse(call(`JSON.stringify({d:dashBtn(),g:typeof gonBtn==='function'?[gonBtn()]:[],s:typeof gcSlots==='function'?gcSlots():[]})`));
     const nom = (b, n) => n + ' (W-' + Math.round(o.W - b.x) + ',H-' + Math.round(o.H - b.y) + ' r' + b.r + ')';
     const B = S.s.map((b, i) => ({ x: b.x, y: b.y, r: b.r + 10, n: nom(b, i === 2 ? 'ULTIME' : 'AUTEL/competence ' + (i + 1)) }));
-    if (!o.deskt) B.push({ x: S.d.x, y: S.d.y, r: S.d.r + 10, n: nom(S.d, 'dash') });
+    for (const g of S.g) B.push({ x: g.x, y: g.y, r: g.r + 10, n: nom(g, 'gonfler') });
+    B.push({ x: S.d.x, y: S.d.y, r: S.d.r + 10, n: nom(S.d, 'dash') });
     return B; };
-  const coupe = (r, b) => { const dx = Math.max(r.x0 - b.x, 0, b.x - r.x1), dy = Math.max(r.y0 - b.y, 0, b.y - r.y1); return dx * dx + dy * dy < b.r * b.r; };
+  const coupe = (r, b) => { if (b.rect) return r.x0 < b.rect.x1 && r.x1 > b.rect.x0 && r.y0 < b.rect.y1 && r.y1 > b.rect.y0;
+    const dx = Math.max(r.x0 - b.x, 0, b.x - r.x1), dy = Math.max(r.y0 - b.y, 0, b.y - r.y1); return dx * dx + dy * dy < b.r * b.r; };
+  const haut = b => b.rect ? b.rect.y0 : b.y - b.r;
   const SIT = [
     ['S22 tactile 411×900', { W: 411, H: 900, PS: 1.5, cw: 617, ch: 1351, top: TOP, wk: true, wkn: 558 }],
     ['S22 tactile, sans ligne « où » ni marge audio', { W: 411, H: 900, PS: 1.5, cw: 617, ch: 1351, top: [], wk: true, margin: -1 }],
     ['tactile 320×640', { W: 320, H: 640, PS: 1.5, cw: 480, ch: 960, top: TOP, wk: true }],
     ['tactile couche 780×360', { W: 780, H: 360, PS: 1.5, cw: 1170, ch: 540, top: TOP, wk: true }],
     ['tactile couche 568×320', { W: 568, H: 320, PS: 1.5, cw: 852, ch: 480, top: TOP, wk: true }],
-    ['poste fixe 1536×864', { W: 1536, H: 864, top: TOP, wk: true, deskt: true }],
-    ['poste fixe 800×600', { W: 800, H: 600, top: TOP, wk: true, deskt: true }],
+    ['poste fixe 1536×864, jauge pleine', { W: 1536, H: 864, top: TOP, wk: true, deskt: true, jauge: true }],
+    ['poste fixe 800×600, jauge pleine', { W: 800, H: 600, top: TOP, wk: true, deskt: true, jauge: true }],
   ];
-  const MORC = ['ips', 'image ', 'pire ', 'JS ', 'hors-JS ', 'effets ', 'resol ', 'PS ', 'canvas ', 'DPR ', 'ref ', 'cuisson '];
+  const MORC = ['ips', 'image ', 'pire ', 'JS ', 'hors-JS ', 'effets ', 'resol ', 'PS ', 'canvas ', 'DPR ', 'ref ', 'saut ', 'cuisson '];
   for (const [nom, o] of SIT) for (const em of [0.50, 0.68]) {
     EM = em;
-    const L = drawBlock(o), B = boutons(o), pb = [];
+    const L = drawBlock(o), B = boutons(o, L), pb = [];
     for (const l of L) for (const b of B) if (coupe({ x0: l.x, x1: l.x + l.w, y0: l.y - l.px, y1: l.y }, b)) pb.push('« ' + l.s.slice(-22) + ' » (y=H-' + Math.round(o.H - l.y) + ') sur ' + b.n);
     const bd = L.rects.filter(r => /rgba\(8,5,18/.test(r.fill));
     for (const r of bd) for (const b of B) if (coupe({ x0: r.x, x1: r.x + r.w, y0: r.y, y1: r.y + r.h }, b)) pb.push('bandeau sur ' + b.n);
     const tag = nom + ', police ' + em.toFixed(2) + ' em, ' + L.length + ' lignes';
-    check(tag + ' : le bloc ne chevauche AUCUN bouton', L.length >= 3 && pb.length === 0,
-      pb.length ? pb.length + ' chevauchement(s) — cause : ancre fixe sous le haut des boutons — ' + pb.slice(0, 3).join(' ; ') : 'bloc de y=H-' + Math.round(o.H - Math.min(...L.map(l => l.y - l.px))) + ' a H-' + Math.round(o.H - Math.max(...L.map(l => l.y))) + ', bouton le plus haut H-' + Math.round(o.H - Math.min(...B.map(b => b.y - b.r))));
+    check(tag + ' : le bloc ne chevauche AUCUN bouton', L.length >= 3 && B.length >= (o.deskt ? 1 : 2) && pb.length === 0,
+      B.length < (o.deskt ? 1 : 2) ? 'zones a eviter introuvables (' + B.length + ')' : pb.length ? pb.length + ' chevauchement(s) — cause : ancre fixe sous le haut des boutons — ' + pb.slice(0, 3).join(' ; ') : 'bloc de y=H-' + Math.round(o.H - Math.min(...L.map(l => l.y - l.px))) + ' a H-' + Math.round(o.H - Math.max(...L.map(l => l.y))) + ', zone la plus haute H-' + Math.round(o.H - Math.min(...B.map(haut))) + ' (' + B.length + ' zone(s))');
     const tout = L.map(l => l.s).join(' | '), manq = MORC.concat(o.margin === -1 ? [] : ['marge audio ']).filter(m => tout.indexOf(m) < 0);
     check(tag + ' : rien n\'a disparu, tout tient dans la largeur et dans l\'ecran',
       manq.length === 0 && L.every(l => fits(l, o) && l.y - l.px >= 0 && l.y <= o.H), manq.length ? 'manque : ' + manq.join(', ') : L.map(l => (l.x + l.w).toFixed(0) + '/' + (o.W - PAD)).join(' '));
@@ -373,7 +355,9 @@ const TOP = [['render', 6.06, 12], ['glow', 1.28, 4], ['drawHUD', 1.09, 5], ['dr
      est ce que CLOCK avance PENDANT frame() ; on l'avance depuis l'interieur de render(), enveloppee ici.
      Les evenements sont de VRAIS appels : genChunk() et obsSprite() du jeu (donc a travers les enveloppes
      de jsProfStart), et une cuisson neuve posee sur le chunk du centre de l'ecran, que la vraie
-     drawChunks() colle. L'arrivee du worker est simulee par ce que fait wkRecv (gw2.js:413) : c.bake=…, WKN++
+     drawChunks() colle. Les genChunk du pic sont hors de l'ilot (rien n'est enregistre dans WD.chunks) ; les deux
+     sprites sont ceux de COPIES de deux vrais obstacles, sans sprite et hors de tout chunk (refonte en ilots :
+     l'ilot entier tient dans la fenetre de streamWorld, qui habille tous ses obstacles des la mise en regime). L'arrivee du worker est simulee par ce que fait wkRecv (gw2.js:413) : c.bake=…, WKN++
      — ENTRE deux rappels, comme une tache de message.
        rappel A (leurre 1) : 3 genChunk, 15 ms de JS, intervalle suivant NORMAL (16,7 ms) ;
        rappel B (le pic)   : 1 genChunk + 2 sprites + 1 cuisson collee, 9 ms de JS ; puis 1 chunk recu du
@@ -386,10 +370,10 @@ const TOP = [['render', 6.06, 12], ['glow', 1.28, 4], ['drawHUD', 1.09, 5], ['dr
     const rd0=render;let hook=null;render=function(){if(hook){const h=hook;hook=null;h();}return rd0.apply(this,arguments);};
     const centre=()=>getChunk(Math.floor(CAM.x/CH),Math.floor(CAM.y/CH));
     const neuve=()=>{centre().bake=document.createElement('canvas');};
-    /* obstacles sans sprite, pris dans des chunks du monde loin de la camera (hors de la zone que
-       streamWorld habille), generes AVANT la mesure */
-    const libres=[],kx=Math.floor(CAM.x/CH),ky=Math.floor(CAM.y/CH);
-    for(let k=12;libres.length<2&&k<200;k++)for(const s of [1,-1]){const c=getChunk(kx+s*k,ky);if(c)for(const o of c.obs)if(!o.wall&&!o.spr&&libres.length<2)libres.push(o);}
+    /* obstacles sans sprite : copies de vrais obstacles de l'ilot (o.spr vide), hors de tout chunk — ni drawObstacles
+       ni streamWorld ne les voient, seul le rappel B les habille */
+    const libres=[];
+    for(const c of WD.chunks)if(c)for(const o of c.obs)if(!o.wall&&libres.length<2)libres.push(Object.assign({},o,{spr:null,home:null}));
     let t=last+16.7,far=0;const img=d=>{frame(t);t+=d;};
     G.state='play';for(let i=0;i<8;i++)img(16.7);       /* mise en regime : tout ce qui est visible est cuit et colle */
     DIAG_T=0;DIAG_N=0;DIAG_CDT=0;DIAG_CJS=0;DIAG_MX=0;DIAG_WORST=null;if(typeof DIAG_W!=='undefined')DIAG_W[0]=0;
@@ -483,7 +467,7 @@ const TOP = [['render', 6.06, 12], ['glow', 1.28, 4], ['drawHUD', 1.09, 5], ['dr
   sandbox.__lt = (d, n, a) => LTCB && LTCB({ getEntries: () => [{ duration: d, name: n, attribution: [{ name: a }] }] });
   const r = JSON.parse(call(`(()=>{
     meta.fps=true;meta.q='auto';jsProfStart();WK=false;WKN=0;
-    LT_ST=0;if(typeof ltStart==='function')ltStart();   /* --ref=HEAD : pas de ltStart, les criteres echouent en le nommant */
+    LT_ST=0;if(typeof ltStart==='function')ltStart();   /* commit d'avant A4 : pas de ltStart, les criteres echouent en le nommant */
     const recoit=ms=>wkRecv({data:{get t(){__tick(ms);return 'autre';}}});   /* le VRAI wkRecv, par la globale, comme w.onmessage */
     let t=last+16.7;const img=(d,ret)=>{__horloge(t+(ret||0));frame(t);t+=d;};
     G.state='play';for(let i=0;i<8;i++)img(16.7,1);

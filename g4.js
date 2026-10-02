@@ -15,13 +15,13 @@ function readInput(){
   if(Rs){const dx=Rs.x-Rs.ox,dy=Rs.y-Rs.oy;if(Math.hypot(dx,dy)>12){G.aimMan=true;G.aimA=Math.atan2(dy,dx);}}
   else if(!inp.touch&&(inp.mdown||performance.now()-inp.mt<1500)){const s=w2s(G.p.x,G.p.y);G.aimMan=true;G.aimA=Math.atan2(inp.my-s[1],inp.mx-s[0]);}
 }
-/* boutons tactiles, dans l'espace du HUD (zones réservées déduites) */
+/* boutons tactiles, dans l'espace du HUD (zones réservées déduites) : dash et gonfler (g3.js dashBtn, gonBtn) */
 function hudHit(x,y,fn){const w0=W,h0=H;W-=SAFE.l+SAFE.r;H-=SAFE.t+SAFE.b;try{return fn(x-SAFE.l,y-SAFE.t);}finally{W=w0;H=h0;}}
-function touchBtnAt(x,y){const d=dashBtn();if(Math.hypot(x-d.x,y-d.y)<d.r+10)return 'dash';if(G.p&&G.p.sk){const S=gcSlots();for(let i=0;i<3;i++)if(Math.hypot(x-S[i].x,y-S[i].y)<S[i].r+10)return i===2?'ult':i;}return null;}
+function touchBtnAt(x,y){for(const [b,n] of [[dashBtn(),'dash'],[gonBtn(),'gon']])if(Math.hypot(x-b.x,y-b.y)<b.r+10)return n;return null;}
 let CVR=null;function localXY(e){const r=CVR||(CVR=cv.getBoundingClientRect());return[e.clientX-r.left,e.clientY-r.top];}
 function onDown(e){
   auInit();const [x,y]=localXY(e);
-  if(e.pointerType==='mouse'){inp.mx=x;inp.my=y;inp.mt=performance.now();if(e.button===2){if(G&&G.state==='play')gcUse(0);return;}inp.mdown=true;return;}
+  if(e.pointerType==='mouse'){inp.mx=x;inp.my=y;inp.mt=performance.now();if(e.button===2){tryGonfle();return;}inp.mdown=true;return;}
   inp.touch=true;e.preventDefault();
   if(!G||G.state!=='play')return;
   const hb=hudHit(x,y,touchBtnAt);
@@ -38,126 +38,75 @@ function onMove(e){
 }
 function onUp(e){
   if(e.pointerType==='mouse'){inp.mdown=false;return;}
-  if(inp.B&&inp.B.id===e.pointerId){const b=inp.B.b;inp.B=null;if(b==='dash')tryDash();else if(b==='ult')gcUlt();else gcUse(b);return;}
+  if(inp.B&&inp.B.id===e.pointerId){const b=inp.B.b;inp.B=null;if(b==='dash')tryDash();else tryGonfle();return;}
   if(inp.L&&inp.L.id===e.pointerId)inp.L=null;
   if(inp.R&&inp.R.id===e.pointerId)inp.R=null;
 }
+/* clavier : ZQSD ou flèches (codes PHYSIQUES : AZERTY comme QWERTY), Espace ou Maj : dash, E (ou F) : gonfler,
+   Échap ou P : pause ; au choix d'un bonus, 1 à 3 et R pour relancer */
 function onKey(e){
   const inGame=G&&G.state==='play';
-  if((inGame||G&&G.state==='evo')&&['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();
+  if((inGame||G&&G.state==='pick')&&['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();
   inp.keys[e.code]=true;auInit();
   if(e.code==='KeyM'){setMute(!meta.mute);updMuteBtn();return;}
   if(!G)return;
-  if(G.state==='duel'){const d=/^(?:Digit|Numpad)([1-9])$/.exec(e.code),a=d&&DU?DU.keys[+d[1]-1]:null;if(a)duelAct(a);else if(e.code==='Enter')duelEndTurn();return;}
-  if(G.state==='evo'){if(e.code==='Digit1'||e.code==='Numpad1')pickEvo(0);else if(e.code==='Digit2'||e.code==='Numpad2')pickEvo(1);else if(e.code==='Digit3'||e.code==='Numpad3')pickEvo(2);else if(e.code==='KeyR')reroll();return;}
+  if(G.state==='pick'){const d=/^(?:Digit|Numpad)([1-3])$/.exec(e.code);if(d)pickCard(+d[1]-1);else if(e.code==='KeyR')reroll();return;}
   if(inGame&&(e.code==='Space'||e.code==='ShiftLeft'||e.code==='ShiftRight'))tryDash();
-  if(inGame&&!e.repeat){if(e.code==='KeyQ')gcUse(0);else if(e.code==='KeyE')gcUse(1);else if(e.code==='KeyR')gcUlt();else if(e.code==='KeyF')gxInteract();}
+  if(inGame&&!e.repeat&&(e.code==='KeyE'||e.code==='KeyF'))tryGonfle();
   if(e.code==='Escape'||e.code==='KeyP')togglePause();
 }
 
 /* ---------- écrans ---------- */
-const IN_GAME=['play','dying','victory','evo','pause','duel'];
+const IN_GAME=['play','dying','pick','pause','trans'];
 function flashFade(col,ms){const f=$('fade');if(!f||REDUCED)return;f.style.background=col;f.style.setProperty('--d',(ms||800)+'ms');f.classList.remove('go');void f.offsetWidth;f.classList.add('go');}
 function show(id){
   document.querySelectorAll('.ov').forEach(o=>o.classList.toggle('on',o.id===id));
-  if(id){const p=$('prompt');if(p)p.hidden=true;if(G&&G.gx){G.gx.pk='';G.gx.prompt=null;}}
   document.body.classList.toggle('ingame',!!(G&&IN_GAME.includes(G.state)));
   const el=id&&$(id);if(el){const f=el.querySelector('button:not([disabled]):not([hidden])');if(f&&!COARSE)f.focus({preventScroll:true});}
 }
 function updMuteBtn(){const b=$('bMute');b.textContent=meta.mute?'🔇':'🔊';b.setAttribute('aria-label',meta.mute?'Activer le son':'Couper le son');}
-function todayKey(){const d=new Date();return d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();}
 function renderMenu(){
-  $('mStats').innerHTML=
-    
-    '<div class="pill"><b>'+(meta.runs+1)+'</b><span>niveau de menace</span></div>'+
-    '<div class="pill"><b>'+artCount()+'</b><span>reliques</span></div>'+
-    (meta.best?'<div class="pill"><b>'+fmt(meta.best)+'</b><span>record</span></div>':'');
-  const dk=meta.daily[String(todayKey())];
-  $('bDaily').textContent=dk?'Défi du jour ('+fmt(dk)+')':'Défi du jour';
-  gsMenu();
-  $('mHint').textContent=COARSE?'Pouce gauche pour bouger, pouce droit pour viser. Le tir est automatique.':'ZQSD pour bouger, souris pour viser, Espace : dash, A ou clic droit : compétence, E : 2e compétence, R : ultime.';
-}
-function renderProf(){
-  const bars=(v)=>'<i style="--v:'+Math.round(clamp(v,0,1)*100)+'%"></i>';
-  $('profCards').innerHTML=Object.keys(PROF).map((k,i)=>{const p=PROF[k];
-    const ok=shipOK(k);
-    return '<button class="card prof'+(ok?'':' locked')+'" data-p="'+k+'" style="--c:'+p.col+'"><span class="key">'+(i+1)+'</span><span class="ic">'+(ok?p.ic:'🔒')+'</span><span class="nm">'+p.n+'</span><span class="ds">'+(ok?p.d:(p.cost?p.cost+' ◇ au Sanctuaire':'Débloqué par le récit'))+'</span>'+
-    '<span class="bars"><span>Vitesse</span>'+bars(p.spd/4.2)+'<span>Puissance</span>'+bars(p.dmg*p.rate/1.2)+'<span>Robustesse</span>'+bars((p.bub/16)/(p.armor*1.4))+'</span></button>';}).join('');
+  const st=[];if(meta.best)st.push([fmt(meta.best),'record']);if(meta.bestIsl)st.push([meta.wins?'Victoire':'Îlot '+meta.bestIsl+' / '+NISL,'au plus loin']);
+  if(meta.wins)st.push([meta.wins,meta.wins>1?'victoires':'victoire']);if(meta.runs)st.push([meta.runs,meta.runs>1?'parties':'partie']);
+  $('mStats').innerHTML=st.map(p=>'<div class="pill"><b>'+p[0]+'</b><span>'+p[1]+'</span></div>').join('');
+  $('mHint').textContent=COARSE?'Pouce gauche : bouger. Le tir est automatique. ⚡ : dash. ◉ : gonfler quand la jauge est pleine.':'ZQSD ou flèches : bouger. Le tir vise seul (la souris reprend la main). Espace : dash. E ou clic droit : gonfler.';
 }
 const ROMAN=['','I','II','III','IV','V','VI','VII','VIII','IX','X'];
-function renderEvo(){
+/* le choix d'un bonus (gp.js openPick) : bleu = bonus, or = fusion de deux bonus possédés, rouge = pacte (un prix) */
+function renderPick(){
   const P=G.p;
-  if(G.evoAlt){$('evoT').textContent=G.evoAlt[0];$('evoS').textContent=G.evoAlt[1];}else{
-  $('evoT').textContent=G.evoMut?'Mutation':'Évolution';
-  $('evoS').textContent=G.evoLv===0?'Récompense du cœur : choisis ta voie':G.evoMut?'Niveau '+G.evoLv+' : ta forme change pour de bon':'Niveau '+G.evoLv+' : choisis ta voie';}
-  $('evoCards').innerHTML=G.choices.map((ch,i)=>{const cur=ch.mut?0:(P.evo[ch.u.id]||0);
-    return '<button class="card'+(ch.mut?' mut':'')+'" data-i="'+i+'"><span class="key">'+(i+1)+'</span><span class="ic">'+ch.u.ic+'</span><span class="cat">'+(ch.mut?'Mutation':ch.u.c)+'</span><span class="nm">'+ch.u.n+(cur>0?' '+ROMAN[cur+1]:'')+'</span><span class="ds">'+ch.u.d+'</span></button>';}).join('');
-  const rb=$('bReroll');rb.hidden=!(P.rerolls>0)||!!G.evoAlt;rb.textContent='Relancer ('+P.rerolls+')';
+  $('evoT').textContent=G.isl===1?'Première mutation':'Îlot '+G.isl+' : '+BIO[G.biome].n;
+  $('evoS').textContent=G.isl===1?'Choisis un bonus. Tu en gagnes un à chaque îlot, jusqu’au bout de la partie.':'Choisis un bonus. Il te suit jusqu’au bout de la partie.';
+  $('evoCards').innerHTML=G.choices.map((ch,i)=>{const u=ch.u,n=P.cards[u.id]||0,cat=ch.k==='f'?'Fusion : '+CARDS[u.a].u.n+' + '+CARDS[u.b].u.n:ch.k==='p'?'Pacte':u.c;
+    return '<button class="card'+(ch.k==='f'?' mut':ch.k==='p'?' pact':'')+'" data-i="'+i+'"><span class="key">'+(i+1)+'</span><span class="ic">'+u.ic+'</span><span class="cat">'+cat+'</span><span class="nm">'+u.n+(n>0?' '+ROMAN[n+1]:'')+'</span><span class="ds">'+u.d+'</span>'+(ch.k==='p'?'<span class="cost">Prix : '+u.cost+'</span>':'')+'</button>';}).join('');
+  const rb=$('bReroll');rb.hidden=!(G.rerolls>0);rb.textContent='Relancer ('+G.rerolls+')'+(COARSE?'':' · R');
 }
-function pickEvo(i){
-  if(!G||G.state!=='evo')return;const ch=G.choices[i];if(!ch)return;
-  applyChoice(ch);G.state='play';show(null);SFX.evo();G.glitch=Math.max(G.glitch,12);
-  const P=G.p,c=ch.mut?COL.gd:COL.cy;ftext(P.x,P.y-P.r-22,ch.u.n,c,19);ringFX(P.x,P.y,P.r,P.r*4,c,24,4);sparks(P.x,P.y,c,20,5);
-  if(G.pendingEvo.length)G.evoDelay=12;
-}
-function reroll(){if(!G||G.state!=='evo'||G.p.rerolls<=0||G.evoAlt)return;G.p.rerolls--;G.choices=rollChoices(G.evoMut);renderEvo();SFX.ui();}
 function buildSummary(){
   const P=G.p,parts=[];
-  for(const id of P.muts){const m=MUT.find(x=>x.id===id);parts.push('<span class="chip mut">'+m.ic+' '+m.n+'</span>');}
-  for(const u of UPG){const n=P.evo[u.id];if(n)parts.push('<span class="chip">'+u.ic+' '+u.n+(n>1?' '+ROMAN[n]:'')+'</span>');}
-  return parts.length?parts.join(''):'<span class="muted">Aucune évolution pour l\'instant.</span>';
+  for(const id in P.cards){const C=CARDS[id];if(!C)continue;const n=P.cards[id];parts.push('<span class="chip'+(C.k==='f'?' mut':C.k==='p'?' pact':'')+'">'+C.u.ic+' '+C.u.n+(n>1?' '+ROMAN[n]:'')+'</span>');}
+  return parts.length?parts.join(''):'<span class="muted">Aucun bonus pour l\'instant.</span>';
 }
 function togglePause(){
   if(!G)return;
-  if(G.state==='play'){G.state='pause';$('pauseBuild').innerHTML=buildSummary();$('pauseInfo').textContent=BIO[G.biome].n+', cœurs '+G.heartsDone+' sur 3, niveau '+G.p.lvl+', '+mmss(G.time);$('pauseJournal').innerHTML=gxJournal();show('ov-pause');}
+  if(G.state==='play'){G.state='pause';$('pauseBuild').innerHTML=buildSummary();$('pauseInfo').textContent='Îlot '+G.isl+' sur '+NISL+', '+BIO[G.biome].n+', '+mmss(G.time);show('ov-pause');}
   else if(G.state==='pause'){G.state='play';show(null);}
 }
 function showEnd(){
   if(!G||G.state!=='end')return;
-  if(gsEndingGate())return;
-  const P=G.p;
-  const t=$('endT');t.textContent=G.win?'Noyau brisé':'Éclaté';t.className='endt '+(G.win?'win':'lose');
-  $('endS').textContent=(G.win?'Victoire en '+mmss(G.time):'Éclaté après '+mmss(G.time)+', '+G.heartsDone+' cœur'+(G.heartsDone>1?'s':'')+' sur 3')+(G.daily?', défi du jour':'');
+  const t=$('endT');t.textContent=G.win?'Hypernoyau brisé':'Éclaté';t.className='endt '+(G.win?'win':'lose');
+  $('endS').textContent=G.win?'Les '+NISL+' îlots, en '+mmss(G.time)+'.':'Îlot '+G.isl+' sur '+NISL+', '+BIO[G.biome].n+', après '+mmss(G.time)+'.';
   $('endStats').innerHTML=
     '<div class="st big"><span class="l">Score</span><span class="v">'+fmt(G.score)+'</span>'+(G.newBest?'<span class="rec">Nouveau record</span>':'')+'</div>'+
-    '<div class="st"><span class="l">Niveau max</span><span class="v">'+P.maxLvl+'</span></div>'+
-    '<div class="st"><span class="l">Absorptions</span><span class="v">'+G.kills+'</span></div>'+
-    '<div class="st"><span class="l">Combo max</span><span class="v">×'+G.maxCombo+'</span></div>';
-  $('endBuild').innerHTML=buildSummary();$('endGs').innerHTML=gsEndBox()+giEndBox();
-  let ach='';
-  for(const id of G.newAch){const a=ACH.find(x=>x.id===id);ach+='<div class="achrow">★ '+a.n+' <span class="muted">'+a.d+'</span></div>';}
-  for(const k of G.freeArts)ach+='<div class="achrow gold">Relique offerte : '+ARTS[k].ic+' '+ARTS[k].n+'</div>';
-  $('endAch').innerHTML=ach;$('endAch').hidden=!ach;
-  const wrap=$('endArts');
-  if(G.artChoices.length){
-    $('endArtsL').textContent='Choisis une relique. Elle te suivra dans toutes tes prochaines parties.';
-    wrap.innerHTML=G.artChoices.map(k=>{const a=ARTS[k],n=meta.arts[k]||0;return '<button class="card relic" data-k="'+k+'"><span class="ic">'+a.ic+'</span><span class="nm">'+a.n+artLvl(n,a.max)+'</span><span class="ds">'+a.d+'</span></button>';}).join('');
-    setEndBtns(false);
-  }else{
-    $('endArtsL').textContent=G.daily?'Le défi du jour se joue sans reliques, à armes égales.':'Détruis un cœur de zone ou survis 2 minutes pour gagner une relique.';
-    wrap.innerHTML='';setEndBtns(true);
-  }
+    '<div class="st"><span class="l">Îlot</span><span class="v">'+G.isl+' / '+NISL+'</span>'+(G.newIsl?'<span class="rec">Plus loin que jamais</span>':'')+'</div>'+
+    '<div class="st"><span class="l">Absorptions</span><span class="v">'+G.eats+'</span></div>'+
+    '<div class="st"><span class="l">Éclatés</span><span class="v">'+G.kills+'</span></div>';
+  $('endBuild').innerHTML=buildSummary();
   show('ov-end');
 }
-/* niveau atteint en prenant la relique (le 1er ne porte pas de numéro, comme les évolutions) ; au maximum, le dire */
-function artLvl(n,mx){return n>=mx?' · max atteint':n?' '+ROMAN[n+1]+(n+1===mx?' · max':''):'';}
-function setEndBtns(on){$('bAgain').disabled=!on;$('bMenu').disabled=!on;}
-function pickArt(k,btn){
-  if(!G||G.artPicked)return;G.artPicked=true;
-  meta.arts[k]=Math.min(ARTS[k].max,(meta.arts[k]||0)+1);saveMeta();SFX.evo();
-  document.querySelectorAll('#endArts .card').forEach(b=>{b.disabled=true;b.classList.toggle('chosen',b===btn);});
-  setEndBtns(true);$('bAgain').focus({preventScroll:true});
-}
-function renderArts(){
-  const owned=Object.keys(ARTS).filter(k=>meta.arts[k]);
-  $('artsList').innerHTML=owned.length?owned.map(k=>{const a=ARTS[k];return '<div class="relrow"><span class="ic">'+a.ic+'</span><span><b>'+a.n+' ×'+meta.arts[k]+'</b><br><span class="muted">'+a.d+' (max '+a.max+')</span></span></div>';}).join(''):'<p class="muted">Tu n\'as encore aucune relique. Atteins la salle 3 pour en gagner une.</p>';
-  $('achList').innerHTML=ACH.map(a=>'<div class="relrow'+(meta.ach[a.id]?'':' locked')+'"><span class="ic">'+(meta.ach[a.id]?'★':'☆')+'</span><span><b>'+a.n+'</b><br><span class="muted">'+a.d+'</span></span></div>').join('');
-  $('achCount').textContent=Object.keys(meta.ach).length+' sur '+ACH.length+'. Chaque succès offre une relique.';
-  const rb=$('bReset');rb.dataset.c='';rb.textContent='Effacer la progression';
-}
 function renderLB(){
-  const rows=meta.lb.map((e,i)=>'<tr><td>'+(i+1)+'</td><td class="num">'+fmt(e.s)+'</td><td>'+(e.w?'Victoire':e.r+' cœur'+(e.r>1?'s':''))+'</td><td>Niv. '+e.l+'</td><td>'+(PROF[e.p]?PROF[e.p].n:'')+(e.d?' (jour)':'')+'</td></tr>').join('');
-  $('lbBody').innerHTML=rows||'<tr><td colspan="5" class="muted">Aucune partie terminée. Lance-toi.</td></tr>';
+  const rows=meta.lb.map((e,i)=>'<tr><td>'+(i+1)+'</td><td class="num">'+fmt(e.s)+'</td><td>'+(e.w?'Victoire':'Îlot '+e.i+' / '+NISL)+'</td><td>'+mmss(e.d||0)+'</td></tr>').join('');
+  $('lbBody').innerHTML=rows||'<tr><td colspan="4" class="muted">Aucune partie terminée. Lance-toi.</td></tr>';
+  const rb=$('bReset');rb.dataset.c='';rb.textContent='Effacer les records';
 }
 
 /* ---------- boucle ---------- */
@@ -223,13 +172,11 @@ function ltStart(){if(LT_ST)return;const P=globalThis.PerformanceObserver,T=P&&P
   try{new P(l=>{for(const e of l.getEntries())if(e.duration>DIAG_LT[0]){const a=e.attribution&&e.attribution[0];DIAG_LT[0]=e.duration;DIAG_LT[1]=e.name||'?';DIAG_LT[2]=a&&a.name||'?';}}).observe({entryTypes:['longtask']});LT_ST=1;}
   catch(e){LT_ST=-2;}}
 const JSPROF_N=['render','step','streamWorld','bakeStep','genChunk','getChunk','perf',
-  'drawChunks','drawLive','drawDeco','solDraw','drawTowers','chSurf','drawWhaleShadow','drawSeuils','drawAmers','drawDecFX','drawFalls','drawHUD','gcHUD','gxHUD','gtHUD','drawMinimap',
+  'drawChunks','drawLive','drawDeco','solDraw','drawTowers','chSurf','drawWhaleShadow','drawDecFX','drawFalls','drawHUD',
   'drawEdges','drawObstacles','drawEnemies','drawBoss','drawPlayer','drawBullets',
-  'drawFX','drawWeather','drawLabels','drawIndicators','drawTexts','drawShadows',
-  'drawTrails','drawPickups','drawObjectives','postFX','lowBegin','lowWorld','lowEnd',
-  'lowScreen','drawLowGlows','drawFar','drawVista','drawGround',
-  'gcDrawWorld','gsDrawWorld','giDrawWorld','gxDrawWorld','gvDrawWorld',
-  'gcDrawUnder','gcDrawOver','gvDrawScreen','soft','softSpr','glow','worldTf','screenTf','wkRecv'];
+  'drawFX','drawWeather','drawIndicators','drawTexts','drawShadows',
+  'drawTrails','drawPUs','drawTele','drawSpawns','drawTerrain','drawTrSnap','postFX','lowBegin','lowWorld','lowEnd',
+  'lowScreen','drawLowGlows','drawFar','drawGround','soft','softSpr','glow','worldTf','screenTf','wkRecv'];
 function jsProfStart(){
   if(JSPROF_ON)return;JSPROF_ON=true;ltStart();lfStart();
   /* wkRecv : w.onmessage=wkRecv (gw2.js, wkOn) lit la globale a la creation du worker, APRES boot() : c'est donc
@@ -418,29 +365,30 @@ function frame(ts){
   if(!last)last=ts;let dt=ts-last;last=ts;const dtb=dt,rt=t0-ts;if(dt>100)dt=100;
   perf(dt);FDT=dt;musTick();
   let A=1;
-  if(G&&(G.state==='play'||G.state==='dying'||G.state==='victory')){
+  if(G&&(G.state==='play'||G.state==='dying'||G.state==='trans')){
     /* Rattrapage : machine saine -> jusqu'à 5 pas, comme avant. Image précédente hors budget -> 2 pas
        au plus et l'excédent est ABANDONNÉ : rattraper une image lente la rendait plus lente encore
        (rétroaction positive). Temps réel conservé jusqu'à 30 ips ; en dessous le jeu ralentit. */
     const nx=SKBAD?2:5;
     acc+=dt*G.timeScale;let n=0;while(acc>=STEPMS&&n<nx){step();acc-=STEPMS;n++;}if(n>=nx)acc=nx<5?acc%STEPMS:0;
-    if(G&&(G.state==='play'||G.state==='dying'||G.state==='victory'))A=clamp(acc/STEPMS,0,1);
+    if(G&&(G.state==='play'||G.state==='dying'||G.state==='trans'))A=clamp(acc/STEPMS,0,1);
   }
   if(REDUCED&&G){G.trauma*=.5;G.glitch=Math.min(G.glitch,2);}
-  const bgOnly=!G||['pause','duel','end','evo'].includes(G.state);FRN=(FRN+1)%4;
-  if(!bgOnly||FRN%(G&&G.state!=='evo'?4:2)===0||!G&&FRN%2===0)render(A,dt);
+  const bgOnly=!G||['pause','end','pick'].includes(G.state);FRN=(FRN+1)%4;
+  if(!bgOnly||FRN%(G&&G.state!=='pick'?4:2)===0||!G&&FRN%2===0)render(A,dt);
   /* travail JS réel de cette image, hors cuisson : la mesure dont bakeBudget() part à l'image suivante */
   FWK=performance.now()-t0-BKMS;skipCtl(FWK+BKMS,dt);
   /* ---------- diagnostic embarque : cumul sur une seconde, puis publication ---------- */
   /* On ne cumule que les images qui JOUENT : la meme condition que la boucle de simulation ci-dessus.
      Avant, les images d'interface entraient dans la fenetre d'une seconde, donc « image : N ms »
      decrivait un melange de deux choses, et les ips gonflaient d'autant. */
-  if(G&&(G.state==='play'||G.state==='dying'||G.state==='victory')){
+  if(G&&(G.state==='play'||G.state==='dying'||G.state==='trans')){
     DIAG_T+=dt;DIAG_N++;DIAG_CJS+=FWK+BKMS;DIAG_CDT+=dt;if(dt>DIAG_MX)DIAG_MX=dt;
     if(AU.ac&&AU.next!=null){const m=AU.next-AU.ac.currentTime;if(m<DIAG_AUM)DIAG_AUM=m;}
-    /* pire image : meme test que DIAG_MX (donc le meme nombre que « pire »), apparie au rappel PRECEDENT */
+    /* pire image : meme test que DIAG_MX (donc le meme nombre que « pire »), apparie au rappel PRECEDENT. Son retard (w[6]) vaut si
+       ce rappel a commence avant celui-ci (+rt) : Chromium donne a l'image N le tick passe PENDANT une longue tache (test/navigateur.js A4) */
     if(dt>DIAG_W[0]){const p=DIAG_PV,w=DIAG_W;w[0]=dt;w[1]=p[0];w[2]=p[1];w[3]=p[2];w[4]=p[0]<0?0:Math.max(0,WKN-p[4]);w[5]=p[3];
-      w[6]=p[0]>=0&&p[5]>=0&&p[5]<=dtb+1?p[5]:-1;const wm=p[0]>=0&&!!JSPROF.wkRecv;w[7]=wm?DIAG_WK[0]:-1;w[8]=wm?DIAG_WK[1]:0;w[9]=dtb;}
+      w[6]=p[0]>=0&&p[5]>=0&&p[5]<=dtb+rt+1?p[5]:-1;const wm=p[0]>=0&&!!JSPROF.wkRecv;w[7]=wm?DIAG_WK[0]:-1;w[8]=wm?DIAG_WK[1]:0;w[9]=dtb;}
     DIAG_PV[0]=FWK+BKMS;DIAG_PV[1]=DIAG_EV[0];DIAG_PV[2]=DIAG_EV[1];DIAG_PV[3]=CHNEW;DIAG_PV[4]=WKN;DIAG_PV[5]=rt;}
   else DIAG_PV[0]=-1;
   DIAG_EV[0]=DIAG_EV[1]=0;CHNEW=0;DIAG_WK[0]=DIAG_WK[1]=0;
@@ -457,10 +405,7 @@ function frame(ts){
     FPSV=DIAG_DT>0?Math.round(1000/DIAG_DT):0;
     DIAG_MARGIN=DIAG_AUM>=1e9?-1:DIAG_AUM;DIAG_CJS=0;DIAG_CDT=0;DIAG_MX=0;DIAG_AUM=1e9;DIAG_N=0;DIAG_T=0;}
 }
-function startGame(prof,daily){
-  if(!shipOK(prof)){SAN_TAB='ships';renderSanct();show('ov-sanct');return;}
-  if(storyGate(()=>startGame(prof,daily)))return;
-  applyQuality();refReset();meta.lastProf=prof;saveMeta();cv.classList.remove('dying');newRun(prof,daily);flashFade('#05030c',900);gsRunStart();gcRunStart();giRunStart();gxRunStart();gtRunStart();gvRunStart();inp.L=inp.R=null;show(null);}
+function startGame(){applyQuality();refReset();cv.classList.remove('dying');newRun();flashFade('#05030c',900);inp.L=inp.R=null;show(null);}
 function boot(){
   jsProfStart();
   resize();addEventListener('resize',()=>{CVR=null;resize();});
@@ -468,32 +413,28 @@ function boot(){
   cv.addEventListener('pointermove',onMove,{passive:true});
   cv.addEventListener('pointerup',onUp);cv.addEventListener('pointercancel',e=>{if(inp.B&&inp.B.id===e.pointerId)inp.B=null;onUp(e);});
   addEventListener('keydown',onKey);
-  addEventListener('keyup',e=>{inp.keys[e.code]=false;if(G&&G.state==='evo'&&e.code==='Space')e.preventDefault();});
+  addEventListener('keyup',e=>{inp.keys[e.code]=false;if(G&&G.state==='pick'&&e.code==='Space')e.preventDefault();});
   addEventListener('blur',()=>{inp.keys={};inp.L=inp.R=null;inp.mdown=false;});
   document.addEventListener('visibilitychange',()=>{if(document.hidden&&G&&G.state==='play')togglePause();});
-  $('bPlay').onclick=()=>{auInit();SFX.ui();renderProf();show('ov-prof');};
-  $('bDaily').onclick=()=>{auInit();startGame('bal',true);};
-  $('bArts').onclick=()=>{SFX.ui();renderArts();show('ov-arts');};gsBindUI();giBindUI();gxBindUI();
+  $('bPlay').onclick=()=>{auInit();SFX.ui();startGame();};
   $('bLb').onclick=()=>{SFX.ui();renderLB();show('ov-lb');};
   document.querySelectorAll('.back').forEach(b=>b.onclick=()=>{SFX.ui();renderMenu();show('ov-menu');});
-  $('profCards').onclick=e=>{const b=e.target.closest('[data-p]');if(b)startGame(b.dataset.p,false);};
-  $('ov-prof').addEventListener('keydown',e=>{const i=['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6'].indexOf(e.code);if(i>=0)startGame(Object.keys(PROF)[i],false);});
-  $('evoCards').onclick=e=>{const b=e.target.closest('[data-i]');if(b)pickEvo(+b.dataset.i);};
+  $('evoCards').onclick=e=>{const b=e.target.closest('[data-i]');if(b)pickCard(+b.dataset.i);};
   $('bReroll').onclick=reroll;
-  $('endArts').onclick=e=>{const b=e.target.closest('[data-k]');if(b)pickArt(b.dataset.k,b);};
-  $('bAgain').onclick=()=>{if(G.daily)startGame('bal',true);else startGame(G.prof,false);};
+  $('bAgain').onclick=()=>startGame();
   $('bMenu').onclick=()=>{G=null;cv.classList.remove('dying');setMusic(0);renderMenu();show('ov-menu');};
   $('bPause').onclick=()=>togglePause();
   $('bResume').onclick=()=>togglePause();
   $('bQuit').onclick=()=>{if(G&&G.state==='pause'){show(null);endRun(false);}};
   $('bMute').onclick=()=>{auInit();setMute(!meta.mute);updMuteBtn();};
-  $('bReset').onclick=function(){if(this.dataset.c){meta={runs:0,wins:0,arts:{},ach:{},best:0,lb:[],daily:{},mute:meta.mute,kills:0,seenHelp:false};gsMetaInit();giMetaInit();saveMeta();renderArts();renderMenu();}else{this.dataset.c='1';this.textContent='Confirmer l\'effacement';}};
+  $('bReset').onclick=function(){if(this.dataset.c){meta=Object.assign(META0(),{mute:meta.mute,fps:meta.fps,q:meta.q,qAuto:meta.qAuto});saveMeta();renderLB();renderMenu();}else{this.dataset.c='1';this.textContent='Confirmer l\'effacement';}};
   const fb=document.createElement('button');fb.className='btn ghost';fb.id='bFps';const ufb=()=>fb.textContent='Compteur d’images : '+(meta.fps?'oui':'non');ufb();
   fb.onclick=()=>{meta.fps=!meta.fps;saveMeta();ufb();SFX.ui();};const lbb=$('bLb');if(lbb.after)lbb.after(fb);
   const qb=document.createElement('button');qb.className='btn ghost';qb.id='bQual';const QN={auto:'Auto',high:'Haute',mid:'Équilibrée',low:'Performance'},QO=['auto','high','mid','low'];
   const uqb=()=>qb.textContent='Qualité : '+QN[meta.q||'auto'];uqb();
   qb.onclick=()=>{meta.q=QO[(QO.indexOf(meta.q||'auto')+1)%4];saveMeta();applyQuality();uqb();SFX.ui();};if(fb.after)fb.after(qb);applyQuality();
-  genWorld((Math.random()*4294967295)>>>0);
+  /* fond du menu : l'îlot 1 de la prochaine partie (newRun le reprend s'il n'a pas servi) */
+  genIslet((Math.random()*4294967295)>>>0,1);
   updMuteBtn();renderMenu();show('ov-menu');
   requestAnimationFrame(frame);
 }

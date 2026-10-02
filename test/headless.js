@@ -1,756 +1,353 @@
 'use strict';
 /* =========================================================
    Test headless de BULGE — exécute la VRAIE logique de jeu
-   Utilise le mode simulation intégré au jeu (window.__SIM).
-   Aucune modification du code du jeu : on ne fait que
-   l'instancier dans un DOM stubé et le faire tourner.
+   Utilise le mode simulation intégré au jeu (window.__SIM) : les modules sont chargés tels quels dans un DOM
+   stubé (test/lib.js), avec une horloge virtuelle et un Math.random à graine. Aucune copie du code du jeu.
 
-   node test/headless.js                  parties complètes + scénarios de régression
-   node test/headless.js --scenarios      scénarios de régression seulement (rapide)
-   node test/headless.js --ref=HEAD       charge les modules depuis git (ex. état d'origine),
-                                          sans rien écrire sur le disque
+   node test/headless.js                  parties complètes + scénarios + gardes (sous-processus)
+   node test/headless.js --scenarios      scénarios et gardes seulement (sans les parties complètes)
+   node test/headless.js --sans-gardes    sans les gardes en sous-processus (mise au point)
+   node test/headless.js --ref=HEAD       charge les modules depuis git (ex. état d'origine), sans rien écrire
    Code de sortie : 0 si tout passe, 1 sinon.
+
+   Refonte en îlots (01/10/2026) : huit îlots = huit niveaux (trois vagues puis un boss chacun), un bonus à
+   choisir à l'arrivée sur chaque îlot, des power-ups à ramasser, une membrane en segments pour vie. Les
+   scénarios de l'ancienne version (duel, autel, hangar, prologue, défi du jour, cœurs, monde ouvert) sont
+   partis avec leurs systèmes ; ceux qui gardaient une propriété toujours vraie (aucun lookbehind de regex,
+   Espace capturé sur l'écran de choix, pointercancel qui relâche un bouton tactile, indépendance à l'algorithme
+   de tri, hooks du harnais) sont repris sur le nouveau jeu.
    ========================================================= */
-const fs = require('fs');
 const path = require('path');
-const vm = require('vm');
 const cp = require('child_process');
+const L = require('./lib');
 
-const ROOT = path.resolve(__dirname, '..');
-const ARG = k => { const a = process.argv.find(x => x === '--' + k || x.startsWith('--' + k + '=')); return a ? (a.split('=')[1] || true) : null; };
-const REF = ARG('ref'), ONLY_SCN = !!ARG('scenarios');
-/* ordre figé, identique à build.sh */
-const ORDER = ['g1.js', 'gw.js', 'gw2.js', 'g2.js', 'gs.js', 'gc.js', 'gi.js', 'gx.js', 'gt.js', 'gv.js', 'g3.js', 'g4.js'];
-const readModule = f => REF ? cp.execFileSync('git', ['show', REF + ':' + f], { cwd: ROOT, encoding: 'utf8' }) : fs.readFileSync(path.join(ROOT, f), 'utf8');
-
-/* ---------- horloge virtuelle : setTimeout avance avec les pas de simulation ---------- */
-let CLOCK = 0, TID = 0;
-const TIMERS = [];
-function advance(ms) {
-  const end = CLOCK + ms;
-  for (;;) {
-    let k = -1;
-    for (let i = 0; i < TIMERS.length; i++) if (TIMERS[i].at <= end && (k < 0 || TIMERS[i].at < TIMERS[k].at || (TIMERS[i].at === TIMERS[k].at && TIMERS[i].id < TIMERS[k].id))) k = i;
-    if (k < 0) break;
-    const t = TIMERS.splice(k, 1)[0]; CLOCK = Math.max(CLOCK, t.at); t.fn();
-  }
-  CLOCK = end;
-}
-
-/* ---------- stub canvas 2D : accepte tous les appels, renvoie des objets factices ---------- */
-function mkCtx() {
-  const grad = { addColorStop() {} };
-  const base = {
-    createImageData: (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
-    getImageData: (x, y, w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
-    createRadialGradient: () => grad,
-    createLinearGradient: () => grad,
-    createPattern: () => ({}),
-    measureText: (s) => ({ width: (s || '').length * 7 }),
-  };
-  return new Proxy(base, { get: (t, p) => (p in t ? t[p] : () => {}), set: (t, p, v) => (t[p] = v, true) });
-}
-/* ---------- stub DOM : style (setProperty…), classList (contains…), dataset, écouteurs enregistrés ---------- */
-function mkStyle() {
-  const s = {};
-  Object.defineProperties(s, {
-    setProperty: { value: (k, v) => { s[k] = String(v); } },
-    removeProperty: { value: (k) => { const v = s[k]; delete s[k]; return v || ''; } },
-    getPropertyValue: { value: (k) => (s[k] || '') },
-  });
-  return s;
-}
-function mkClassList() {
-  const set = new Set();
-  return { add: (...c) => c.forEach(x => set.add(x)), remove: (...c) => c.forEach(x => set.delete(x)),
-    toggle: (c, f) => { const on = f === undefined ? !set.has(c) : !!f; if (on) set.add(c); else set.delete(c); return on; },
-    contains: (c) => set.has(c) };
-}
-function mkListeners() { const L = {}; return { add: (t, fn) => (L[t] = L[t] || []).push(fn), fire: (t, e) => (L[t] || []).forEach(fn => fn(e)), has: (t) => !!(L[t] && L[t].length) }; }
-const doc = { activeElement: null };
-function mkEl(id, tag) {
-  const L = mkListeners(), attrs = {};
-  const el = {
-    id: id || '', tagName: (tag || 'div').toUpperCase(), style: mkStyle(), classList: mkClassList(), dataset: {},
-    hidden: false, disabled: false, innerHTML: '', textContent: '', value: '', className: '',
-    offsetWidth: 0, offsetHeight: 0, parentElement: null,
-    getBoundingClientRect: () => ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600, x: 0, y: 0 }),
-    setAttribute: (k, v) => { attrs[k] = String(v); }, getAttribute: (k) => (k in attrs ? attrs[k] : null),
-    closest: () => null, focus: () => { doc.activeElement = el; }, blur() {},
-    querySelector: () => null, querySelectorAll: () => [],
-    addEventListener: (t, fn) => L.add(t, fn), removeEventListener() {}, _fire: L.fire, _has: L.has,
-    after() {}, appendChild: (c) => c, setPointerCapture() {}, releasePointerCapture() {},
-  };
-  return el;
-}
-function mkCanvasEl(w, h, id) { const el = mkEl(id, 'canvas'); el.width = w || 300; el.height = h || 150; el.getContext = () => mkCtx(); return el; }
-const stash = new Map();
-Object.assign(doc, {
-  hidden: false,
-  getElementById(id) {
-    if (!stash.has(id)) {
-      const el = (id === 'cv' || id === 'low' || id === 'hgPrev') ? mkCanvasEl(800, 600, id) : mkEl(id);
-      if (id === 'cv') el.parentElement = mkEl('stage');
-      stash.set(id, el);
-    }
-    return stash.get(id);
-  },
-  createElement: (t) => (t === 'canvas' ? mkCanvasEl() : mkEl('', t)),
-  querySelectorAll: () => [], querySelector: () => null,
-  body: mkEl('body', 'body'),
-});
-const DOCL = mkListeners(); doc.addEventListener = DOCL.add;
-const WINL = mkListeners();
-const win = { __SIM: true, devicePixelRatio: 1, requestAnimationFrame: () => 0, addEventListener: WINL.add, removeEventListener() {} };
-const sandbox = {
-  window: win, document: doc, console,
-  matchMedia: () => ({ matches: false }),
-  localStorage: { getItem: () => null, setItem() {} },
-  performance: { now: () => CLOCK }, requestAnimationFrame: win.requestAnimationFrame,
-  setTimeout: (fn, ms) => { TIMERS.push({ fn, at: CLOCK + (ms || 0), id: ++TID }); return TID; },
-  clearTimeout: (id) => { const k = TIMERS.findIndex(t => t.id === id); if (k >= 0) TIMERS.splice(k, 1); },
-  setInterval: () => 0, clearInterval() {},
-  getComputedStyle: () => ({ paddingTop: '0px', paddingBottom: '0px', paddingLeft: '0px', paddingRight: '0px' }),
-  addEventListener: WINL.add, removeEventListener() {},
-};
-sandbox.globalThis = sandbox;
-
-/* ---------- chargement (même ordre que le build) ---------- */
-const code = ORDER.map(readModule).join('\n');
-const ctx = vm.createContext(sandbox);
-const call = (e) => vm.runInContext(e, ctx);
-/* Math.random à graine (le jeu l'utilise pour la graine du monde et les effets) : parties reproductibles */
-call(`(function(){let s=1;Math.__seed=v=>{s=(v>>>0)||1;};Math.random=function(){s=(s+0x6D2B79F5)>>>0;let t=s;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};})();`);
-vm.runInContext(code, ctx, { filename: 'game.js' });
-console.log('[ok] jeu chargé : ' + ORDER.length + ' modules' + (REF ? ' (git ' + REF + ')' : '') + ', ' + code.length + ' octets de JS exécutés sans exception');
-console.log('[ok] SIMF() = ' + call('SIMF()'));
-const STEP = call('(function(){step();})');
-function steps(n, stop) { for (let i = 0; i < n; i++) { STEP(); advance(1000 / 60); if (stop && stop()) return i + 1; } return n; }
-/* même séquence que startGame (g4.js), sans shipOK/storyGate/show : voulu pour les tests */
-function start(prof, daily) {
-  call(`newRun(${JSON.stringify(prof)},${daily ? 'true' : 'false'});gsRunStart();gcRunStart();giRunStart();gxRunStart();gtRunStart();gvRunStart();inp.L=inp.R=null;`);
-}
-const noSim = (expr) => { win.__SIM = false; try { return call(expr); } finally { win.__SIM = true; } };
-const key = (code, extra) => { let pd = 0; call('onKey')(Object.assign({ code, repeat: false, preventDefault() { pd++; } }, extra)); return pd; };
-
-/* ---------- IA de test, écrite DANS le realm du jeu ---------- */
-const AI = `
-/* navigation : BFS sur la grille des falaises (cellules WC=64), cellules encombrées par un obstacle évitées ;
-   chemin recalculé toutes les 30 images ; renvoie le point de passage à viser */
-var __NAV = { t: -1e9, key: '', path: null, wd: null, obs: null };
-function navBfs(si, sj, ti, tj, useObs) {
-  const N = NG, prev = new Int32Array(N * N).fill(-1), q = new Int32Array(N * N), s = sj * N + si, t = tj * N + ti;
-  const C = __NAV.obs;
-  const blocked = (i, j) => {
-    if (i < 0 || j < 0 || i >= N || j >= N || wallAt(i, j)) return true;
-    if (!useObs || (i === ti && j === tj)) return false;
-    const k = j * N + i; if (!C[k]) C[k] = pointHit(G0 + (i + .5) * WC, G0 + (j + .5) * WC, 26) ? 2 : 1;
-    return C[k] === 2;
-  };
-  let h = 0, e = 0; q[e++] = s; prev[s] = s;
-  while (h < e) { const k = q[h++]; if (k === t) break; const i = k % N, j = (k / N) | 0;
-    for (const [di, dj] of [[1,0],[-1,0],[0,1],[0,-1]]) { const ni = i + di, nj = j + dj, nk = nj * N + ni; if (ni < 0 || nj < 0 || ni >= N || nj >= N || prev[nk] >= 0 || blocked(ni, nj)) continue; prev[nk] = k; q[e++] = nk; } }
-  if (prev[t] < 0) return null;
-  const path = []; for (let k = t; k !== s; k = prev[k]) path.push(k); path.push(s); return path.reverse();
-}
-function navTo(P, tx, ty) {
-  const N = NG, ci = v => Math.floor((v - G0) / WC), si = ci(P.x), sj = ci(P.y), ti = ci(tx), tj = ci(ty);
-  if (Math.hypot(tx - P.x, ty - P.y) < 260) return [tx, ty];
-  if (__NAV.wd !== WD) { __NAV.wd = WD; __NAV.obs = new Uint8Array(N * N); __NAV.path = null; }
-  const key = ti + ',' + tj;
-  if (!__NAV.path || __NAV.key !== key || G.t - __NAV.t > 30) { __NAV.t = G.t; __NAV.key = key; __NAV.path = navBfs(si, sj, ti, tj, true) || navBfs(si, sj, ti, tj, false); }
-  const p = __NAV.path; if (!p || p.length < 2) return [tx, ty];
-  let b = 0, bd = 1e18; for (let k = 0; k < Math.min(p.length, 12); k++) { const x = G0 + (p[k] % N + .5) * WC, y = G0 + (((p[k] / N) | 0) + .5) * WC, d = (x - P.x) ** 2 + (y - P.y) ** 2; if (d < bd) { bd = d; b = k; } }
-  const w = p[Math.min(p.length - 1, b + 2)]; return [G0 + (w % N + .5) * WC, G0 + (((w / N) | 0) + .5) * WC];
-}
-window.__SIM_BOOST = 0;
-window.__SIM_TELEPORT = 0;
-window.__SIM_INPUT = function(){
-  const P = G.p; if (!P || P.dead) return;
-  if (window.__SIM_BOOST && !P.__boosted) { P.__boosted = 1; P.dmg *= 6; P.fireI *= .5; P.armor *= .05; P.bub = 40; P.base = 40; }
-  let vx = 0, vy = 0;
-  // 1) fuite des projectiles ennemis (avec anticipation de leur trajectoire)
-  const R = 260;
-  for (const b of G.eb) {
-    const px = b.x + (b.vx || 0) * 8, py = b.y + (b.vy || 0) * 8;
-    const dx = P.x - px, dy = P.y - py, d2 = dx*dx + dy*dy;
-    if (d2 > R*R) continue;
-    const d = Math.sqrt(d2) || .01, w = (R - d) / R;
-    vx += dx/d * w * 3.4; vy += dy/d * w * 3.4;
-  }
-  // 2) fuite des corps-à-corps (épines, mites)
-  for (const e of G.en) {
-    if (e.spawn > 0) continue;
-    const dx = P.x - e.x, dy = P.y - e.y, d2 = dx*dx + dy*dy, r = e.r + P.r + 60;
-    if (d2 > r*r) continue;
-    const d = Math.sqrt(d2) || .01, w = (r - d) / r;
-    vx += dx/d * w * 2.0; vy += dy/d * w * 2.0;
-  }
-  // 3) direction de l'objectif (cœur de zone / Hypernoyau) — seulement si assez costaud.
-  //    Le monde a des falaises (WD.wall) et des obstacles : on suit un chemin BFS sur la grille des falaises
-  //    au lieu d'une ligne droite (sinon l'IA reste plaquée contre une falaise, cf. passe de clôture).
-  const o = objective();
-  const ready = P.lvl >= 4 || P.bub > 1.6 * P.base;
-  if (o && ready) { const q = navTo(P, o.x, o.y), dx = q[0] - P.x, dy = q[1] - P.y, d = Math.hypot(dx, dy) || 1, dO = Math.hypot(o.x - P.x, o.y - P.y); const w = dO > 300 ? 1 : .25; vx += dx/d*w; vy += dy/d*w; }
-  // 3b) sinon : recul pour ne pas déclencher l'arène d'un cœur trop tôt
-  else if (G.hearts) { for (const h of G.hearts) { if (h.state !== 'dormant') continue; const dx = P.x - h.x, dy = P.y - h.y, d = Math.hypot(dx, dy) || 1; if (d < 700) { vx += dx/d*3; vy += dy/d*3; } } }
-  // 4) collecte des bulles proches (les bulles = PV, ressource vitale)
-  let bx = 0, by = 0;
-  for (const k of G.pk) { const dx = k.x - P.x, dy = k.y - P.y, d2 = dx*dx + dy*dy; if (d2 < 760*760) { const d = Math.sqrt(d2) || 1; const w = 1.6 * (1 - d/760); bx += dx/d*w; by += dy/d*w; } }
-  vx += bx; vy += by;
-  // 5) mur extérieur
-  const dc = Math.hypot(P.x, P.y) || 1;
-  if (dc > WR - 320) { vx -= P.x/dc*2; vy -= P.y/dc*2; }
-  const l = Math.hypot(vx, vy) || 1;
-  G.inX = vx/l; G.inY = vy/l;
-  // 6) dash réflexe si un tir est très proche
-  if (P.dashT <= 0) { for (const b of G.eb) { if (dist2(b.x, b.y, P.x, P.y) < 95*95) { tryDash(); break; } } }
-  // 6b) compétences et ultime dès qu'ils sont prêts, si un ennemi est à portée (comme un joueur ; fait aussi avancer le prologue)
-  if (P.sk && G.en.some(e => !e.dead && e.spawn <= 0 && dist2(e.x, e.y, P.x, P.y) < 320*320)) { for (let i = 0; i < 2; i++) if (P.sk[i] && P.sk[i].cd <= 0) gcUse(i); if (P.ultC >= 100) gcUlt(); }
-  // 7) téléportation de test vers le cœur (couverture du chemin boss)
-  if (window.__SIM_TELEPORT && G.lair && G.lair.open && !G.boss && !G.arena) { P.x = WD.core.x; P.y = WD.core.y - 80; }
-};`;
-vm.runInContext(AI, ctx, { filename: 'ai-test.js' });
-console.log('[ok] IA de test injectée dans le contexte du jeu');
-/* boot() n'est pas appelé en mode simulation : on l'appelle pour enregistrer les vrais écouteurs (clavier, pointeur) */
-call('boot()');
-console.log('[ok] boot() exécuté : écouteurs enregistrés (pointercancel sur le canvas : ' + doc.getElementById('cv')._has('pointercancel') + ')');
-
+const REF = L.ARG('ref'), ONLY_SCN = !!L.ARG('scenarios'), NO_SUB = !!L.ARG('sans-gardes');
+const ROOT = L.ROOT;
 const checks = [];
 const check = (name, ok, detail) => { checks.push({ name, ok: !!ok, detail: detail || '' }); };
+
+const H0 = L.mkGame({ ref: REF });
+console.log('[ok] jeu chargé : ' + H0.order.length + ' modules' + (REF ? ' (git ' + REF + ')' : '') + ', ' + H0.code.length + ' octets de JS exécutés sans exception');
+console.log('[ok] SIMF() = ' + H0.call('SIMF()'));
+
+/* ---------- observateur, écrit DANS le realm du jeu (appelé à chaque pas, coût minimal) ----------
+   Ce qu'une partie complète doit respecter, vérifié à chaque image et non à la fin :
+   - le boss d'un îlot n'arrive qu'après ses NWAVE vagues, et une seule fois ;
+   - un type d'ennemi n'est jamais présent au-delà de GONEA îlots d'écart ; à PREYA il est une proie
+     (sauf les petits que pond un Porteur : ils ont l'âge de leur parent) ;
+   - la bulle et les ennemis restent dans l'îlot (rayon jouable PR, plus une marge de rebond). */
+const OBS = `window.__OB={err:[],boss:{},waves:{},kills:{},ph:[],types:{},maxR:0,maxER:0};
+window.__OBS=function(){const O=window.__OB;if(!G||!G.p)return;const k=G.isl;
+  if(O.ph.length===0||O.ph[O.ph.length-1]!==k+':'+G.ph)O.ph.push(k+':'+G.ph);
+  if(G.ph==='wave')O.waves[k]=Math.max(O.waves[k]||0,G.wave);
+  if(G.boss&&!O.boss[k]){O.boss[k]=1;if((O.waves[k]||0)!==NWAVE)O.err.push('îlot '+k+' : boss après '+(O.waves[k]||0)+' vague(s)');}
+  if(G.boss&&G.boss.dead)O.kills[k]=1;
+  const P=G.p;if(G.state==='play'){const r=Math.hypot(P.x,P.y);if(r>O.maxR)O.maxR=r;}
+  for(const e of G.en){if(e.dead)continue;const age=k-e.d.isl;(O.types[k]||(O.types[k]={}))[e.t]=1;
+    if(!e.parent&&age>=GONEA&&O.err.length<20)O.err.push('îlot '+k+' : '+e.t+' encore là à '+age+' îlots d écart');
+    if(!e.parent&&e.prey!==(age>=PREYA)&&O.err.length<20)O.err.push('îlot '+k+' : '+e.t+' proie='+e.prey+' à '+age+' îlots d écart');
+    const r=Math.hypot(e.x,e.y);if(e.spawn<=0&&r>O.maxER)O.maxER=r;}};`;
+const ETL = ['mite', 'spike', 'spread', 'sniper', 'orbit', 'gatling', 'ring', 'spawner'], K8 = [1, 2, 3, 4, 5, 6, 7, 8];
 
 /* =========================================================
    PARTIES COMPLÈTES
    ========================================================= */
-function playRun(name, prof, seed, maxSteps, opts = {}) {
-  const res = { run: name, prof, ended: false, win: null, steps: 0, error: null };
-  call(`Math.__seed(${seed})`);
-  win.__SIM_PICK = (c) => c[Math.floor(call('Math.random()') * c.length)];
-  win.__SIM_END = (w) => { res.ended = true; res.win = w; };
-  win.__SIM_BOOST = opts.boost ? 1 : 0;
-  win.__SIM_TELEPORT = opts.teleport ? 1 : 0;
-  const t0 = Date.now();
-  let n = 0;
-  try { start(prof, opts.daily); for (; n < maxSteps && !res.ended; n++) { STEP(); advance(1000 / 60); } }
+function playRun(name, seed, maxSteps, o = {}) {
+  const H = L.mkGame({ ref: REF, seed });
+  const res = { run: name, seed, ended: 0, win: null, steps: 0, error: null, choix: [] };
+  H.win.__SIM_PICK = (c) => { res.choix.push(c.map(x => x.u.id)); return c[Math.floor(H.call('Math.random()') * c.length)]; };
+  H.win.__SIM_END = (w) => { res.ended++; res.win = w; };
+  H.ai(o.god); if (o.boost) H.call('window.__SIM_BOOST=' + o.boost);
+  H.call(OBS); const OB = H.call('window.__OBS');
+  const t0 = Date.now(); let n = 0;
+  try { H.start(); for (; n < maxSteps && !res.ended; n++) { H.STEP(); OB(); H.advance(1000 / 60); }
+    /* après la fin : quelques pas encore, rien ne doit relancer __SIM_END ni lever */
+    for (let i = 0; i < 120; i++) { H.STEP(); H.advance(1000 / 60); } }
   catch (e) { res.error = String(e && e.stack || e).split('\n').slice(0, 3).join(' | '); }
-  const G = call('G');
-  Object.assign(res, {
-    steps: n, ms: Date.now() - t0, daily: G.daily,
-    score: G.score, kills: G.kills, hearts: G.heartsDone, maxLvl: G.p.maxLvl,
-    state: G.state, room: +G.room.toFixed(2), frames: G.time,
-    evolutions: Object.values(G.p.evo).reduce((a, b) => a + b, 0), mutations: G.p.muts.length,
-    bossPhase: G.boss ? G.boss.phase : null, bossDead: G.boss ? !!G.boss.dead : false, arenaKind: G.arena ? G.arena.kind : null,
-    relicChoices: G.artChoices.length,
-  });
-  win.__SIM_END = null; win.__SIM_BOOST = 0; win.__SIM_TELEPORT = 0;
-  console.log(JSON.stringify(res));
+  const G = JSON.parse(H.call('JSON.stringify({isl:G.isl,state:G.state,score:G.score,kills:G.kills,eats:G.eats,picks:G.picks,maxIsl:G.maxIsl,t:G.t,seg:G.p.seg})'));
+  Object.assign(res, G, { steps: n, ms: Date.now() - t0, ob: JSON.parse(H.call('JSON.stringify(window.__OB)')) });
+  console.log(JSON.stringify({ run: res.run, seed, steps: n, ms: res.ms, fin: res.ended, victoire: res.win, ilot: res.isl, score: res.score, kills: res.kills, eats: res.eats, bonus: res.picks.join(','), erreurs: res.ob.err.length, err: res.error }));
   return res;
 }
 if (!ONLY_SCN) {
   console.log('\n=== PARTIES COMPLÈTES ===');
-  const r1 = playRun('run1-naturel', 'bal', 12345, 120000);
-  const r2 = playRun('run2-assiste', 'bal', 999, 400000, { boost: true, teleport: true });
-  const r3 = playRun('run3-defi-du-jour', 'bal', 424242, 60000, { daily: true });
-  const r4 = playRun('run4-colosse', 'tank', 31337, 60000);
-  const r5 = playRun('run5-eclaireur', 'scout', 2718, 60000);
-  /* passe globale : la VICTOIRE en défi du jour n'était couverte nulle part (run3 : actif + kills>0 seulement).
-     La graine du défi dépend de la date (g2.js newRun) : la date est FIGÉE au 27/09/2026 pour ce critère, sinon il
-     dépendrait du jour d'exécution. Vérifié (test/trace.js --daily-days=10) : l'IA de test gagne 9 dates sur 10 ; au
-     04/10/2026 elle reste coincée loin d'un cœur alors que le terrain est praticable (remplissage à 12 px avec pointHit,
-     rayon 30 et 37 px : 3 cœurs et noyau atteignables). Ce n'est pas un défaut du jeu mais une limite de l'IA de test. */
-  call('var __RealDate=Date;Date=class extends __RealDate{constructor(...a){if(a.length)super(...a);else super(2026,8,27,12);}static now(){return new __RealDate(2026,8,27,12).getTime();}}');
-  let r6, m6, a6;
-  try {
-    m6 = JSON.parse(call('JSON.stringify({runs:meta.runs,wins:meta.wins,day:meta.daily[String(todayKey())]||0,lb:meta.lb.length})'));
-    r6 = playRun('run6-defi-du-jour-victoire', 'bal', 777, 400000, { daily: true, boost: true, teleport: true });
-    a6 = JSON.parse(call('JSON.stringify({runs:meta.runs,wins:meta.wins,day:meta.daily[String(G.dayKey)],ach:!!meta.ach.daily,xp:G.gi?G.gi.xp:null,lbd:meta.lb.some(e=>e.d===1&&e.w===1&&e.s===G.score),arts:ARTS_ON,dk:G.dayKey})'));
-  } finally { call('Date=__RealDate'); }
-  const rs = [r1, r2, r3, r4, r5, r6];
+  /* naturelle : l'IA de test joue pour de vrai (elle finit par éclater, ou la partie est coupée à 40 min de jeu) */
+  const r1 = playRun('naturelle', 12345, 60 * 60 * 40);
+  /* assistées : membrane entretenue et dégâts ×4 — couvrent le déroulé COMPLET des 8 îlots jusqu'à la victoire */
+  const r2 = playRun('assistee', 999, 60 * 60 * 60, { god: true, boost: 4 });
+  const r3 = playRun('assistee-2', 31337, 60 * 60 * 60, { god: true, boost: 4 });
+  const rs = [r1, r2, r3];
   check('parties : aucune exception', rs.every(r => !r.error), rs.filter(r => r.error).map(r => r.run + ': ' + r.error).join(' ; '));
-  check('run1 : absorptions (kills>0)', r1.kills > 0, 'kills=' + r1.kills);
-  check('run1 : progression de niveau (maxLvl>2)', r1.maxLvl > 2, 'maxLvl=' + r1.maxLvl);
-  check('run1 : au moins 1 cœur de zone détruit', r1.hearts >= 1, 'coeurs=' + r1.hearts);
-  check('run1 : évolutions accordées', r1.evolutions > 0, 'evolutions=' + r1.evolutions);
-  check('run2 : arène de boss atteinte', r2.bossPhase !== null || r2.arenaKind === 'boss' || r2.bossDead);
-  check('run2 : 3 cœurs détruits', r2.hearts >= 3, 'coeurs=' + r2.hearts);
-  check('run2 : VICTOIRE sur l Hypernoyau (__SIM_END(true))', r2.ended && r2.win === true);
-  check('run2 : reliques proposées en fin de partie', r2.relicChoices > 0, 'reliques=' + r2.relicChoices);
-  check('run3 : défi du jour actif', r3.daily === true && r3.kills > 0, 'daily=' + r3.daily + ' kills=' + r3.kills);
-  check('run4 : profil Colosse jouable', r4.kills > 0, 'kills=' + r4.kills);
-  check('run5 : profil Éclaireur jouable', r5.kills > 0, 'kills=' + r5.kills);
-  check('run6 : VICTOIRE en défi du jour (__SIM_END(true), 3 cœurs, reliques inactives)', r6.ended && r6.win === true && r6.daily === true && r6.hearts >= 3 && a6.arts === false,
-    'jour=' + a6.dk + ' daily=' + r6.daily + ' fin=' + r6.ended + ' victoire=' + r6.win + ' coeurs=' + r6.hearts + ' pas=' + r6.steps + ' reliques actives=' + a6.arts);
-  check('run6 : règles du défi à la victoire (aucune relique proposée, cycle et victoires non comptés, 0 XP, record du jour, succès Rituel, classement)',
-    r6.relicChoices === 0 && a6.runs === m6.runs && a6.wins === m6.wins && a6.xp === 0 && a6.day === Math.max(m6.day, r6.score) && a6.ach && a6.lbd,
-    'reliques=' + r6.relicChoices + ' cycles ' + m6.runs + '→' + a6.runs + ' victoires ' + m6.wins + '→' + a6.wins + ' xp=' + a6.xp + ' record du jour ' + m6.day + '→' + a6.day + ' (score ' + r6.score + ') Rituel=' + a6.ach + ' classement=' + a6.lbd);
+  check('parties : invariants tenus à chaque image (boss après les 3 vagues, proies et disparitions selon l’âge)', rs.every(r => !r.ob.err.length), rs.map(r => r.ob.err.slice(0, 3).join(' ; ')).filter(Boolean).join(' | '));
+  check('parties : la bulle et les ennemis restent dans l’îlot', rs.every(r => r.ob.maxR < 900 + 30 && r.ob.maxER < 900 + 60), rs.map(r => r.run + ' bulle ' + Math.round(r.ob.maxR) + ' ennemis ' + Math.round(r.ob.maxER)).join(', ') + ' (PR 900)');
+  check('naturelle : elle joue (absorptions, éclatés, îlot 1 fini)', r1.kills > 0 && r1.maxIsl >= 2, 'kills=' + r1.kills + ' eats=' + r1.eats + ' îlot max=' + r1.maxIsl);
+  check('naturelle : si elle finit, c’est une défaite signalée UNE fois', !r1.ended || (r1.ended === 1 && r1.win === false && r1.state === 'end'), 'fin=' + r1.ended + ' victoire=' + r1.win + ' état=' + r1.state);
+  for (const r of [r2, r3]) {
+    check(r.run + ' : VICTOIRE après les 8 îlots (__SIM_END(true) une seule fois)', r.ended === 1 && r.win === true && r.isl === 8 && r.state === 'end', 'fin=' + r.ended + ' victoire=' + r.win + ' îlot=' + r.isl + ' pas=' + r.steps);
+    check(r.run + ' : 8 boss, chacun abattu', K8.every(k => r.ob.boss[k] && r.ob.kills[k]), 'boss=' + Object.keys(r.ob.boss).join(',') + ' abattus=' + Object.keys(r.ob.kills).join(','));
+    check(r.run + ' : un bonus choisi à l’arrivée sur chaque îlot, parmi 3 cartes distinctes', r.picks.length === 8 && r.choix.length === 8 && r.choix.every(c => c.length === 3 && new Set(c).size === 3), 'bonus=' + r.picks.length + ' tirages=' + r.choix.map(c => c.length).join(''));
+    const ty = r.ob.types, permis = k => Object.keys(ty[k] || {}).every(t => { const a = k - ETL.indexOf(t) - 1; return a >= 0 && (a < 4 || t === 'mite'); });
+    check(r.run + ' : chaque îlot apporte son ennemi (le type de l’îlot k est là à l’îlot k), et rien d’autre que ses aînés', K8.every(k => ty[k] && ty[k][ETL[k - 1]]) && K8.every(permis),
+      K8.map(k => k + ':' + Object.keys(ty[k] || {}).join('+')).join(' '));
+  }
+  /* même graine, même partie : deux instances neuves, 20 000 pas, empreinte identique */
+  const dig = () => { const H = L.mkGame({ ref: REF, seed: 4242 }); H.win.__SIM_PICK = c => c[1]; H.ai(true); H.start(); H.steps(20000);
+    return H.call('[G.isl,G.ph,G.wave,G.score,G.kills,G.eats,G.picks.join(),G.p.x.toFixed(3),G.p.y.toFixed(3),G.en.length,G.eb.length,WD.seed].join("|")'); };
+  const d1 = dig(), d2 = dig();
+  check('déterminisme : même graine, même partie (20 000 pas, deux instances)', d1 === d2, d1 === d2 ? d1 : d1 + ' ≠ ' + d2);
 }
 
 /* =========================================================
-   SCÉNARIOS DE RÉGRESSION : un par défaut de l'audit
-   Chacun échoue sur le code d'origine (--ref=HEAD) et passe après correction.
+   SCÉNARIOS : chacun sur une instance neuve, graine 4242, premier bonus choisi
    ========================================================= */
 function scenario(name, fn) {
   let r;
-  try { call('Math.__seed(4242)'); win.__SIM_PICK = (c) => c[0]; r = fn(); }
+  try { const H = L.mkGame({ ref: REF, seed: 4242 }); H.win.__SIM_PICK = (c) => c[0]; r = fn(H); }
   catch (e) { r = { ok: false, detail: 'exception : ' + String(e && e.message || e) }; }
-  finally { win.__SIM = true; }
   check(name, r.ok, r.detail);
 }
-console.log('\n=== SCÉNARIOS DE RÉGRESSION ===');
+/* place la partie sur l'îlot k, sans le choix de bonus, à la phase voulue */
+const onIslet = (H, k, ph) => H.call(`G.state='play';G.tr=null;genIslet(G.seed,${k});G.isl=${k};islStart();G.pickIsl=${k};` + (ph ? `G.ph='${ph}';G.phT=0;` : ''));
+/* une arène vide et sans vague : pour poser soi-même ce qu'on mesure */
+const calme = H => H.call('G.en=[];G.eb=[];G.marks=[];G.wq=null;G.ph="pause";G.phT=-1e9;');
+console.log('\n=== SCÉNARIOS ===');
 
-/* n°1 — gt.js:64 : pas d'assertion arrière (Safari < 16.4 rejette tout le script) ; découpe identique */
-scenario('n°1 tip() : aucune assertion arrière, 1re phrase identique à la découpe d origine', () => {
-  const bad = ORDER.filter(f => /\(\?<[=!]/.test(readModule(f)));
-  start('bal', false);
-  const ids = call('Object.keys(TIPS)'), diffs = [];
-  for (const id of ids) {
-    const want = call('TIPS')[id].split(/(?<=[.!])\s/)[0];   /* référence : l'expression d'origine, évaluée par V8 */
-    call(`meta.tips={};G.gs.subs=[];tip(${JSON.stringify(id)})`);
-    const got = call('G.gs.subs.length?G.gs.subs[G.gs.subs.length-1].s:null');
-    if (got !== want) diffs.push(id);
+scenario('hooks : SIMF / __SIM / __SIM_INPUT / __SIM_PICK / __SIM_END utilisés par le jeu', H => ({
+  ok: H.call('typeof SIMF') === 'function' && ['__SIM_END', '__SIM_PICK', '__SIM_INPUT'].every(h => H.code.includes('window.' + h)) && H.code.includes('window.__SIM'),
+}));
+scenario('vieux navigateurs : aucun lookbehind ni groupe nommé de regex « (?< » dans les modules', H => {
+  const bad = H.order.filter(f => L.readModule(f, REF).includes('(?<'));
+  return { ok: bad.length === 0, detail: bad.join(', ') };
+});
+scenario('choix d’un bonus : à l’arrivée sur l’îlot 1, 3 cartes distinctes, celle choisie appliquée', H => {
+  let got = null; H.win.__SIM_PICK = c => (got = c.map(x => x.u.id), c[2]);
+  H.start(); H.steps(60);
+  const p = H.call('G.picks.join()'), own = JSON.parse(H.call('JSON.stringify(G.p.cards)'));
+  return { ok: got && got.length === 3 && new Set(got).size === 3 && p === got[2] && own[got[2]] === 1, detail: 'tirage=' + got + ' pris=' + p };
+});
+scenario('tirage : 3 cartes distinctes, pas de pacte avant l’îlot 3, fusion offerte avec ses ingrédients, pas de carte au maximum', H => {
+  H.start(); H.steps(30);
+  const r = JSON.parse(H.call(`(()=>{const P=G.p,o={bad:0,pact1:0,pact3:0,fus:0,max:0};P.cards={};
+    for(let i=0;i<400;i++){G.isl=1+(i%2);const c=rollCards();if(c.length!==3||new Set(c.map(x=>x.u.id)).size!==3)o.bad++;if(c.some(x=>x.k==='p'))o.pact1++;}
+    for(let i=0;i<400;i++){G.isl=3+(i%6);if(rollCards().some(x=>x.k==='p'))o.pact3++;}
+    G.isl=4;P.cards={twin:1,rapid:1};for(let i=0;i<200;i++)if(rollCards().some(x=>x.u.id==='hydra'))o.fus++;
+    P.cards={};for(const u of BON)P.cards[u.id]=u.max;P.cards.twin=0;for(let i=0;i<50;i++)for(const x of rollCards())if(x.k==='b'&&x.u.id!=='twin')o.max++;
+    return JSON.stringify(o);})()`));
+  return { ok: !r.bad && !r.pact1 && r.pact3 > 40 && r.fus > 60 && !r.max, detail: JSON.stringify(r) };
+});
+scenario('bonus : chaque bonus, fusion et pacte change vraiment la bulle', H => {
+  H.start(); H.steps(30);
+  const sans = JSON.parse(H.call(`(()=>{const out=[];for(const id in CARDS){const P=mkPlayer(),a=JSON.stringify(P);CARDS[id].u.f(P);if(JSON.stringify(P)===a)out.push(id);}return JSON.stringify(out);})()`));
+  const n = H.call('Object.keys(CARDS).length');
+  return { ok: n >= 40 && sans.length === 0, detail: n + ' cartes' + (sans.length ? ', sans effet : ' + sans.join(',') : '') };
+});
+scenario('power-ups : invincibilité 6 s au plus, les chronométrés expirent, réparation, bouclier, onde', H => {
+  H.start(); H.steps(30); calme(H);
+  const r = JSON.parse(H.call(`(()=>{const P=G.p,o={};o.invD=PU.inv.d;takePU({k:'inv'});o.inv=P.pu.inv;
+    takePU({k:'rapid'});const d=P.pu.rapid;for(let i=0;i<d+1;i++)updPUs();o.rapidFin=P.pu.rapid===undefined;
+    P.seg=P.segMax-1;takePU({k:'repair'});o.rep=P.seg===P.segMax;
+    P.inv=0;delete P.pu.inv;takePU({k:'shield'});const s0=P.seg;hurtPlayer(P.x+50,P.y);o.shield=P.seg===s0&&!P.pu.shield;
+    const e=mkEnemy('mite',P.x+120,P.y,{spawn:0});G.en.push(e);const h0=e.hp;takePU({k:'wave'});o.wave=e.hp<h0||e.dead;
+    return JSON.stringify(o);})()`));
+  return { ok: r.invD <= 360 && r.inv === r.invD && r.rapidFin && r.rep && r.shield && r.wave, detail: JSON.stringify(r) };
+});
+scenario('membrane : un coup = un segment, puis invulnérable ; au dernier, éclatement et __SIM_END(false) une fois', H => {
+  const fin = []; H.win.__SIM_END = w => fin.push(w);
+  H.start(); H.steps(30); calme(H);
+  const a = JSON.parse(H.call('(()=>{const P=G.p;P.inv=0;const s=P.seg;hurtPlayer(P.x+40,P.y);return JSON.stringify({d:s-P.seg,inv:P.inv});})()'));
+  H.call('G.p.seg=1;G.p.inv=0;G.p.second=0;hurtPlayer(G.p.x+40,G.p.y);');
+  const st = H.call('G.state'); H.steps(200);
+  return { ok: a.d === 1 && a.inv > 0 && st === 'dying' && fin.length === 1 && fin[0] === false && H.call('G.state') === 'end', detail: JSON.stringify(a) + ' état=' + st + ' fins=' + JSON.stringify(fin) };
+});
+scenario('second souffle : un coup fatal laisse à 1 segment, une fois par îlot', H => {
+  H.start(); H.steps(30); calme(H);
+  const r = H.call(`(()=>{const P=G.p;P.second=1;P.seg=1;P.inv=0;hurtPlayer(P.x+40,P.y);const a=P.seg===1&&G.state==='play'&&P.secUsed;
+    P.inv=0;hurtPlayer(P.x+40,P.y);const b=G.state==='dying';return a+','+b;})()`);
+  return { ok: r === 'true,true', detail: r };
+});
+scenario('échelle : un type rapetisse de ×1,4 par îlot d’écart, devient proie à 2, quitte le tirage à 4', H => {
+  H.start(); H.steps(30);
+  const r = JSON.parse(H.call(`(()=>{const bad=[];for(let k=1;k<=8;k++){G.isl=k;for(const t of ETL){const d=ET[t];if(d.isl>k)continue;const e=mkEnemy(t,0,0),a=k-d.isl;
+      if(Math.abs(e.r-d.r*Math.pow(1.4,-a))>1e-6||e.prey!==(a>=2))bad.push(k+':'+t);}}
+    const gone=[];for(let k=5;k<=8;k++){G.isl=k;G.wq={left:40,n:40,el:99,eld:true,prey:40,nextT:0};for(let i=0;i<300;i++){G.marks=[];spawnGroup();for(const m of G.marks)if(k-ET[m.t2].isl>=4)gone.push(k+':'+m.t2);}}
+    return JSON.stringify({bad,gone:gone.slice(0,5),GROW,PREYA,GONEA});})()`));
+  return { ok: !r.bad.length && !r.gone.length && r.GROW === 1.4 && r.PREYA === 2 && r.GONEA === 4, detail: JSON.stringify(r) };
+});
+scenario('lisibilité : le tir automatique ne vise que ce qui est à l’écran', H => {
+  H.start(); H.steps(30); calme(H);
+  const r = H.call(`(()=>{const P=G.p,hw=W/2/G.zoom,hh=H/2/G.zoom;const far=mkEnemy('mite',G.cx,G.cy+hh+60,{spawn:0});G.en=[far];
+    const a=findTarget(P.x,P.y,700)===null;const near=mkEnemy('mite',G.cx+hw*.5,G.cy,{spawn:0});G.en.push(near);const b=findTarget(P.x,P.y,700)===near;
+    return a+','+b+','+Math.round(Math.hypot(far.x-P.x,far.y-P.y));})()`);
+  return { ok: r.startsWith('true,true'), detail: 'hors écran ignoré, à l’écran visé ; distance du témoin hors écran ' + r.split(',')[2] };
+});
+scenario('apparitions : chaque groupe est annoncé au sol, à vue mais pas collé, dans l’îlot', H => {
+  H.start(); H.steps(30);
+  const r = JSON.parse(H.call(`(()=>{const P=G.p,o={n:0,proche:0,dehors:0,mur:0,court:0};for(let k=1;k<=8;k++){genIslet(G.seed,k);G.isl=k;islStart();G.pickIsl=k;
+    for(let i=0;i<60;i++){P.x=(R()-.5)*900;P.y=(R()-.5)*900;if(pointHit(P.x,P.y,30)||wallNear(P.x,P.y,30))continue;G.marks=[];G.wq={left:9,n:9,el:99,eld:true,prey:0,nextT:0};spawnGroup();
+      for(const m of G.marks){o.n++;const d=Math.hypot(m.x-P.x,m.y-P.y);if(d<290)o.proche++;if(Math.hypot(m.x,m.y)>PR-60)o.dehors++;if(wallNear(m.x,m.y,40))o.mur++;if(m.max<30)o.court++;}}}
+    return JSON.stringify(o);})()`));
+  return { ok: r.n > 300 && !r.proche && !r.dehors && !r.mur && !r.court, detail: JSON.stringify(r) };
+});
+scenario('déroulé : arrivée, 3 vagues séparées par des pauses, le boss, l’îlot nettoyé, puis le passage', H => {
+  H.ai(true); H.call('window.__SIM_BOOST=6'); H.call(OBS); const OB = H.call('window.__OBS');
+  H.start(); for (let i = 0; i < 60 * 60 * 6 && H.call('G.isl') < 2; i++) { H.STEP(); OB(); H.advance(1000 / 60); }
+  const ph = H.call('window.__OB.ph.join(" ")'), want = '1:arrive 1:wave 1:pause 1:wave 1:pause 1:wave 1:preboss 1:boss 1:clear';
+  return { ok: ph.startsWith(want) && H.call('G.isl') === 2, detail: ph.slice(0, 160) };
+});
+scenario('îlot nettoyé : un segment de membrane revient', H => {
+  H.start(); H.steps(30); H.call('G.p.inv=1e9;G.p.seg=G.p.segMax-2;G.en=[];G.eb=[];G.boss=null;islClear();');
+  const s0 = H.call('G.p.seg'); H.steps(150);
+  return { ok: H.call('G.p.seg') === s0 + 1, detail: s0 + ' → ' + H.call('G.p.seg') + ' / ' + H.call('G.p.segMax') };
+});
+scenario('passage d’îlot : îlot suivant généré, relique au centre, ennemis effacés, la bulle plus forte (×GROWD)', H => {
+  H.start(); H.steps(30); H.call('G.p.inv=1e9;G.en=[];G.eb=[];G.boss=null;islClear();');
+  const d0 = H.call('G.p.dmg'); H.steps(400, () => H.call('G.state') === 'trans');
+  const mid = H.call('G.state'); H.steps(300, () => H.call('G.state') === 'play' && H.call('G.isl') === 2);
+  const r = JSON.parse(H.call('JSON.stringify({isl:G.isl,wd:WD.isl,st:G.state,rel:!!WD.relic,en:G.en.length,eb:G.eb.length,pus:G.pus.length,dmg:G.p.dmg,biome:G.biome})'));
+  return { ok: mid === 'trans' && r.isl === 2 && r.wd === 2 && r.st === 'play' && r.rel && !r.en && !r.eb && Math.abs(r.dmg / d0 - 1.2) < 1e-9 && r.biome === 'floral', detail: 'pendant=' + mid + ' ' + JSON.stringify(r) };
+});
+scenario('passage d’îlot : ni le compteur de diagnostic ni la météo de l’îlot quitté ne passent dans le suivant', H => {
+  H.start(); H.call('meta.fps=true;G.p.inv=1e9;'); H.steps(30); H.call('render();G.en=[];G.eb=[];G.boss=null;islClear();');
+  H.call('var __TX=[];(()=>{const f=ctx.fillText;ctx.fillText=function(t){__TX.push(String(t));return f.apply(this,arguments);};})();');
+  const txt = () => H.call('(()=>{const r=__TX.join("\\n");__TX.length=0;return r;})()');
+  /* juste avant la copie (trSnap à TR_SNAP), puis une fois la copie faite */
+  H.steps(500, () => H.call('G.state==="trans"&&G.tr.t===TR_SNAP-1')); txt(); H.call('render()'); const avant = txt();
+  const w1 = H.call('WEA.filter(p=>p.t).map(p=>p.t).join()');
+  H.steps(40, () => H.call('G.tr&&G.tr.t>TR_SNAP+20')); txt(); H.call('render()'); const apres = txt();
+  H.steps(300, () => H.call('G.state==="play"&&G.isl===2')); H.call('render()');
+  const w2 = JSON.parse(H.call('JSON.stringify(WEA.filter(p=>p.t).map(p=>p.t))')), fl = H.call('BIO.floral.wea'), reste = w2.filter(t => t !== fl).length;
+  return { ok: !/DPR /.test(avant) && /DPR /.test(apres) && /pollen/.test(w1) && w2.length > 0 && reste === 0,
+    detail: 'compteur avant la copie : ' + /DPR /.test(avant) + ', après : ' + /DPR /.test(apres) + ' ; météo îlot 2 : ' + reste + '/' + w2.length + ' d’un autre îlot' };
+});
+scenario('îlots : genIslet est déterministe et ne dépend ni de Math.random ni de l’algorithme de tri', H => {
+  const dg = `(k=>{genIslet(777,k);const h=[WD.seed,WD.wall.join('')];for(let cx=-COFF;cx<COFF;cx++)for(let cy=-COFF;cy<COFF;cy++){const c=getChunk(cx,cy);if(!c)continue;for(const o of c.obs)h.push([o.k,Math.round(o.x),Math.round(o.y),Math.round(o.r||o.w),o.brk||0,o.pu?1:0].join(','));h.push(c.live.length);}
+    let s=0;const t=h.join(';');for(let i=0;i<t.length;i++)s=(Math.imul(s,31)+t.charCodeAt(i))|0;return s;})`;
+  const a = [], b = [], c = [];
+  for (const k of K8) a.push(H.call(dg + '(' + k + ')'));
+  H.call('for(let i=0;i<1000;i++)Math.random();');
+  for (const k of K8) b.push(H.call(dg + '(' + k + ')'));
+  /* un autre algorithme de tri (correct, mais pas celui de V8) ne doit rien changer */
+  H.call(`Array.prototype.__s=Array.prototype.sort;Array.prototype.sort=function(f){const a=this.slice().reverse();f=f||((x,y)=>String(x)<String(y)?-1:String(x)>String(y)?1:0);
+    for(let i=1;i<a.length;i++){const v=a[i];let j=i-1;while(j>=0&&f(a[j],v)>0){a[j+1]=a[j];j--;}a[j+1]=v;}for(let i=0;i<a.length;i++)this[i]=a[i];return this;};ISLM.clear();ISLS=-1;`);
+  try { for (const k of K8) c.push(H.call(dg + '(' + k + ')')); } finally { H.call('Array.prototype.sort=Array.prototype.__s;'); }
+  return { ok: a.join() === b.join() && a.join() === c.join() && new Set(a).size === 8, detail: a.join(',') };
+});
+scenario('gonfler : jauge pleine, la bulle grossit et avale l’ennemi plus petit au contact', H => {
+  H.start(); H.steps(30); calme(H);
+  const r = JSON.parse(H.call(`(()=>{const P=G.p,r0=P.r;P.gauge=1;tryGonfle();const on=P.gon>0;G.en=[mkEnemy('spike',P.x+P.r*2.2,P.y,{spawn:0})];const e0=G.eats;
+    for(let i=0;i<30;i++)step();return JSON.stringify({on,r0,r:P.r,eats:G.eats-e0});})()`));
+  return { ok: r.on && r.r > r.r0 * 1.5 && r.eats >= 1, detail: JSON.stringify(r) };
+});
+scenario('décor cassable : il cède sous les tirs, et celui qui porte un power-up le lâche', H => {
+  H.start(); H.steps(30);
+  const r = JSON.parse(H.call(`(()=>{let o=null;for(let cx=-COFF;cx<COFF&&!o;cx++)for(let cy=-COFF;cy<COFF&&!o;cy++){const c=getChunk(cx,cy);if(c)for(const q of c.obs)if(q.brk&&q.pu){o=q;break;}}
+    if(!o)return JSON.stringify({o:0});const n0=G.pus.length;let i=0;while(!o.gone&&i++<500)hitObs(o,1);return JSON.stringify({o:1,coups:i,parti:!!o.gone,pu:G.pus.length-n0,reste:pointHit(o.cx,o.cy,1)===o});})()`));
+  return { ok: r.o && r.parti && r.pu === 1 && !r.reste, detail: JSON.stringify(r) };
+});
+scenario('boss : tout coup qui n’est pas un tir (charge, rayon, rafale, couronne) est annoncé, et assez tôt', H => {
+  H.start(); H.steps(30);
+  /* chaque télégraphe est noté à sa création ; une charge (B.st 1 → 2) doit suivre une bande 'path' */
+  H.call(`window.__TL=[];const __t=tele;tele=function(o){window.__TL.push({ty:o.ty,w:o.warn,k:G.boss&&G.boss.k,ph:G.boss&&G.boss.phase});return __t(o);};`);
+  const out = [], bad = [];
+  for (const k of K8) {
+    onIslet(H, k, 'preboss'); H.call('G.phT=99;G.p.inv=1e9;window.__TL=[];window.__CH=0;window.__PA=0;');
+    let st0 = 0;
+    for (let n = 1; n < 60 * 50; n++) { H.STEP(); H.advance(1000 / 60);
+      if (n === 60 * 25) H.call('if(G.boss)G.boss.hp=G.boss.mhp*.45'); if (n === 60 * 40 && k === 8) H.call('if(G.boss)G.boss.hp=G.boss.mhp*.3');
+      const st = H.call('G.boss?G.boss.st:0'); if (st === 2 && st0 !== 2 && H.call('!!(G.boss&&G.boss.k<=2)')) H.call('window.__CH++'); st0 = st; }
+    const tl = JSON.parse(H.call('JSON.stringify(window.__TL)')), path = tl.filter(t => t.ty === 'path').length, ch = H.call('window.__CH');
+    for (const t of tl) if (t.w < 18) bad.push(k + ':' + t.ty + ' ' + t.w + ' pas');
+    if (ch > path) bad.push(k + ': ' + ch + ' charges pour ' + path + ' bandes');
+    out.push(k + ':' + tl.length + (ch ? '/' + ch + 'ch' : ''));
   }
-  return { ok: !bad.length && !diffs.length, detail: 'modules avec (?<= : [' + bad.join(',') + '] ; astuces divergentes : [' + diffs.join(',') + '] sur ' + ids.length };
+  /* les boss à coups spéciaux (pas seulement des tirs) les annoncent : 1 et 2 chargent, 4 et 8 tirent des rayons, 5 couronne, 6 rafales */
+  const avec = out.filter(s => +s.split(':')[1].split('/')[0] > 0).map(s => +s.split(':')[0]);
+  return { ok: !bad.length && [1, 2, 4, 5, 6, 8].every(k => avec.includes(k)), detail: 'télégraphes par boss ' + out.join(' ') + (bad.length ? ' ; ' + bad.slice(0, 4).join(', ') : '') };
 });
 
-/* n°2 — gx.js:179 : propriété du duel, touches 1 à 9, sans 2e compétence.
-   (1) si l'énergie baisse, un effet observable doit avoir changé ; (2) une touche au-delà des boutons
-   affichés ne change rien ; (3) l'énergie affichée suit l'énergie réelle. */
-scenario('n°2 duel : touche qui débite ⇒ effet observable ; touche hors boutons ⇒ rien ; écran synchrone', () => {
-  const obs = () => call('JSON.stringify({f:DU.foes.map(f=>[f.hp,f.sh,f.rev,f.frozen||0,f.grouped||0,JSON.stringify(f.st)]),me:[DU.me.hp,DU.me.sh,DU.me.crit,DU.me.bonus,DU.me.evade,DU.me.drones,DU.me.ult,DU.me.cd.join()],log:DU.log.join("|")})');
-  const bad = [], seen = [];
-  let nBtn = 0, effective = 0;
-  for (let k = 1; k <= 9; k++) {
-    start('bal', false);
-    if (!call('WD.hunt.length')) return { ok: false, detail: 'aucun chasseur généré' };
-    call('duelStart(0)');
-    if (call('G.p.sk[1]') !== null) return { ok: false, detail: 'P.sk[1] non nul' };
-    nBtn = (call("$('dvAct').innerHTML").match(/class="dact"/g) || []).length;
-    const en0 = call('DU.me.en'), o0 = obs();
-    key('Digit' + k);
-    const en1 = call('DU.me.en'), o1 = obs(), pips = (call("$('dvMe').innerHTML").match(/class="on"/g) || []).length;
-    call('duelFlee()');
-    seen.push(k + ':' + en0 + '→' + en1 + (o1 !== o0 ? '+effet' : ''));
-    if (en1 < en0 && o1 === o0) bad.push('touche ' + k + ' débite sans effet');
-    if (en1 < en0 && o1 !== o0) effective++;
-    if (k > nBtn && (en1 !== en0 || o1 !== o0)) bad.push('touche ' + k + ' agit au-delà des ' + nBtn + ' boutons');
-    if (pips !== en1) bad.push('touche ' + k + ' : écran ' + pips + ' pastilles pour ' + en1 + ' d énergie');
-  }
-  if (!effective) bad.push('aucune touche n a eu d effet (test vide)');
-  return { ok: !bad.length, detail: nBtn + ' boutons ; ' + seen.join(' ') + (bad.length ? ' ; ÉCHECS : ' + bad.join(', ') : '') };
+/* ---------- interface réelle (hors mode simulation) ---------- */
+scenario('écran de choix : 1 à 3 choisissent, R relance, Espace capturé à l’appui ET au relâché', H => {
+  H.boot(); H.start(); H.steps(30);
+  H.noSim('G.choices=rollCards();G.state="pick";G.rerolls=1;renderPick();show("ov-evo");');
+  const html = H.doc.getElementById('evoCards').innerHTML, nb = (html.match(/data-i=/g) || []).length;
+  H.key('KeyR'); const rr = H.call('G.rerolls') === 0 && H.call('G.choices.length') === 3;
+  const pdDown = H.key('Space'); let pdUp = 0; H.win._fire('keyup', { code: 'Space', preventDefault() { pdUp++; } });
+  const n0 = H.call('G.picks.length'), id = H.call('G.choices[1].u.id'); H.noSim('onKey({code:"Digit2",repeat:false,preventDefault(){}})');
+  const ok = nb === 3 && !/undefined|NaN/.test(html) && rr && pdDown >= 1 && pdUp >= 1 && H.call('G.state') === 'play' && H.call('G.picks.length') === n0 + 1 && H.call('G.picks[G.picks.length-1]') === id;
+  return { ok, detail: 'cartes=' + nb + ' relance=' + rr + ' Espace appui/relâché=' + pdDown + '/' + pdUp + ' état=' + H.call('G.state') };
+});
+scenario('pause : Échap fige la partie et dit où l’on en est ; Échap la reprend', H => {
+  H.boot(); H.start(); H.steps(30); H.call('G.state="play"');
+  H.key('Escape'); const st = H.call('G.state'), info = H.doc.getElementById('pauseInfo').textContent, fige = 'G.time+","+G.p.x+","+G.en.map(e=>e.x).join()';
+  const t = H.call(fige); H.steps(30); const t2 = H.call(fige);
+  H.key('Escape');
+  return { ok: st === 'pause' && /Îlot 1 sur 8/.test(info) && t === t2 && H.call('G.state') === 'play', detail: st + ' « ' + info + ' »' };
+});
+scenario('fin de partie : l’écran de fin, les records et le menu se remplissent sans « undefined » ni « NaN »', H => {
+  H.boot(); H.start(); H.steps(300);
+  H.noSim('endRun(false)'); H.advance(1000);
+  const end = H.doc.getElementById('endT').textContent + ' ' + H.doc.getElementById('endS').textContent + ' ' + H.doc.getElementById('endStats').innerHTML + H.doc.getElementById('endBuild').innerHTML;
+  H.noSim('renderLB();renderMenu()');
+  const lb = H.doc.getElementById('lbBody').innerHTML, mn = H.doc.getElementById('mStats').innerHTML;
+  const ok = /Éclaté/.test(end) && !/undefined|NaN/.test(end + lb + mn) && /Îlot 1 \/ 8/.test(lb) && /partie/.test(mn);
+  return { ok, detail: end.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 140) };
+});
+scenario('sauvegarde abîmée : le menu s’affiche et une partie se joue', () => {
+  const H = L.mkGame({ ref: REF, seed: 4242, storage: { bulge3_meta: JSON.stringify({ lb: [null, { s: 'x' }, { s: 120, i: 2, w: 0, d: 600 }], runs: 'x', best: {}, mute: 1 }) } });
+  H.win.__SIM_PICK = c => c[0];
+  H.boot(); H.noSim('renderMenu();renderLB()'); const lb = H.doc.getElementById('lbBody').innerHTML, mn = H.doc.getElementById('mStats').innerHTML;
+  H.start(); H.ai(false); H.steps(600);
+  return { ok: H.call('G.t') >= 600 && !/undefined|NaN/.test(lb + mn) && /120/.test(lb), detail: 'meta=' + H.call('JSON.stringify(meta)').slice(0, 120) };
+});
+scenario('tactile : pointercancel sur le bouton de dash le relâche sans dasher', H => {
+  H.boot(); H.start(); H.steps(30); H.call('inp.touch=true;G.state="play";G.p.dashT=0;');
+  const b = JSON.parse(H.call('JSON.stringify(hudHit(0,0,()=>{const b=dashBtn();return{x:b.x+SAFE.l,y:b.y+SAFE.t};}))'));
+  const cv = H.doc.getElementById('cv'), ev = (t) => cv._fire(t, { pointerType: 'touch', pointerId: 7, clientX: b.x, clientY: b.y, preventDefault() {} });
+  ev('pointerdown'); const pris = H.call('!!inp.B'); ev('pointercancel');
+  return { ok: pris && H.call('inp.B') === null && H.call('G.p.dashT') === 0, detail: 'pris=' + pris + ' relâché=' + (H.call('inp.B') === null) + ' dashT=' + H.call('G.p.dashT') };
+});
+scenario('rendu : render() sans exception dans chaque état (menu, jeu, choix, pause, boss, passage, éclatement, fin), compteur allumé', H => {
+  H.boot(); const done = [];
+  const R = (n) => { H.call('render()'); done.push(n); };
+  R('menu'); H.start(); H.call('meta.fps=true'); H.steps(200); R('jeu');
+  H.call('G.choices=rollCards();G.state="pick"'); R('choix'); H.call('G.state="pause"'); R('pause'); H.call('G.state="play"');
+  onIslet(H, 8, 'preboss'); H.call('G.phT=99;G.p.inv=1e9'); H.steps(200); R('boss');
+  H.call('G.boss=null;G.en=[];islClear();'); H.steps(400, () => H.call('G.state==="trans"&&G.tr.t>TR_SNAP+20')); R('passage');
+  H.steps(200, () => H.call('G.state==="play"'));
+  H.call('G.p.inv=0;G.p.seg=1;G.p.second=0;G.p.pu={};hurtPlayer(G.p.x+30,G.p.y)'); H.steps(20); R('éclatement'); H.steps(200); R('fin');
+  return { ok: done.length === 8 && H.call('G.state') === 'end', detail: done.join(', ') };
 });
 
-/* n°3 — g4.js:53/104 : R ne relance pas les dons d'un autel (même avec G.evoMut périmé) ; relance normale intacte */
-scenario('n°3 autel : R ne remplace pas les dons ni ne consomme de relance', () => {
-  start('bal', false);
-  call('G.p.rerolls=2;G.evoMut=true');             /* evoMut périmé : dernière évolution = mutation */
-  noSim('openAltar(-1)');
-  const before = call('G.choices.map(c=>c.u.id).join(",")');
-  key('KeyR');
-  const after = call('G.choices.map(c=>c.u.id).join(",")'), rr = call('G.p.rerolls'), st = call('G.state');
-  call('pickEvo(0)');
-  /* contrôle : la relance d'une évolution de niveau fonctionne toujours */
-  call('G.pendingEvo=[2]'); noSim('openEvo()'); key('KeyR'); const rr2 = call('G.p.rerolls'); call('pickEvo(0)');
-  return { ok: st === 'evo' && before === after && rr === 2 && rr2 === 1,
-    detail: 'dons [' + before + '] → [' + after + '], relances 2→' + rr + ', état=' + st + ' ; relance de niveau 2→' + rr2 };
-});
-
-/* n°4 — gc.js:93 : une évolution prise pendant l'ultime survit à sa fin */
-scenario('n°4 ultimes : évolutions prises pendant Hypervitesse / Faille temporelle conservées', () => {
-  start('scout', false);
-  call('G.p.inv=1e9');
-  const f0 = call('G.p.fireI'), s0 = call('G.p.spd');
-  call('G.p.ultC=100;gcUlt();applyChoice({mut:false,u:UPG.find(u=>u.id==="rapid")});applyChoice({mut:false,u:UPG.find(u=>u.id==="speed")});G.p.ultA.t=1');
-  steps(1);
-  const f1 = call('G.p.fireI'), s1 = call('G.p.spd'), endS = call('G.p.ultA===null');
-  start('spectre', false);
-  call('G.p.inv=1e9');
-  const c0 = call('G.p.crit');
-  call('G.p.ultC=100;gcUlt();applyChoice({mut:false,u:UPG.find(u=>u.id==="crit")});G.p.ultA.t=1');
-  steps(1);
-  const c1 = call('G.p.crit'), endC = call('G.p.ultA===null');
-  const near = (a, b) => Math.abs(a - b) < 1e-9;
-  return { ok: endS && endC && near(f1, f0 / 1.25) && near(s1, s0 * 1.12) && near(c1, c0 + .1),
-    detail: 'éclaireur cadence ' + f0.toFixed(3) + '→' + f1.toFixed(3) + ' (attendu ' + (f0 / 1.25).toFixed(3) + '), vitesse ' + s0.toFixed(3) + '→' + s1.toFixed(3) + ' (attendu ' + (s0 * 1.12).toFixed(3) + ') ; spectre crit ' + c0.toFixed(3) + '→' + c1.toFixed(3) + ' (attendu ' + (c0 + .1).toFixed(3) + ')' };
-});
-
-/* n°5 — gc.js:146 : le don de faille n'est pas perdu si le jeu est en pause au moment prévu */
-function riftSeal(pauseMs) {
-  start('bal', false);
-  if (!call('WD.rifts.length')) return null;
-  call('{const f=WD.rifts[0],P=G.p;P.x=P.px=f.x;P.y=P.py=f.y;P.inv=1e9;G.gc.dorm=false;G.gc.rift={x:f.x,y:f.y,r:430,t:1199,dur:1200,i:0};}');
-  steps(1);
-  const sealed = call('!!G.gc.riftDone[0]');
-  if (pauseMs) { call('togglePause()'); advance(pauseMs); call('togglePause()'); }
-  steps(90);
-  return { sealed, sk1: call('G.p.sk[1]&&G.p.sk[1].id') };
-}
-scenario('n°5 faille : don d autel reçu même après une pause juste après le scellement', () => {
-  const a = riftSeal(0), b = riftSeal(2000);
-  if (!a) return { ok: false, detail: 'aucune faille générée' };
-  return { ok: a.sealed && b.sealed && !!a.sk1 && !!b.sk1,
-    detail: 'sans pause : scellée=' + a.sealed + ' don=' + a.sk1 + ' ; pause 2 s : scellée=' + b.sealed + ' don=' + b.sk1 };
-});
-
-/* n°6 — g4.js:48/208 : Espace n'active pas le bouton focalisé de l'écran d'évolution (NON REPRODUIT EN HEADLESS :
-   l'activation d'un bouton par Espace est un comportement du navigateur ; on vérifie que preventDefault est appelé) */
-scenario('n°6 évolution : Espace neutralisé (keydown ET keyup) — assertion, clic navigateur non reproduit', () => {
-  start('bal', false);
-  call('G.pendingEvo=[2]'); noSim('openEvo()');
-  const st = call('G.state'), pdDown = key('Space');
-  let pdUp = 0; WINL.fire('keyup', { code: 'Space', preventDefault() { pdUp++; } });
-  const still = call('G.state');
-  call('pickEvo(0)');
-  const pdPlay = key('Space');   /* contrôle : en jeu, Espace reste le dash (et reste bloqué pour le défilement) */
-  return { ok: st === 'evo' && still === 'evo' && pdDown > 0 && pdUp > 0 && pdPlay > 0,
-    detail: 'état=' + st + ', preventDefault keydown=' + pdDown + ' keyup=' + pdUp + ', en jeu=' + pdPlay };
-});
-
-/* n°7 — g4.js:53 : touche 3 choisit le 3e don d'autel */
-scenario('n°7 autel : la touche 3 choisit le 3e don', () => {
-  start('bal', false);
-  noSim('openAltar(-1)');
-  const n = call('G.choices.length'), third = call('G.choices[2]&&G.choices[2].u.id'), pgc = call('G.choices[3]&&G.choices[3].u.id'), l0 = call('G.p.sk[0].l');
-  key('Digit3');
-  const st = call('G.state'), l1 = call('G.p.sk[0].l');
-  if (st !== 'play') call('pickEvo(0)');
-  /* Depuis le 29/09/2026 l'autel affiche 4 cartes : les 3 CHOIX, plus la carte « Autres
-     compétences » — les 6 a 8 competences nouvelles sont PAGINEES, sinon elles ne tiennent pas sur
-     un ecran de 411 px (mesure : test/choix-ecran.js, chromium, 4 cartes = 700 px pour 700 px
-     visibles). Ce que ce test defend n'a pas bouge : la touche 3 prend la 3e carte, et cette 3e
-     carte est l'AMELIORATION de la competence du joueur (niveau 1 -> 2). Une regression qui
-     remplacerait la 3e carte par une competence nouvelle echoue donc toujours ici. */
-  return { ok: n === 4 && pgc === 'alt_page' && st === 'play' && third === 'sk_' + call('G.p.sk[0].id') && l1 === l0 + 1,
-    detail: n + ' cartes dont la 4e=' + pgc + ', 3e=' + third + ', état après touche 3=' + st + ', niveau compétence ' + l0 + '→' + l1 };
-});
-
-/* n°8 — gx.js:157 : l'ultime Spectre (crit=1) ne rend pas tous les coups du duel critiques */
-scenario('n°8 duel : Faille temporelle ne rend pas 100 % des coups critiques', () => {
-  start('spectre', false);
-  call('G.p.inv=1e9;G.p.ultC=100;gcUlt();duelStart(0);DU.foes[0].hp=DU.foes[0].mhp=1e12');
-  const base = call('G.p.bCrit');
-  let n = 0; const N = 400;
-  for (let i = 0; i < N; i++) { call('DU.foes[0].fl=null;DU.me.crit=0;dHit(DU.foes[0],.001,true,true)'); if (call('DU.foes[0].fl') === 'Critique') n++; }
-  call('duelFlee()');
-  return { ok: n < N * .5, detail: n + '/' + N + ' coups critiques (chance hors ultime ' + base.toFixed(2) + ')' };
-});
-
-/* n°9 — gx.js:27-28 : placement des souvenirs/chasseurs indépendant de l'algorithme de tri du moteur */
-scenario('n°9 défi du jour : souvenirs et chasseurs identiques avec un autre algorithme de tri', () => {
-  const snap = () => call('JSON.stringify({scn:WD.scn.map(s=>[s.t,Math.round(s.x),Math.round(s.y)]),hunt:WD.hunt.map(h=>[h.n,h.a,Math.round(h.hx),Math.round(h.hy)])})');
-  const ctl = () => call('JSON.stringify({h:WD.hearts,a:WD.alts,r:WD.rifts,l:WD.lms.length})');
-  /* tri fusion stable : même résultat que V8 pour tout comparateur cohérent, autre séquence d'appels */
-  call(`var __nativeSort=Array.prototype.sort,__mergeSort=function(cmp){cmp=cmp||((a,b)=>{a=String(a);b=String(b);return a<b?-1:a>b?1:0;});
-    const ms=a=>{if(a.length<2)return a;const m=a.length>>1,l=ms(a.slice(0,m)),r=ms(a.slice(m)),o=[];let i=0,j=0;
-      while(i<l.length&&j<r.length)o.push(cmp(r[j],l[i])<0?r[j++]:l[i++]);while(i<l.length)o.push(l[i++]);while(j<r.length)o.push(r[j++]);return o;};
-    const s=ms(Array.from(this));for(let k=0;k<s.length;k++)this[k]=s[k];return this;};`);
-  const diff = [], ctlDiff = [];
-  for (const seed of [20260927, 7, 123456789, 424242, 99]) {
-    call(`genWorld(${seed})`); const a = snap(), ca = ctl();
-    call('Array.prototype.sort=__mergeSort'); try { call(`genWorld(${seed})`); } finally { call('Array.prototype.sort=__nativeSort'); }
-    const b = snap(), cb = ctl();
-    if (a !== b) diff.push(seed); if (ca !== cb) ctlDiff.push(seed);
-  }
-  call('WD.used=true');
-  /* mêmes sites de la famille : missions du jour (gs.js:80) et dons d'autel (gc.js:154), même graine, deux tris */
-  start('bal', false);
-  const mis = () => call('meta.mis=null;misToday().list.map(m=>m.id+":"+m.n).join(",")');
-  const alt = () => call('G.p.sk[1]=null;srand(77);openAltar(-1);G.choices.map(c=>c.u.id).join(",")');
-  const m1 = mis(), a1 = alt();
-  call('Array.prototype.sort=__mergeSort'); let m2, a2; try { m2 = mis(); a2 = alt(); } finally { call('Array.prototype.sort=__nativeSort'); }
-  const other = (m1 !== m2 ? ['missions [' + m1 + '] vs [' + m2 + ']'] : []).concat(a1 !== a2 ? ['autel [' + a1 + '] vs [' + a2 + ']'] : []);
-  return { ok: !diff.length && !ctlDiff.length && !other.length, detail: 'graines divergentes (souvenirs/chasseurs) : [' + diff.join(',') + '] ; témoin cœurs/autels/failles divergents : [' + ctlDiff.join(',') + '] ; missions/autel divergents : [' + other.join(' ; ') + ']' };
-});
-
-/* n°10 — gt.js:51 : le défi du jour a failles et chasseurs même pour un profil neuf */
-scenario('n°10 défi du jour : failles et chasseurs actifs pour un profil neuf', () => {
-  const runs = call('meta.runs');
-  call('meta.runs=0'); start('bal', true);
-  const dG = call('G.gc.dorm'), dX = call('G.gx.dorm');
-  start('bal', false);
-  const nG = call('G.gc.dorm'), nX = call('G.gx.dorm');
-  call('meta.runs=' + runs);
-  return { ok: dG === false && dX === false && nG === true && nX === true,
-    detail: 'défi : dorm failles=' + dG + ' chasseurs=' + dX + ' ; 1er cycle normal (témoin) : ' + nG + '/' + nX };
-});
-
-/* n°11 — g4.js:205 : pointercancel sur le bouton d'ultime ne déclenche rien ; pointerup déclenche */
-scenario('n°11 tactile : pointercancel ne lance pas l ultime, pointerup oui', () => {
-  const cv = doc.getElementById('cv');
-  const touch = (type, id) => { const S = call('(()=>{inp.touch=true;return gcSlots()[2];})()'); cv._fire(type, { type, pointerType: 'touch', pointerId: id, clientX: S.x, clientY: S.y, button: 0, preventDefault() {} }); };
-  start('bal', false);
-  call('G.p.ultC=100');
-  touch('pointerdown', 7); const held = call('inp.B&&inp.B.b');
-  touch('pointercancel', 7);
-  const afterCancel = { ultC: call('G.p.ultC'), ultA: call('!!G.p.ultA'), B: call('inp.B') };
-  touch('pointerdown', 8); touch('pointerup', 8);
-  const afterUp = { ultC: call('G.p.ultC'), ultA: call('!!G.p.ultA') };
-  call('inp.touch=false;inp.B=null');
-  return { ok: held === 'ult' && afterCancel.ultC === 100 && !afterCancel.ultA && afterCancel.B === null && afterUp.ultA,
-    detail: 'appui=' + held + ' ; après pointercancel ultC=' + afterCancel.ultC + ' ultime lancé=' + afterCancel.ultA + ' ; après pointerup ultime lancé=' + afterUp.ultA };
-});
-
-/* résiduel (famille « écran non rafraîchi ») — gi.js:273 : vider le nom du tank enregistre BULGE-01, le champ doit l'afficher */
-scenario('résiduel hangar : nom vidé → le champ affiche le nom réellement enregistré', () => {
-  const el = doc.getElementById('hgName'), old = call('meta.tank.name');
-  el.value = ''; el.onchange({ target: el });
-  const stored = call('meta.tank.name'), shown = el.value;
-  call('meta.tank.name=' + JSON.stringify(old));
-  return { ok: stored === shown, detail: 'enregistré=' + JSON.stringify(stored) + ' affiché=' + JSON.stringify(shown) };
-});
-
-/* résiduel (famille « débit sans effet ») — gx.js:171/265 : « Analyser » déjà sans effet (cible révélée ET critique armé)
-   => bouton désactivé et aucun débit ; redevient disponible dès que le critique est consommé ou sur une cible non révélée */
-scenario('résiduel duel : Analyser sans effet ⇒ bouton désactivé, aucun débit ; propriété débit ⇒ effet (hors journal)', () => {
-  const st = () => call('JSON.stringify({f:DU.foes.map(f=>[f.hp,f.sh,f.rev,f.frozen||0,f.grouped||0,JSON.stringify(f.st)]),me:[DU.me.hp,DU.me.sh,DU.me.crit,DU.me.bonus,DU.me.evade,DU.me.drones,DU.me.ult,DU.me.cd.join()]})');
-  const scanOff = () => /data-a="scan" disabled/.test(call("$('dvAct').innerHTML"));
-  const bad = [], log = [];
-  const act = (a, label) => { const e0 = call('DU.me.en'), s0 = st(); call('duelAct(' + JSON.stringify(a) + ')'); const e1 = call('DU.me.en'), s1 = st();
-    log.push(label + ' ' + e0 + '→' + e1 + (s1 !== s0 ? '+effet' : ''));
-    if (e1 < e0 && s1 === s0) bad.push(label + ' débite sans effet'); return { e0, e1, eff: s1 !== s0 }; };
-  start('bal', false);
-  call('duelStart(0);DU.sel=0;renderDuel()');
-  if (scanOff()) bad.push('bouton désactivé alors que la cible n est pas révélée');
-  const a1 = act('scan', 'analyse1');
-  if (!(a1.e1 === a1.e0 - 1 && a1.eff)) bad.push('1re analyse : coût ou effet modifié');
-  const off = scanOff(); log.push('bouton après analyse=' + (off ? 'désactivé' : 'actif'));
-  if (!off) bad.push('bouton actif alors qu Analyser n a plus d effet');
-  act('scan', 'analyse2');
-  act('tir', 'tir(consomme le critique)');
-  const on2 = !scanOff(); log.push('bouton après tir=' + (on2 ? 'actif' : 'désactivé'));
-  if (!on2) bad.push('bouton non réactivé après consommation du critique');
-  const a3 = act('scan', 'analyse3');
-  if (!(a3.e1 === a3.e0 - 1 && a3.eff)) bad.push('analyse après tir : coût ou effet modifié');
-  call('duelFlee()');
-  return { ok: !bad.length, detail: log.join(' ; ') + (bad.length ? ' ; ÉCHECS : ' + bad.join(', ') : '') };
-});
-
-/* résiduel (famille « champ sans garde ») — gi.js:263/268, gx.js:136 : sauvegarde altérée avec it.bi hors bornes */
-scenario('résiduel sauvegarde : équipement à bi hors bornes ⇒ ni exception ni affichage faux (hangar, duel)', () => {
-  const save = call('JSON.stringify({eq:meta.eq,inv:meta.inv})'), bad = [], seen = [];
-  const noJunk = (where, html) => { if (/undefined|NaN/.test(html)) bad.push(where + ' affiche undefined/NaN'); };
-  try {
-    call('{const c=giItem(meta.eq.canon);c.bi=99;meta.inv.push({id:99999,s:"noyau",r:0,lvl:1,up:0,bi:99,aff:[],u:null});meta.eq.noyau=99999;}');
-    try { call('renderHangar()'); seen.push('hangar rendu'); } catch (e) { bad.push('hangar : ' + e.message); }
-    for (const id of ['hgSlots', 'hgStats', 'hgIdx']) noJunk(id, doc.getElementById(id).innerHTML);
-    seen.push('emplacements=' + (doc.getElementById('hgSlots').innerHTML.match(/class="sn">[^<]*/g) || []).map(s => s.slice(11)).join('|'));
-    try { start('bal', false); call('duelStart(0)'); seen.push('duel canon=' + call('DK[DU.kind].n')); noJunk('duel', call("$('dvAct').innerHTML")); call('duelFlee()'); }
-    catch (e) { bad.push('duel : ' + e.message); }
-  } finally { call('{const s=' + save + ';meta.eq=s.eq;meta.inv=s.inv;}'); call('DU=null;if(G)G.state="play"'); }
-  return { ok: !bad.length, detail: seen.join(' ; ') + (bad.length ? ' ; ÉCHECS : ' + bad.join(', ') : '') };
-});
-
-/* résiduel (famille « champ sans garde ») — gs.js:85/194 : sauvegarde altérée meta.mis avec une mission inconnue */
-scenario('résiduel sauvegarde : mission inconnue dans meta.mis ⇒ ni exception ni affichage faux (menu, partie)', () => {
-  const save = call('JSON.stringify(meta.mis)'), bad = [], seen = [];
-  try {
-    call('meta.mis={day:todayKey(),list:[{id:"ancienne_mission",n:5,r:30,p:0,done:0},{id:"kill",n:200,r:30,p:0,done:0}]}');
-    try { call('renderMenu()'); } catch (e) { bad.push('menu : ' + e.message); }
-    const html = call("$('mMis').innerHTML");
-    if (/undefined|NaN/.test(html)) bad.push('menu affiche undefined/NaN');
-    if (!/Absorbe 200 ennemis/.test(html)) bad.push('mission saine absente du menu');
-    seen.push('menu : ' + (html.match(/<span>[^<]*<\/span>/g) || []).join(''));
-    try { start('bal', false); steps(80); seen.push('80 pas de jeu, kills mission=' + call('meta.mis.list[1].p')); } catch (e) { bad.push('partie : ' + e.message); }
-  } finally { call('meta.mis=' + save); }
-  return { ok: !bad.length, detail: seen.join(' ; ') + (bad.length ? ' ; ÉCHECS : ' + bad.join(', ') : '') };
-});
-
-/* passe globale — gx.js renderDuel : les touches 1..n (et Entrée) existaient mais n'étaient affichées nulle part.
-   Au clavier : chaque bouton d'action porte le chiffre qui le déclenche, dans l'ordre de DU.keys ; Entrée sur « Fin du tour ».
-   Sur tactile : aucun libellé de touche (comme les touches A/E/R du HUD, gc.js). */
-scenario('duel : chaque action affiche sa touche au clavier (1…n, Entrée), aucune sur tactile', () => {
-  const read = () => { const html = call("$('dvAct').innerHTML"), btns = html.match(/<button class="dact"[\s\S]*?<\/button>/g) || [];
-    return { html, keys: call('DU.keys.join(",")'), acts: btns.map(b => (/data-a="(\w+)"/.exec(b) || [])[1]).join(','),
-      shown: btns.map(b => (/<kbd>([^<]*)<\/kbd>/.exec(b) || [])[1] || '-').join(','), end: /id="dvEnd"[^>]*>[^<]*<kbd>Entrée<\/kbd>/.test(html) }; };
-  start('bal', false); call('inp.touch=false;duelStart(0)'); const k = read(); call('duelFlee()');
-  start('bal', false); call('inp.touch=true;duelStart(0)'); const t = read(); call('duelFlee();inp.touch=false');
-  const want = k.keys.split(',').map((_, i) => i + 1).join(',');
-  return { ok: k.acts === k.keys && k.shown === want && k.end && !/<kbd>/.test(t.html),
-    detail: 'clavier : boutons [' + k.acts + '] touches affichées [' + k.shown + '] (attendu [' + want + ']), Entrée affichée=' + k.end + ' ; tactile : libellés=' + /<kbd>/.test(t.html) };
-});
-
-/* passe globale — gt.js : une étape du prologue ne se validait QUE par son action. Un joueur qui ne dashe pas ou ne lance
-   jamais sa compétence restait bloqué indéfiniment (d'une partie à l'autre : meta.tuto reprend à l'étape), sans voir
-   la suite ni recevoir la récompense. Joueur passif (immobile, invulnérable, n'utilise rien) placé à l'étape « dash » :
-   il doit arriver à l'étape « heart » (l'objectif de la partie). Témoin : lancer sa compétence valide l'étape tout de suite. */
-scenario('prologue : un joueur qui ne dashe ni ne lance sa compétence n est pas bloqué ; l action valide toujours aussitôt', () => {
-  const tuto = call('meta.tuto'), inputFn = win.__SIM_INPUT, idx = (id) => call('TUTO.findIndex(s=>s.id===' + JSON.stringify(id) + ')');
-  const iDash = idx('dash'), iSkill = idx('skill'), iHeart = idx('heart'), seen = [];
-  try {
-    win.__SIM_INPUT = () => call('G.inX=G.inY=0;G.p.inv=1e9');
-    call('meta.tuto=' + iDash); start('bal', false);
-    let last = call('G.gt.step'); const n = steps(40000, () => { const s = call('G.gt.step'); if (s !== last) { seen.push(s + '@' + call('G.time')); last = s; } return s >= iHeart; });
-    const reached = call('G.gt.step'), usedSkill = call('G.p.sk[0].cd>0'), dashed = call('G.p.dashT>0');
-    /* témoin : l'action valide l'étape immédiatement */
-    call('meta.tuto=' + iSkill); start('bal', false); steps(40); call('gcUse(0)');
-    const n2 = steps(600, () => call('G.gt.step') !== iSkill), after = call('G.gt.step');
-    return { ok: reached === iHeart && !usedSkill && !dashed && after === iSkill + 1 && n2 <= 2,
-      detail: 'passif : étape ' + iDash + '→' + reached + ' en ' + n + ' pas (étapes franchies ' + seen.join(' ') + ', compétence utilisée=' + usedSkill + ') ; témoin : compétence lancée → étape ' + iSkill + '→' + after + ' en ' + n2 + ' pas' };
-  } finally { win.__SIM_INPUT = inputFn; call(tuto === undefined ? 'delete meta.tuto' : 'meta.tuto=' + JSON.stringify(tuto)); }
-});
-
-/* chantier G — la vraie fin : aucun monument dans le biome core (gw.js), donc loreCount() plafonnait à 21/24 :
-   chapitre V, épilogue et deux fins inatteignables. Les 3 échos du Cœur sont révélés par l'Hypernoyau, un par phase.
-   Sauvegarde d'avant (lore sans clé core, 21 échos) -> vrai combat (updBoss, bossPhase, bossDie, endRun) -> 24, c5, S.ending.
-   Puis un 2e combat : lore.core reste à 3 (jamais de doublon). */
-scenario('chantier G : 21 échos + Hypernoyau vaincu ⇒ 24/24, chapitre V, S.ending ; échos du Cœur uniques, lore.core ≤ 3', () => {
-  const keep = call('JSON.stringify({lore:meta.lore,chaps:meta.chaps,pend:meta.pend})');
-  try {
-    start('bal', false);
-    const old = {}; for (const b of ['plains', 'floral', 'sea', 'sky', 'cyber', 'urban', 'ice']) old[b] = 3;
-    call(`meta.lore=JSON.parse(${JSON.stringify(JSON.stringify(old))});delete meta.chaps.c5;meta.pend=meta.pend.filter(x=>x!=='c5');`);
-    const lc0 = call('loreCount()'), nCore = call('(LORE.core||[]).length');
-    call(`var __glN=0,__glMax=0;if(typeof gainLore==='function'){const __o=gainLore;gainLore=function(b,c){if(b==='core')__glN++;return __o(b,c);};}`);
-    const fight = () => {
-      let end = null; win.__SIM_END = w => { end = w; };
-      call('startBossFight()');
-      const subs = call('JSON.stringify(G.gs.subs.filter(q=>q.who.indexOf("Le Cœur")>=0).map(q=>q.calm))');
-      for (let i = 0; i < 20000 && end === null; i++) {
-        call(`{const P=G.p;P.inv=99;P.hp=P.mhp;const B=G.boss;if(B&&!B.dead&&G.state==='play'&&${i % 20 === 0})hurtBoss(B.mhp*.02,true);__glMax=Math.max(__glMax,meta.lore.core||0);}`);
-        STEP(); advance(1000 / 60);
-      }
-      win.__SIM_END = null;
-      return { end, subs, core: call('meta.lore.core||0'), lc: call('loreCount()'), ending: !!call('G.gs.ending'), phase: call('G.boss?G.boss.phase:0') };
-    };
-    const f1 = fight();
-    const c5 = !!call(`!!meta.chaps.c5||meta.pend.includes('c5')`), n1 = call('__glN');
-    start('bal', false);
-    const f2 = fight(), n2 = call('__glN') - n1, mx = call('__glMax');
-    const json = call('JSON.parse(JSON.stringify(meta)).lore.core');
-    const ok = lc0 === 21 && nCore === 3 && f1.end === true && f1.phase === 3 && f1.lc === 24 && f1.core === 3 && c5 && f1.ending && n1 === 3
-      && f2.end === true && f2.core === 3 && f2.lc === 24 && n2 === 3 && mx === 3 && json === 3;
-    return { ok, detail: 'avant=' + lc0 + ' LORE.core=' + nCore + ' | combat 1 : fin=' + f1.end + ' phase=' + f1.phase + ' récit=' + f1.lc + ' core=' + f1.core + ' appels=' + n1 + ' c5=' + c5 + ' S.ending=' + f1.ending
-      + ' | combat 2 : fin=' + f2.end + ' core=' + f2.core + ' récit=' + f2.lc + ' appels=' + n2 + ' | max lore.core observé=' + mx + ' sauvegardé=' + json };
-  } finally { call(`{const k=JSON.parse(${JSON.stringify(keep)});meta.lore=k.lore;meta.chaps=k.chaps;meta.pend=k.pend;}`); }
-});
-scenario('chantier G : un écho de monument passe toujours par le même chemin (1 écho, sous-titre différé au calme) ; celui du Cœur s affiche en combat', () => {
-  const keep = call('JSON.stringify(meta.lore)');
-  try {
-    start('bal', false);
-    call(`meta.lore={};G.gs.subs=[];`);
-    const L = call('JSON.stringify({t:WD.lms[0].t})'), t = JSON.parse(L).t;
-    call('wakeEcho(WD.lms[0],0)');
-    const m = JSON.parse(call(`JSON.stringify({n:meta.lore[${JSON.stringify(t)}]||0,e:G.gs.echo,calm:G.gs.subs.map(q=>q.calm)})`));
-    call('G.gs.subs=[];startBossFight()');
-    const b = JSON.parse(call(`JSON.stringify({n:meta.lore.core||0,e:G.gs.echo,subs:G.gs.subs.map(q=>[q.who,q.calm])})`));
-    const bs = b.subs.find(x => x[0].indexOf('Le Cœur') >= 0);
-    const ok = m.n === 1 && m.e === 1 && m.calm.length === 1 && m.calm[0] === true && b.n === 1 && b.e === 1 && !!bs && bs[1] === false;
-    return { ok, detail: 'monument ' + t + ' : écho=' + m.n + ' S.echo=' + m.e + ' calm=' + m.calm + ' | Hypernoyau : core=' + b.n + ' S.echo=' + b.e + ' sous-titre=' + JSON.stringify(bs || null) };
-  } finally { call(`meta.lore=JSON.parse(${JSON.stringify(keep)})`); }
-});
-
-/* chantier B — embranchements : le contenu annoncé existe ET se joue. Un trésor se ramasse en passant ; un nid se
-   réveille à l'approche (garde avec 2 élites), ne paie rien tant qu'elle vit, et paie quand elle est détruite.
-   Proximité seule, aucune interface : rien à brancher sur SIMF(). Le classement et la vérité des annonces sont
-   vérifiés par test/embranchements.js (plus bas). */
-{ start('bal');
-  /* rendu réel d'une image au carrefour : panneaux/pastilles « icône Type · N m » effectivement écrits */
-  let rD = '', rOK = false;
-  try { rD = call(`(()=>{const b=WD.br[0],o=WD.sites[b.o],k=Math.min(1,(WR-240)/Math.hypot(o.x,o.y));for(const e of G.en)e.dead=true;G.p.x=G.p.px=o.x*k;G.p.y=G.p.py=o.y*k;
-      CAM.x=G.p.x;CAM.y=G.p.y;const T=[],f0=ctx.fillText;ctx.fillText=function(t){T.push(String(t));};try{render(1,16);}finally{ctx.fillText=f0;}
-      const want=WD.br.map((q,i)=>i).filter(i=>WD.br[i].o===b.o&&!gcBrDone(i)).map(i=>BRT[WD.br[i].t].n+' '),got=T.filter(t=>/ m$/.test(t)&&Object.values(BRT).some(v=>t.includes(v.n)));
-      return JSON.stringify({ok:want.every(w=>got.some(t=>t.includes(w.trim()))),got:[...new Set(got)].slice(0,6),want});})()`);
-    rOK = JSON.parse(rD).ok; } catch (e) { rD = 'exception : ' + e.message; }
-  check('branches : au carrefour, une image rendue écrit l’annonce de chaque branche non épuisée (type + mètres)', rOK, rD);
-  const r0 = JSON.parse(call(`(()=>{const ti=WD.br?WD.br.findIndex(b=>b.t==='tresor'):-1,ni=WD.br?WD.br.findIndex(b=>b.t==='nid'):-1;
-    if(ti>=0){const b=WD.br[ti];G.p.x=G.p.px=b.x;G.p.y=G.p.py=b.y;}return JSON.stringify({ti,ni,sh:G.gs.shards});})()`));
-  let tOK = false, tD = 'aucune branche trésor (WD.br absent ?)';
-  if (r0.ti >= 0) { steps(25); const t = JSON.parse(call(`JSON.stringify({d:!!G.gc.brDone[${r0.ti}],sh:G.gs.shards})`)); tOK = t.d && t.sh > r0.sh; tD = 'ramassé=' + t.d + ' éclats ' + r0.sh + '→' + t.sh; }
-  check('branches : un trésor annoncé se ramasse au bout de la branche (éclats en plus)', tOK, tD);
-  let nOK = false, nD = 'aucune branche nid';
-  if (r0.ni >= 0) {
-    call(`(()=>{const b=WD.br[${r0.ni}];G.p.x=G.p.px=b.x;G.p.y=G.p.py=b.y+220;G.p.inv=9999;})()`); steps(25);
-    const a = JSON.parse(call(`JSON.stringify({n:(G.gc.nest[${r0.ni}]||[]).length,el:(G.gc.nest[${r0.ni}]||[]).filter(e=>e.aff).length,d:!!G.gc.brDone[${r0.ni}],sh:G.gs.shards})`));
-    call(`for(const e of G.gc.nest[${r0.ni}]||[])if(!e.dead)killEnemy(e);`); steps(25);
-    const z = JSON.parse(call(`JSON.stringify({d:!!G.gc.brDone[${r0.ni}],sh:G.gs.shards})`));
-    nOK = a.n >= 4 && a.el >= 1 && !a.d && z.d && z.sh > a.sh; nD = 'garde=' + a.n + ' dont élites=' + a.el + ', payé avant=' + a.d + ', payé après=' + z.d + ', éclats ' + a.sh + '→' + z.sh; }
-  check('branches : un nid se réveille à l’approche, ne paie qu’une fois sa garde détruite', nOK, nD);
+/* =========================================================
+   GARDES : chacune dans son propre processus
+   ========================================================= */
+const sub = (f, args) => { const r = cp.spawnSync(process.execPath, [path.join(__dirname, f), ...args], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 << 20 }); const out = (r.stdout || '') + (r.stderr || ''); return { ok: r.status === 0, out }; };
+const okLines = out => out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK';
+const koLines = (out, n) => (out.match(/[ÉE]CHEC [^\n]*/g) || []).slice(0, n || 3).map(s => s.trim().slice(0, 220)).join(' | ');
+const GARDES = [
+  ['cuisson.js', 'cuisson : aucun chunk entier hors budget, travail continu et unité indivisible plafonnés'],
+  ['art.js', 'art : séquence brute des opérations de chaque chunk et de chaque sprite identique à la référence', '--cible='],
+  ['qualite.js', 'qualité : le contrôleur peut remonter, la référence est celle du jeu, applyRes suit chaque cran'],
+  ['regule.js', 'régulateur : un mode manuel est un plafond — descente sous saccade, remontée bornée au cran choisi, Auto inchangé'],
+  ['saut.js', 'saut : un rappel en double ne nourrit plus la période estimée, la cuisson délibérée ne bloque plus la remontée de SKP, SKW se révise des deux côtés'],
+  ['degradation.js', 'dégradation : les postes décoratifs cèdent sous budget, jamais le monde ni le joueur'],
+  ['compteur.js', 'compteur : lisible sur téléphone et il dit qui cuit le monde, worker ou sur place'],
+  ['halos.js', 'halos : dessinés directement dans le canevas principal, plus aucun calque composé en plein écran'],
+  ['menus.js', 'écrans d’interface : fond figé (menu, pause, choix, fin), plus de flou CSS ni de filtre animé'],
+  ['ambiance.js', 'ambiance : surfaces posées par les effets d’environnement bornées sur chaque îlot'],
+  ['defaut.js', 'cuisson déléguée : worker pris PAR DÉFAUT, ?wk=0 = témoin sur place, repli propre si worker absent, en panne ou muet'],
+  ['decor.js', 'décor : la gueule mord l’ennemi, la voiture le percute, le vide l’avale ; jamais le joueur'],
+  ['decor-vue.js', 'décor, ce qui se voit : la gueule s’ouvre et claque, le choc laisse un sillage, l’ennemi qui tombe reste visible'],
+  ['terrain.js', 'terrain : le courant porte, la glace prolonge le dash, le balayage alarme hors abri'],
+];
+console.log('\n=== GARDES ===');
+for (const [f, name, refArg] of NO_SUB ? [] : GARDES) {
+  const t0 = Date.now(), r = sub(f, REF ? [(refArg || '--ref=') + REF] : []);
+  console.log((r.ok ? '[ok] ' : '[KO] ') + f + ' ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s');
+  check(name + ' (test/' + f + ')', r.ok, koLines(r.out) || (r.ok ? okLines(r.out) : r.out.slice(-300)));
 }
 
-/* hooks du harnais : ne doivent pas avoir disparu */
-check('hooks : SIMF / __SIM / __SIM_INPUT / __SIM_PICK / __SIM_END utilisés par le jeu',
-  call('typeof SIMF') === 'function' && ['__SIM_END', '__SIM_PICK', '__SIM_INPUT'].every(h => code.includes('window.' + h)) && code.includes('window.__SIM'));
-
-/* PERF-2 — garde-fous de la cuisson du monde : chacun tourne dans son propre processus (cuisson.js
-   installe le jeu dans le contexte principal de V8, avec une horloge virtuelle) */
-const sub = (f, args) => { const r = cp.spawnSync(process.execPath, [path.join(__dirname, f), ...args], { cwd: ROOT, encoding: 'utf8' }); const out = (r.stdout || '') + (r.stderr || ''); return { ok: r.status === 0, out }; };
-{ const r = sub('cuisson.js', REF ? ['--ref=' + REF] : []);
-  check('cuisson : aucun chunk entier hors budget, travail continu et unité indivisible plafonnés (test/cuisson.js)', r.ok, r.out.split('\n').filter(l => /^\s+(OK|ECHEC)\s/.test(l)).map(l => l.trim()).join(' | ') || r.out.slice(-300)); }
-{ const r = sub('art.js', REF ? ['--cible=' + REF] : []);
-  check('cuisson : séquence brute des opérations de chaque chunk identique à e3a2c93 (test/art.js)', r.ok, (r.out.match(/chunks identiques : .*/) || [r.out.slice(-300)])[0]); }
-{ const r = sub('qualite.js', REF ? ['--ref=' + REF] : []);
-  check('qualité : le contrôleur peut remonter, la référence est celle du jeu, applyRes suit chaque cran (test/qualite.js)', r.ok,
-    (r.out.match(/ECHEC [^\n]*/g) || []).map(s => s.trim()).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
-{ const r = sub('regule.js', REF ? ['--ref=' + REF] : []);
-  check('régulateur : un mode manuel est un plafond — descente sous saccade, remontée bornée au cran choisi, Auto inchangé (test/regule.js)', r.ok,
-    (r.out.match(/ECHEC [^\n]*/g) || []).map(s => s.trim()).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
-{ const r = sub('saut.js', REF ? ['--ref=' + REF] : []);
-  check('saut : un rappel en double ne nourrit plus la période estimée, la cuisson délibérée ne bloque plus la remontée de SKP, SKW se révise des deux côtés (test/saut.js)', r.ok,
-    (r.out.match(/ECHEC .*/g) || []).map(s => s.trim()).join(' | ') || (r.out.match(/^\s+OK/gm) || []).length + ' critères OK'); }
-{ const r = sub('degradation.js', REF ? ['--ref=' + REF] : []);
-  check('dégradation : les postes décoratifs cèdent sous budget, jamais le monde ni le joueur (test/degradation.js)', r.ok,
-    (r.out.match(/ECHEC [^\n]*/g) || []).map(s => s.trim()).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
-{ const r = sub('compteur.js', REF ? ['--ref=' + REF] : []);
-  check('compteur : lisible sur téléphone et il dit qui cuit le monde, worker ou sur place (test/compteur.js)', r.ok,
-    (r.out.match(/ECHEC [^\n]*/g) || []).map(s => s.trim()).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
-{ const r = sub('competences.js', REF ? ['--ref=' + REF] : []);
-  check('compétences : 6 à 8 proposées à l’autel, chacune s’active, recharge débitée, effet mesuré, sauvegarde d’avant jouable (test/competences.js)', r.ok,
-    (r.out.match(/ECHEC [^\n]*/g) || []).map(s => s.trim()).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
-{ const r = sub('colonne.js', REF ? ['--ref=' + REF] : []);
-  check('colonne : chemin principal = plus court chemin 0 → Hypernoyau, 3 cœurs jalons dessus, 3 biomes distincts (test/colonne.js)', r.ok,
-    (r.out.match(/ECHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim()).join(' | ') || (r.out.match(/\d+ graines : [^\n]*/) || [''])[0]); }
-{ const r = sub('annonces.js', REF ? ['--ref=' + REF] : []);
-  check('annonces : Lentille ÷2 (partie = Hangar), puissance des classes, Intouchable, niveau des reliques (test/annonces.js)', r.ok,
-    (r.out.match(/ECHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim()).join(' | ') || (r.out.match(/TOUT PASSE[^\n]*/) || [''])[0]); }
-
-{ const r = sub('embranchements.js', REF ? ['--ref=' + REF] : []);
-  check('embranchements : chaque arête classée une fois, branches variées par carrefour, annonce lisible depuis le carrefour et vraie au mètre près, contenu présent (test/embranchements.js)', r.ok,
-    (r.out.match(/ECHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim()).join(' | ') || (r.out.match(/\d+ graines : [^\n]*/) || [''])[0]); }
-
-{ const r = sub('frontiere-sonore.js', REF ? ['--ref=' + REF] : []);
-  check('frontière sonore : le poids audio est celui de biomeMix, il monte avant la frontière sans repasser par 0 (test/frontiere-sonore.js)', r.ok,
-    (r.out.match(/ÉCHEC [^\n]*/g) || []).slice(0, 2).map(s => s.trim()).join(' | ') || (r.out.match(/\d+ traversées[^\n]*/) || [''])[0]); }
-
-{ const r = sub('decor.js', REF ? ['--ref=' + REF] : []);
-  check('décor : la gueule mord l’ennemi, la voiture le percute, le gouffre l’avale ; jamais le joueur (test/decor.js)', r.ok,
-    (r.out.match(/ECHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim().slice(0, 220)).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
-
-{ const r = sub('decor-vue.js', REF ? ['--ref=' + REF] : []);
-  check('décor, ce qui se voit : la gueule s’ouvre sur sa zone et claque, le choc de voiture laisse un sillage, l’ennemi qui tombe reste visible ; rien hors biome, plafonné (test/decor-vue.js)', r.ok,
-    (r.out.match(/ECHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim().slice(0, 220)).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
-
-{ const r = sub('decor-vivant.js', REF ? ['--ref=' + REF] : []);
-  check('décor vivant : la colonne n’apparaît que sur un biome non visité, le halo croît vers le Cœur, le pool de marques ne croît pas (test/decor-vivant.js)', r.ok,
-    (r.out.match(/ÉCHEC [^\n]*/g) || []).slice(0, 2).map(s => s.trim().slice(0, 200)).join(' | ') || r.out.split('\n').filter(l => /^OK/.test(l)).length + ' critères OK'); }
-
-{ const r = sub('ecrans.js', REF ? ['--ref=' + REF] : []);
-  check('écrans : chaque mot d’une description de classe est rattaché à une règle mesurée (portée d’écho par dichotomie), et la pastille « N j série » du menu dit la vérité aujourd’hui (test/ecrans.js)', r.ok,
-    (r.out.match(/[ÉE]CHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim().slice(0, 220)).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
-
-{ const r = sub('terrain.js', REF ? ['--ref=' + REF] : []);
-  check('terrain : le courant porte, la glace prolonge le dash, le balayage alarme hors abri, le relais protège, le vent vise le prochain nœud (test/terrain.js)', r.ok,
-    (r.out.match(/[ÉE]CHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim().slice(0, 220)).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
-
-{ const r = sub('defaut.js', REF ? ['--ref=' + REF] : []);
-  check('cuisson déléguée : worker pris PAR DÉFAUT, ?wk=0 = témoin sur place, repli propre si worker absent, en panne ou muet (test/defaut.js)', r.ok,
-    (r.out.match(/CAUSE [^\n]*/g) || []).slice(0, 2).map(s => s.trim().slice(0, 240)).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
-/* test/worker.js (identité au pixel worker / sur place) exige un VRAI Chromium : il n'entre pas ici, et ce n'est pas un
-   oubli — la raison est écrite en tête de test/navigateur.js. Ce harnais le DIT au lieu de le taire (voir le verdict). */
-{ const r = sub('duel-annonces.js', REF ? ['--ref=' + REF] : []);
-  check('duel : ce que l’écran annonce (noms, pourcentages, invitations) est ce que le code applique (test/duel-annonces.js)', r.ok,
-    (r.out.match(/[ÉE]CHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim().slice(0, 220)).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
-
-{ const r = sub('halos.js', REF ? ['--ref=' + REF] : []);
-  check('halos : dessinés directement dans le canevas principal, plus aucun calque intermédiaire composé en plein écran (test/halos.js)', r.ok,
-    (r.out.match(/ECHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim().slice(0, 220)).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
-
-{ const r = sub('menus.js', REF ? ['--ref=' + REF] : []);
-  check('écrans d’interface : fond figé (menu, pause, évolution, fin, duel), plus de flou CSS ni de filtre animé (test/menus.js)', r.ok,
-    (r.out.match(/ECHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim().slice(0, 220)).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
-{ const r = sub('ambiance.js', REF ? ['--ref=' + REF] : []);
-  check('ambiance : surface étirée et surface totale posées par les effets d’environnement bornées dans chaque biome (test/ambiance.js)', r.ok,
-    (r.out.match(/ECHEC [^\n]*/g) || []).slice(0, 3).map(s => s.trim().slice(0, 220)).join(' | ') || r.out.split('\n').filter(l => /^\s+OK/.test(l)).length + ' critères OK'); }
-
-const NAV = 'NON EXERCÉ ICI (vrai Chromium requis) : node test/navigateur.js — test/worker.js + le défaut dans un vrai navigateur';
+const NAV = 'NON EXERCÉ ICI (vrai Chromium requis) : node test/navigateur.js — test/worker.js, test/sol.js, test/pire-navigateur.js dans un vrai navigateur';
 
 /* ---------- verdict ---------- */
 console.log('\n---------------- VERDICT ----------------');

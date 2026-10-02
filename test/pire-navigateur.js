@@ -20,8 +20,8 @@
         « pire N ms » seul, SANS les champs (le lecteur ne voit donc pas des champs qui n'y sont pas).
    ========================================================= */
 const path = require('path');
-const { launch } = require('./worker.js');
-const HTML = 'file://' + path.resolve(__dirname, '..', 'bulge.html');
+const { launch, START } = require('./worker.js');
+const HTML = 'file://' + path.resolve(process.env.BULGE_ROOT || path.resolve(__dirname, '..'), 'bulge.html');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let ok = true;
 const check = (label, cond, info) => { if (!cond) ok = false; console.log((cond ? '  OK    ' : '  ECHEC ') + label + (info ? '  — ' + info : '')); };
@@ -46,8 +46,9 @@ const vu = m => ['pire ' + m[1] + ' ms', 'JS ' + m[2], 'gen ' + m[3], 'spr ' + m
       if (tact) await B.cdp('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
       await B.nav(HTML);
       for (let i = 0; i < 80; i++) { await sleep(250); try { if (await B.ev("typeof startGame==='function'&&typeof MAINCTX!=='undefined'&&document.readyState==='complete'")) break; } catch (e) { } }
-      /* meme amorce que navigateur.js : startGame peut ne pas prendre tout de suite, on reessaie */
-      for (let i = 0; i < 40; i++) { if (await B.ev('(()=>{meta.fps=false;try{if(!G||G.state!=="play"){startGame("bal",false);show(null);}}catch(e){}return !!G&&G.state==="play";})()')) break; await sleep(500); }
+      /* meme amorce que navigateur.js (START, test/worker.js) : startGame, choix d'arrivee pris (sinon l'ecran est fige
+         en etat « pick » et le compteur n'ecrit rien), bulle invulnerable (la partie ne finit pas pendant la mesure) */
+      for (let i = 0; i < 60; i++) { if (await B.ev(START('meta.fps=false;'))) break; await sleep(250); }
       await sleep(1500); await B.ev(HOOK);
       /* A. eteint */
       await sleep(2500);

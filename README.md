@@ -5,6 +5,24 @@ Un seul fichier HTML autonome, sans dépendance : il tourne en `file://` comme e
 
 **Jouer :** https://lorenzoapro12-jpg.github.io/bulge/ (`index.html` redirige vers `bulge.html`)
 
+## Le jeu
+
+Tu es une bulle. Huit îlots, huit niveaux : sur chacun, trois vagues puis un boss. Chaque îlot apporte
+son ennemi ; les anciens restent un temps, mais tu grandis : d'îlot en îlot ils rapetissent, deviennent
+des **proies** (pâles, inoffensives : avale-les), puis disparaissent. Au centre de chaque îlot, la
+relique est l'îlot que tu viens de quitter, en miniature.
+
+- **Vie** : une membrane de 5 segments ; un coup = un segment ; un segment revient à chaque îlot nettoyé.
+- **Bonus** : à l'arrivée sur chaque îlot, une carte parmi trois (35 bonus, 8 fusions dorées quand on
+  possède leurs deux ingrédients, 4 pactes rouges à partir de l'îlot 3 : un pouvoir contre un prix).
+- **Power-ups** (losanges vert-jaune, quelques secondes) : invincibilité 6 s, tir rapide, tir triple,
+  perforant, ralenti, bouclier, onde, réparation.
+- **Commandes** : ZQSD ou flèches pour bouger (codes physiques, AZERTY comme QWERTY), le tir vise seul
+  ce qui est à l'écran (la souris reprend la main), Espace ou Maj : dash, E ou clic droit : gonfler
+  quand la jauge est pleine (tu avales ce qui est plus petit), Échap : pause. Sur mobile : pouce
+  gauche pour bouger, boutons ⚡ (dash) et ◉ (gonfler).
+- Rien ne se garde d'une partie à l'autre, sauf les records.
+
 ## Fichiers
 
 | Fichier | Contenu |
@@ -13,18 +31,15 @@ Un seul fichier HTML autonome, sans dépendance : il tourne en `file://` comme e
 | `index.html` | Page d'entrée GitHub Pages : ouvre `bulge.html` |
 | `shell_head.html` | `<head>`, styles, et tout le balisage HTML (HUD, menus, écrans) jusqu'à `<script>` |
 | `shell_tail.html` | `</script></body></html>` |
-| `g1.js` | Utilitaires, sauvegarde, données, audio et musique adaptative |
-| `gw.js` | Monde continu : biomes, obstacles, relief, sentiers, falaises, monuments |
-| `gw2.js` | Art du monde : décor, sprites d'obstacles, parallaxe, météo |
-| `g2.js` | Logique de jeu : joueur, ennemis, cœurs, boss, projectiles, fin de partie |
-| `gs.js` | Histoire, éclats, sanctuaire, missions, série |
-| `gc.js` | Compétences, ultimes, monde semi-ouvert |
-| `gi.js` | Tank, pilote, équipement, butin, hangar |
-| `gx.js` | Souvenirs d'Iris (scènes) et duel tactique |
-| `gt.js` | Prologue jouable |
-| `gv.js` | Décors lointains du rêve |
-| `g3.js` | Rendu |
-| `g4.js` | Entrées, interface, boucle principale |
+| `g1.js` | Utilitaires, sauvegarde (`bulge3_*`), types d'ennemis, audio et musique adaptative |
+| `gw.js` | Îlots : `genIslet(graine, k)`, biome de l'îlot, falaises, obstacles (dont cassables), relique |
+| `gw2.js` | Art du monde : cuisson des chunks (sur place ou dans un worker), décor, sprites, météo |
+| `g2.js` | Partie : déroulé d'un îlot (vagues, boss, passage), bulle, ennemis, tirs, terrain, fin |
+| `gp.js` | Pouvoirs : power-ups, bonus permanents, fusions, pactes, écran de choix |
+| `gb.js` | Les 8 boss et leurs attaques annoncées |
+| `g3.js` | Rendu (monde, entités, HUD) et cinématique de passage d'îlot |
+| `g4.js` | Entrées, interface, boucle principale, régulation de qualité |
+| `gk.js` | Entrée du worker de cuisson (placé par `build.sh` dans la page, bloc `wk-src`) |
 | `build.sh`, `.build-sha256` | Build vérifié par empreinte SHA-256 |
 | `test/` | Harnais headless et outils de mesure (voir plus bas) |
 
@@ -36,7 +51,7 @@ bash build.sh --update   # accepte un changement légitime de la sortie (à anno
 ```
 
 L'ordre de concaténation est figé :
-`g1.js gw.js gw2.js g2.js gs.js gc.js gi.js gx.js gt.js gv.js g3.js g4.js`, puis
+`g1.js gw.js gw2.js g2.js gp.js gb.js g3.js g4.js`, puis
 `shell_head.html` + `game.js` + `shell_tail.html`. `game.js` est un intermédiaire non suivi.
 Ne jamais éditer `bulge.html` à la main.
 
@@ -46,15 +61,15 @@ Le jeu a un mode simulation intégré (`window.__SIM`, `SIMF()`) : les tests fon
 **vraie** logique de jeu dans un DOM et un canvas stubés.
 
 ```bash
-node test/headless.js               # parties complètes + scénarios de régression ; code 0 = TOUT PASSE
-node test/headless.js --scenarios   # scénarios seulement (rapide)
+node test/headless.js               # parties complètes + scénarios + gardes ; code 0 = TOUT PASSE
+node test/headless.js --scenarios   # sans les parties complètes
+node test/headless.js --sans-gardes # sans les gardes en sous-processus (mise au point)
 node test/headless.js --ref=HEAD    # même chose sur les modules d'un commit
 
-node test/trace.js                  # empreinte d'état de 5 parties à graine fixe + µs par pas
+node test/trace.js                  # empreinte d'état de 2 parties à graine fixe (naturelle, assistée) + µs par pas
 node test/trace.js --ref=HEAD       # à comparer : une optimisation « sans effet » doit donner la même empreinte
-node test/trace.js --gen            # temps de genWorld + empreinte du monde généré (falaises, cartes…)
+node test/trace.js --gen            # temps de genIslet + empreinte des îlots générés (8 graines × 8 îlots)
 node test/trace.js --render --calls # appelle render() ; décompte des appels canvas par image
-node test/trace.js --tuto           # déroulé des étapes du prologue
 
 node test/unused.js                 # recensement du code mort (identifiants, SFX, id HTML, classes CSS, médias)
 ```
@@ -64,7 +79,15 @@ node test/unused.js                 # recensement du code mort (identifiants, SF
 passe par un intercepteur : le code y tourne jusqu'à ~180× plus lentement. **Ne pas tirer de
 conclusion de performance d'un profil pris sous `vm`.**
 
+`test/lib.js` est le socle commun : il charge les modules d'un commit (ordre lu dans son `build.sh`),
+avec une horloge virtuelle, un `Math.random` à graine et une IA de test.
+
 ## Journal
+
+**2 oct. 2026, refonte en îlots** : le monde ouvert, l'XP, les classes, le hangar, le duel, le
+prologue, l'histoire et le défi du jour sont retirés (`gs gc gi gx gt gv`). Le jeu devient une suite
+de huit îlots-arènes (voir « Le jeu »). `test/headless.js` est réécrit : parties complètes jusqu'à la
+victoire avec des invariants vérifiés à chaque image, et un scénario par règle du jeu.
 
 **27 sept. 2026, passe globale** : voir `PASSE-GLOBALE.md` (élagage, touches du duel affichées,
 prologue qui ne bloque plus, victoire en défi du jour couverte, outils de mesure).
