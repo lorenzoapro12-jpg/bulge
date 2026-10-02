@@ -40,9 +40,7 @@ function genIslet(seed,k){
   buildWalls();buildMaps();
   if(ISLS!==seed){ISLM.clear();ISLS=seed;}ISLM.set(k,WD.mini);
 }
-function warpXY(x,y){const w=WD.warp;return[x+Math.sin(y*.0013+w[0])*190+Math.sin(y*.0041+w[1])*60,y+Math.sin(x*.0012+w[1])*190+Math.sin(x*.0037+w[0])*60];}
 /* un seul biome par îlot : les fonctions de lecture du monde gardent leur forme (art, audio, météo) */
-function siteAt(x,y){return WD.sites[0];}
 function biomeAt(x,y){return WD.sites[0].t;}
 function biomeMix(x,y){return[{b:WD.sites[0].t,w:1}];}
 /* carte 256² de l'îlot : couleur du sol, bord qui s'éteint dans le vide, relique au centre */

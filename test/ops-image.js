@@ -6,8 +6,6 @@
    node test/ops-image.js --images=N    images mesurées par scénario (défaut 300)
    node test/ops-image.js --chauffe=N   images de chauffe MINIMALES, joueur immobile, non comptées (défaut 180) ; la chauffe
                                         dure jusqu'à 60 images de suite sans cuisson
-   node test/ops-image.js --prologue    sauvegarde vierge : la partie est le PROLOGUE (scène presque vide). Par défaut le
-                                        prologue est réputé fait (meta.tuto=TUTO.length) : c'est une partie normale.
    node test/ops-image.js --resume      seulement le tableau résumé et l'empreinte
    node test/ops-image.js --k=5         coût d'une opération, en µs, pour l'HORLOGE VIRTUELLE (défaut 5)
    node test/ops-image.js --ref=HEAD    modules d'un commit git (sans rien écrire)
@@ -40,12 +38,10 @@
    navigateur est le worker — voir « non mesuré » en fin de sortie.
    ========================================================= */
 const fs = require('fs'), path = require('path'), vm = require('vm'), cp = require('child_process'), crypto = require('crypto');
-const ROOT = path.resolve(__dirname, '..');
 const ARG = k => { const a = process.argv.find(x => x === '--' + k || x.startsWith('--' + k + '=')); return a ? (a.split('=')[1] || true) : null; };
 const REF = ARG('ref'), NIM = +(ARG('images') || 300), NCH = +(ARG('chauffe') || 180), K = +(ARG('k') || 5) / 1000, STEPC = 1.5, VS = 1000 / 60;
-const LW = 411, LH = 757, PROLO = !!ARG('prologue'), RESUME = !!ARG('resume'), CHMAX = 1500;
-const ORDER = ['g1.js', 'gw.js', 'gw2.js', 'g2.js', 'gs.js', 'gc.js', 'gi.js', 'gx.js', 'gt.js', 'gv.js', 'g3.js', 'g4.js'];
-const readModule = f => REF ? cp.execFileSync('git', ['show', REF + ':' + f], { cwd: ROOT, encoding: 'utf8' }) : fs.readFileSync(path.join(ROOT, f), 'utf8');
+const LW = 411, LH = 757, RESUME = !!ARG('resume'), CHMAX = 1500;
+const L = require('./lib'), ORDER = L.ordre(REF).order, readModule = f => L.readModule(f, REF), DEBUT = L.startCode(REF);
 const CODE = ORDER.map(readModule).join('\n');
 const CAT = ['ecran', 'cuisson', 'autre'];
 
@@ -114,9 +110,9 @@ function build() {
 /* ---------- un scénario : qualité × (immobile | déplacement) ---------- */
 function mesure(q, bouge) {
   const B = build(), call = B.call, err = [];
-  call(`meta.q=${JSON.stringify(q)};${PROLO ? '' : 'meta.tuto=TUTO.length;'}resize();applyQuality();refReset();`);
-  const dem = B.bloc(`newRun('bal',false);gsRunStart();gcRunStart();giRunStart();gxRunStart();gtRunStart();gvRunStart();inp.L=inp.R=null;`);
-  const etat = () => JSON.parse(call(`JSON.stringify({QL,RES,PS,cw:cv.width,ch:cv.height,W,H,st:G.state,x:G.p.x,y:G.p.y,en:G.en.length,pb:G.pb.length,eb:G.eb.length,pk:G.pk.length,fx:G.fx.length,h:G.hearts.length,touch:inp.touch,wk:!!WK})`));
+  call(`meta.q=${JSON.stringify(q)};resize();applyQuality();refReset();`);
+  const dem = B.bloc(DEBUT);
+  const etat = () => JSON.parse(call(`JSON.stringify({QL,RES,PS,cw:cv.width,ch:cv.height,W,H,st:G.state,x:G.p.x,y:G.p.y,en:G.en.length,pb:G.pb.length,eb:G.eb.length,pus:G.pus.length,fx:G.fx.length,isl:G.isl,ph:G.ph,touch:inp.touch,wk:!!WK})`));
   const e0 = etat(), QL0 = e0.QL, RES0 = e0.RES;
   /* chauffe, joueur immobile : le monde du départ finit de cuire, les sprites se construisent */
   const ch = neufSomme();
@@ -159,8 +155,8 @@ function rapport(R) {
   const n = R.ims.length, e = R.e2, console = RESUME ? { log() {} } : global.console;
   console.log(`\n================ QL=${e.QL} / RES=${e.RES} (meta.q=${R.q}) · PS=${e.PS.toFixed(2)} · canvas ${e.cw}×${e.ch} · dessin ${e.W}×${e.H} · tactile=${e.touch} · ${R.bouge ? 'EN DÉPLACEMENT' : 'IMMOBILE'} ================`);
   console.log(`  ${n} images mesurées après ${R.nch} de chauffe · état « ${e.st} » · worker=${e.wk} (cuisson sur place) · déplacement ${R.dist.toFixed(0)} px${R.bouge ? ' (' + R.virages + ' virage(s) du pilote)' : ''}`);
-  console.log(`  scène en fin de mesure : ${e.en} ennemis, ${e.pb} tirs joueur, ${e.eb} tirs ennemis, ${e.pk} butins, ${e.fx} effets, ${e.h} cœurs   (début : ${R.e1.en} ennemis, ${R.e1.fx} effets)`);
-  console.log(`  avant la mesure (non compté dans les tableaux) : démarrage newRun… ${tot(R.dem)} appels dont cuisson ${R.dem.cuisson} ; chauffe ${tot(R.ch)} appels dont cuisson ${R.ch.cuisson}, ${R.ch.fin} chunks finis`);
+  console.log(`  scène en fin de mesure : ${e.en} ennemis, ${e.pb} tirs joueur, ${e.eb} tirs ennemis, ${e.pus} power-ups, ${e.fx} effets, îlot ${e.isl} phase « ${e.ph} »   (début : ${R.e1.en} ennemis, ${R.e1.fx} effets)`);
+  console.log(`  avant la mesure (non compté dans les tableaux) : démarrage (newRun) ${tot(R.dem)} appels dont cuisson ${R.dem.cuisson} ; chauffe ${tot(R.ch)} appels dont cuisson ${R.ch.cuisson}, ${R.ch.fin} chunks finis`);
   console.log('  ' + padE('APPELS canvas PAR IMAGE', 44) + pad('moyenne', 10) + pad('min', 9) + pad('médiane', 9) + pad('max', 9) + pad('somme', 11));
   ligne('1. image complète frame() — tous contextes', R.ims.map(tot));
   ligne('2. dans render() — tous contextes', R.ims.map(r => r.rendu));
@@ -201,7 +197,7 @@ function rapport(R) {
   SORTIE.push(JSON.stringify({ q: R.q, b: R.bouge, ims: R.ims, lit: R.lit, M: CAT.concat('set', 'toile').map(c => [...R.M[c].entries()].sort()) }));
 }
 
-console.log(`# ops-image : ${REF ? 'git ' + REF : 'arbre de travail'} — ${PROLO ? 'PROLOGUE (sauvegarde vierge)' : 'partie normale (prologue fait : meta.tuto=TUTO.length)'}, ${NIM} images par scénario, chauffe ≥ ${NCH}, horloge virtuelle K=${K * 1000} µs/appel`);
+console.log(`# ops-image : ${REF ? 'git ' + REF : 'arbre de travail'} — partie normale (îlot 1, IA immobile ou pilote), ${NIM} images par scénario, chauffe ≥ ${NCH}, horloge virtuelle K=${K * 1000} µs/appel`);
 let bad = 0; const RES = [];
 for (const q of ['high', 'mid']) for (const bouge of [false, true]) { const R = mesure(q, bouge); rapport(R); RES.push(R); bad += R.err.length; }
 
@@ -213,7 +209,7 @@ console.log('\nNON MESURÉ ICI :');
 console.log('  - le chemin PAR DÉFAUT en navigateur (cuisson dans un worker) : pas de Worker sous vm, la cuisson comptée ici est celle du repli sur place ;');
 console.log('  - la répartition de la cuisson entre les images sur un vrai appareil : elle suit bakeBudget, donc l’horloge (ici un modèle, --k=) ;');
 console.log('  - le coût d’un appel (pixels touchés, rasterisation, composition) : un compte ne dit pas combien chaque appel coûte ;');
-console.log('  - les autres états (boss, fin de partie, duel, menus, souvenirs) et les autres profils : une seule partie « bal », graine fixe.');
+console.log('  - les autres états (boss, passage d’îlot, choix de bonus, fin de partie, menus) et les autres îlots : une seule partie, îlot 1, graine fixe.');
 console.log('\nempreinte des comptes (doit être identique d’un lancement à l’autre) : ' + crypto.createHash('sha256').update(SORTIE.join('\n')).digest('hex').slice(0, 16));
 console.log(bad ? 'OPS-IMAGE : MESURE INVALIDE (' + bad + ')' : 'OPS-IMAGE : MESURÉ');
 process.exit(bad ? 1 : 0);

@@ -6,7 +6,6 @@
    node test/ops-pixels.js --images=N    images mesurées par scénario (défaut 300)
    node test/ops-pixels.js --chauffe=N   images de chauffe MINIMALES, joueur immobile (défaut 180) ; la chauffe dure
                                          jusqu'à 60 images de suite sans cuisson. Sa cuisson est donnée À PART.
-   node test/ops-pixels.js --prologue    sauvegarde vierge (la partie est le prologue)
    node test/ops-pixels.js --resume      seulement le résumé, le verdict et l'empreinte
    node test/ops-pixels.js --k=5         coût d'une opération, en µs, pour l'HORLOGE VIRTUELLE (défaut 5)
    node test/ops-pixels.js --ref=HEAD    modules d'un commit git (sans rien écrire)
@@ -63,16 +62,14 @@
 
    C'est un INSTRUMENT, pas une garde : aucun seuil, code de sortie 0 sauf si la mesure elle-même est invalide
    (partie sortie de « play », qualité qui a bougé, joueur qui n'a pas avancé). Les surfaces dépendent de la
-   scène (ennemis, effets, biome) : une partie « bal », graine fixe. L'empreinte doit être identique d'un
+   scène (ennemis, effets, îlot) : une partie, îlot 1, graine fixe. L'empreinte doit être identique d'un
    lancement à l'autre — sinon ce n'est pas une mesure.
    ========================================================= */
 const fs = require('fs'), path = require('path'), vm = require('vm'), cp = require('child_process'), crypto = require('crypto');
-const ROOT = path.resolve(__dirname, '..');
 const ARG = k => { const a = process.argv.find(x => x === '--' + k || x.startsWith('--' + k + '=')); return a ? (a.split('=')[1] || true) : null; };
 const REF = ARG('ref'), NIM = +(ARG('images') || 300), NCH = +(ARG('chauffe') || 180), K = +(ARG('k') || 5) / 1000, STEPC = 1.5, VS = 1000 / 60;
-const LW = 411, LH = 757, PROLO = !!ARG('prologue'), RESUME = !!ARG('resume'), CHMAX = 1500, TAU = Math.PI * 2;
-const ORDER = ['g1.js', 'gw.js', 'gw2.js', 'g2.js', 'gs.js', 'gc.js', 'gi.js', 'gx.js', 'gt.js', 'gv.js', 'g3.js', 'g4.js'];
-const readModule = f => REF ? cp.execFileSync('git', ['show', REF + ':' + f], { cwd: ROOT, encoding: 'utf8' }) : fs.readFileSync(path.join(ROOT, f), 'utf8');
+const LW = 411, LH = 757, RESUME = !!ARG('resume'), CHMAX = 1500, TAU = Math.PI * 2;
+const L = require('./lib'), ORDER = L.ordre(REF).order, readModule = f => L.readModule(f, REF), DEBUT = L.startCode(REF);
 const SRC = ORDER.map(f => [f, readModule(f)]), CODE = SRC.map(x => x[1]).join('\n');
 const CAT = ['ecran', 'basse', 'cuisson', 'autre'], QUAL = ['exact', 'approx', 'borne', 'grossier'];
 
@@ -83,7 +80,7 @@ for (const [f, src] of SRC) { const L = src.split('\n');
   if (f === 'g3.js') { const a = L.findIndex(l => l.startsWith('function render(')); if (a >= 0) { let b = a + 1; while (b < L.length && !L[b].startsWith('function ')) b++; RLIG = a + 1; RENDU = L.slice(a, b).map((l, i) => [a + 1 + i, l]); } } }
 const APPEL = new Map();   /* fonction appelée directement dans render() -> ligne de g3.js */
 for (const [n, l] of RENDU) { const re = /([A-Za-z_$][\w$]*)\(/g; let m; while ((m = re.exec(l))) if (DEF.has(m[1]) && m[1] !== 'render' && !APPEL.has(m[1])) APPEL.set(m[1], n); }
-const POSTES = [...new Set([...APPEL.keys(), ...[...DEF.keys()].filter(n => /^(draw[A-Z]|g[csixtv](Draw|HUD|Mini)|postFX$|low(Begin|End)$|soft$|fleeBuild$)/.test(n))])].filter(n => !['render', 'step', 'bakeStep', 'frame'].includes(n));
+const POSTES = [...new Set([...APPEL.keys(), ...[...DEF.keys()].filter(n => /^(draw[A-Z]|postFX$|low(Begin|End)$|soft$)/.test(n))])].filter(n => !['render', 'step', 'bakeStep', 'frame'].includes(n));
 const ou = nom => { if (nom === '(render, direct)') return 'g3.js:' + RLIG; const p = nom.split(' > '), d = DEF.get(p[p.length - 1]) || '?', a = APPEL.get(p[0]); return d + (a ? ' ← render g3.js:' + a : ''); };
 
 const inter = (b, c) => [Math.max(b[0], c[0]), Math.max(b[1], c[1]), Math.min(b[2], c[2]), Math.min(b[3], c[3])];
@@ -227,8 +224,8 @@ function build() {
 /* ---------- un scénario : qualité × (immobile | déplacement) — même déroulé que test/ops-image.js ---------- */
 function mesure(q, bouge) {
   const B = build(), call = B.call, err = [];
-  call(`meta.q=${JSON.stringify(q)};${PROLO ? '' : 'meta.tuto=TUTO.length;'}resize();applyQuality();refReset();`);
-  call(`newRun('bal',false);gsRunStart();gcRunStart();giRunStart();gxRunStart();gtRunStart();gvRunStart();inp.L=inp.R=null;`);
+  call(`meta.q=${JSON.stringify(q)};resize();applyQuality();refReset();`);
+  call(DEBUT);
   const etat = () => JSON.parse(call(`JSON.stringify({QL,RES,PS,RZ,DPR,cw:cv.width,ch:cv.height,lw:typeof LOWC!=='undefined'&&LOWC?LOWC.width:0,lh:typeof LOWC!=='undefined'&&LOWC?LOWC.height:0,lowdom:typeof LOWDOM!=='undefined'&&LOWDOM,W,H,CH,st:G.state,x:G.p.x,y:G.p.y,en:G.en.length,fx:G.fx.length,wk:!!WK})`));
   const e0 = etat(), ch = neuf();
   let nch = 0, calme = 0; B.compte(true);
@@ -284,7 +281,7 @@ function rapport(R) {
   SORTIE.push(JSON.stringify({ q: R.q, b: R.bouge, ims: R.ims.map(r => [r.n, r.px.map(r6), r.raw.map(r6), r.np, r.fin]), ch: [R.ch.n, R.ch.px.map(r6), R.ch.fin], M: ['forme', 'poste', 'detail'].map(k => [...R.M[k].entries()].sort((a, b) => a[0] < b[0] ? -1 : 1).map(([x, o]) => [x, o.n, r6(o.px), r6(o.raw), o.mv, o.st])), np: [...R.M.nonp.entries()].sort() }));
 }
 
-console.log(`# ops-pixels : ${REF ? 'git ' + REF : 'arbre de travail'} — ${PROLO ? 'PROLOGUE (sauvegarde vierge)' : 'partie normale (prologue fait)'}, ${NIM} images par scénario, chauffe ≥ ${NCH}, horloge virtuelle K=${K * 1000} µs/appel — des PIXELS, pas des durées`);
+console.log(`# ops-pixels : ${REF ? 'git ' + REF : 'arbre de travail'} — partie normale (îlot 1), ${NIM} images par scénario, chauffe ≥ ${NCH}, horloge virtuelle K=${K * 1000} µs/appel — des PIXELS, pas des durées`);
 let bad = 0; const RES = [];
 for (const q of ['high', 'mid']) for (const bouge of [false, true]) { const R = mesure(q, bouge); rapport(R); RES.push(R); bad += R.err.length; }
 const nom = R => `QL=${R.e2.QL} PS=${f2(R.e2.PS)} ${R.bouge ? 'déplacement' : 'immobile'}`;

@@ -108,7 +108,7 @@ function updMarks(){
 }
 /* îlot nettoyé : le boss est tombé */
 function islClear(){
-  G.ph='clear';G.phT=0;G.eb=[];G.tele=[];G.marks=[];G.wq=null;
+  G.ph='clear';G.phT=0;G.eb=[];G.tele=[];G.marks=[];G.wq=null;SFX.lvl();
   for(const e of G.en)if(!e.dead){e.dead=true;shards(e.x,e.y,e.col,5,3,e.r);G.score+=10;}G.en=[];
 }
 function clearTick(){
@@ -289,7 +289,7 @@ function clearNear(rad){const P=G.p;for(let i=G.eb.length-1;i>=0;i--){const b=G.
 function tryDash(){
   if(!G||G.state!=='play')return;const P=G.p;if(P.dashT>0||P.dead||P.noDash||P.dashing>0)return;
   let dx=G.inX,dy=G.inY;if(!dx&&!dy){dx=Math.cos(P.ang);dy=Math.sin(P.ang);}const l=Math.hypot(dx,dy)||1;dx/=l;dy/=l;
-  P.glisse=G.biome==='ice';P.dashing=P.glisse?ICE_DASH:12;if(P.glisse)G.dec.glisseT=G.t;P.dashT=P.dashMax;P.dvx=dx*P.spd*3.6;P.dvy=dy*P.spd*3.6;P.inv=Math.max(P.inv,P.dashing+4);P.dashHit=[];SFX.dash();
+  P.glisse=G.biome==='ice';P.dashing=P.glisse?ICE_DASH:12;if(P.glisse)G.dec.glisseT=G.t;P.dashT=P.dashMax;P.dvx=dx*P.spd*3.6;P.dvy=dy*P.spd*3.6;P.inv=Math.max(P.inv,18);P.dashHit=[];SFX.dash();
   ringFX(P.x,P.y,P.r,P.r*2.2,P.col,14,3);if(P.echo)clearNear(160);if(P.mines)layMine(P.x,P.y);
 }
 /* Gonfler : jauge pleine. La bulle double, devient invulnérable et avale ce qui est plus petit qu'elle ; à la fin, elle éclate. */
@@ -352,7 +352,6 @@ function playerFire(){
 }
 /* le boss est la seule « grande » cible ; ces trois noms servent aux armes de zone */
 function BIGS(){const B=G.boss;return B&&bossHittable()?[B]:[];}
-function bigHittable(o){return o===G.boss&&bossHittable();}
 function hurtBig(o,d,q){if(o===G.boss)hurtBoss(d,q);}
 function updWeapons(){
   const P=G.p,dm=P.dmg*(P.overload&&puAny()?1.4:1);
@@ -409,7 +408,7 @@ function nodeHit(b){const c=getChunk(Math.floor(b.x/CH),Math.floor(b.y/CH));if(!
 /* ---------- le décor mord : gueules (floral), circulation (urban), vide (sky) ----------
    Règles de TERRAIN de l'îlot (G.biome). Elles ne visent que G.en : le boss n'y est jamais, ni le joueur.
    Dégâts = fraction des PV max, appliqués hors hurtEnemy : ni critique ni bonus ne les dépassent. */
-const BLOOM_T=240,BLOOM_O=60,BLOOM_R=72,BLOOM_D=.3,CAR_D=.4,CAR_K=8,SKY_KB=4.5,FALL_T=20;
+const BLOOM_T=240,BLOOM_O=60,BLOOM_R=72,BLOOM_D=.3,CAR_D=.4,CAR_K=8,SKY_KB=3.5,FALL_T=20;
 /* gueule : 0 au repos, monte de 0 à 1 pendant l'ouverture (1 s) ; la morsure a lieu au tick où elle retombe à 0 */
 function bloomOpen(it,t){const k=(t+Math.floor(it.ph/TAU*BLOOM_T))%BLOOM_T;return k<BLOOM_O?k/BLOOM_O:0;}
 function bloomBites(it,t){return (t+Math.floor(it.ph/TAU*BLOOM_T))%BLOOM_T===BLOOM_O;}
@@ -436,7 +435,8 @@ function decorTick(){
         D.car.push({it,x:q[0],y:q[1],e,t});decorHurt(e,CAR_D);}}}
 }
 /* vide : un ennemi PROJETÉ contre un gouffre tombe. Recul = vitesse au-delà de sa propre allure `sp`
-   (ses déplacements seuls n'y parviennent jamais : la vitesse lissée ne dépasse pas sp). Élites exclues. */
+   (ses déplacements seuls n'y parviennent jamais : la vitesse lissée ne dépasse pas sp). Élites exclues. SKY_KB 3,5 : le dash et
+   l'éclat du gonflement (4,4), l'Onde (4,9) y suffisent, le tir de base (1,3) non (test/decor.js --mesure, 02/10/2026). */
 function skyFalls(e,sp,oh){
   if(G.biome!=='sky'||e.elite||Math.hypot(e.vx,e.vy)-sp<=SKY_KB||!wallNear(e.x,e.y,e.r+2))return false;
   e.fall=FALL_T;e.fdx=-oh[0];e.fdy=-oh[1];e.vx=e.vy=0;G.dec.fall.push(e);return true;
@@ -533,7 +533,7 @@ function updDying(){
 function endRun(win){
   if(G.state==='end')return;
   G.state='end';G.win=win;
-  if(win){G.winBonus=10000+Math.max(0,1500-Math.floor(G.time/60))*10;G.score+=G.winBonus;}
+  if(win){SFX.ach();G.winBonus=10000+Math.max(0,1500-Math.floor(G.time/60))*10;G.score+=G.winBonus;}
   G.score=Math.round(G.score);
   meta.kills+=G.kills;meta.eats=(meta.eats||0)+G.eats;meta.runs++;if(win)meta.wins++;
   meta.lb.push({s:G.score,i:G.isl,w:win?1:0,t:Date.now(),d:G.time});

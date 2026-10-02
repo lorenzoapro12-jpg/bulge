@@ -37,7 +37,6 @@ function natSpr(src,key,n){const k=key+'|'+n;let S=NAT.get(k);if(S){NAT.delete(k
   S=mkCanvas(n,n);const g=S.getContext('2d');g.imageSmoothingEnabled=true;g.drawImage(src,0,0,n,n);if(NAT.size>=24)NAT.delete(NAT.keys().next().value);NAT.set(k,S);return S;}
 function natD(D){return Math.max(8,Math.round(Math.exp(Math.round(Math.log(D)/.0583)*.0583)));}
 function softPx(X,Y,D,col,a){if(!(D>=8))return;if(D>2048)D=2048;const n=natD(D);ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=a*LOWA;ctx.drawImage(natSpr(softSpr(col),'s'+col,n),Math.round(X-n/2),Math.round(Y-n/2));}
-function glowPx(X,Y,D,col,a){if(!(D>=8))return;if(D>2048)D=2048;const n=natD(D);ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=a*LOWA;ctx.drawImage(natSpr(glowSpr(col),'g'+col,n),Math.round(X-n/2),Math.round(Y-n/2));}
 /* halo en coordonnées du monde (appelant en worldTf) */
 function softW(x,y,r,col,a){const s=PS*RZ;softPx(PS*(W/2+RSX)+(x-CAM.x)*s,PS*(H/2+RSY)+(y-CAM.y)*s,2*r*s,col,a);worldTf();}
 function buildCaus(){const s=256,c=mkCanvas(s,s),g=c.getContext('2d');g.strokeStyle='rgba(170,240,255,.6)';g.lineWidth=2.2;
@@ -293,7 +292,7 @@ function drawLive(it){
    que skLev()>=1 (render). Sur un téléphone qui a dégradé sa qualité, seul ce qui est dessiné
    dans la passe du monde (drawChunks, drawObstacles, marques) reste visible.
    ========================================================= */
-/* intensité du Cœur : 1 sur l'Hypernoyau, décroît STRICTEMENT avec la distance (test/decor-vivant.js) */
+/* intensité du Cœur : 1 sur l'Hypernoyau, décroît STRICTEMENT avec la distance (test/decor-vue.js) */
 function coreK(x,y){if(!WD||!WD.core)return .5;const d=Math.hypot(x-WD.core.x,y-WD.core.y)/1800;return .3+.7/(1+d*d);}
 let EMK=.5;
 /* battement : une noire = 4 pas de séquenceur (STEP, g1.js) ; RT est en images à 60 i/s */
