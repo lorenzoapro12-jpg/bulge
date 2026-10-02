@@ -1,7 +1,8 @@
 /* =========================================================
    BOSS : un par îlot. Le boss est l'ennemi de l'îlot, en géant (même forme, même couleur).
-   Toute attaque est ANNONCÉE avant de frapper : trait de visée, bande de charge, anneau au sol
-   (G.tele, dessinés par g3.js drawTele). Deux phases (trois pour l'Hypernoyau), à 50 % de vie.
+   Les tirs se voient venir ; tout coup qui n'est pas un tir est ANNONCÉ avant de frapper : trait de visée,
+   bande de charge, secteur de rafale, anneau au sol (G.tele, dessinés par g3.js drawTele ; vérifié par
+   test/headless.js). Deux phases (trois pour l'Hypernoyau), à 50 % de vie.
    ========================================================= */
 const BOSS=[
   {n:'Essaim-Mère',sub:'Elle charge en ligne droite : écarte-toi de la bande',t:'mite',r:52,hp:110},

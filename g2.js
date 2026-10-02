@@ -84,17 +84,19 @@ function waveTick(){
   if(Q.left<=0&&!G.marks.some(m=>!m.prey)&&alive===0){G.score+=100*k*G.wave;
     if(G.wave<NWAVE){G.ph='pause';G.phT=0;}else{G.ph='preboss';G.phT=0;G.marks=[];}}
 }
-/* un groupe annoncé : une marque au sol une demi-seconde, puis les ennemis sur le bord de l'îlot */
+/* où paraître : à vue, ni collé à la bulle ni au bout de l'îlot, sur un sol libre (sinon, le bord) */
+function spawnSpot(){const P=G.p;let x=0,y=0;
+  for(let tr=0;tr<40;tr++){if(tr<24){const a=R()*TAU,r=rr(330,540);x=P.x+Math.cos(a)*r;y=P.y+Math.sin(a)*r;if(Math.hypot(x,y)>PR-90)continue;}
+    else{const a=R()*TAU,r=tr<32?PR-110:PR-260;x=Math.cos(a)*r;y=Math.sin(a)*r;if(dist2(x,y,P.x,P.y)<(tr<32?460:300)**2)continue;}
+    if(!wallNear(x,y,56)&&!pointHit(x,y,44))break;}
+  return[x,y];}
+/* un groupe annoncé : une marque au sol (près d'une seconde), puis les ennemis */
 function spawnGroup(){
   const Q=G.wq,k=G.isl,P=G.p;let t,n,prey=false;
   const pt=[];for(let a=PREYA;a<GONEA;a++)if(k-a>=1)pt.push(ETL[k-a-1]);
   if(Q.prey>0&&pt.length&&(Q.left<=0||R()<.34)){t=pick(pt);prey=true;n=Math.min(Q.prey,t==='mite'?5:3);Q.prey-=n;}
   else{if(Q.left<=0)return;t=k>=2&&R()<.36?ETL[k-2]:ETL[k-1];const big=ET[t].r>=19;n=Math.min(Q.left,t==='mite'?4:big?1:2+(R()<.4?1:0));Q.left-=n;}
-  let x=0,y=0,ok=false;
-  /* à vue, ni collés ni au bout de l'îlot : la marque au sol laisse le temps de les voir venir (sinon, le bord) */
-  for(let tr=0;tr<40&&!ok;tr++){if(tr<24){const a=R()*TAU,r=rr(330,540);x=P.x+Math.cos(a)*r;y=P.y+Math.sin(a)*r;if(Math.hypot(x,y)>PR-90)continue;}
-    else{const a=R()*TAU,r=tr<32?PR-110:PR-260;x=Math.cos(a)*r;y=Math.sin(a)*r;if(dist2(x,y,P.x,P.y)<(tr<32?460:300)**2)continue;}
-    ok=!wallNear(x,y,56)&&!pointHit(x,y,44);}
+  const [x,y]=spawnSpot();
   let el=0;if(!prey&&!Q.eld&&Q.n-Q.left>=Q.el){Q.eld=true;el=1;}
   G.marks.push({x,y,t:0,max:prey?30:50,t2:t,n,prey,el,col:ET[t].col});
 }
@@ -141,15 +143,16 @@ function zoomFull(){return Math.min(W,H)/(2*(WR+40));}
 /* age = îlots écoulés depuis l'arrivée du type : taille ÷1,4 par îlot ; à PREYA, proie */
 function mkEnemy(t,x,y,o){const d=ET[t],age=o&&o.age!=null?o.age:G.isl-d.isl,prey=age>=PREYA;
   const e={t,d,age,prey,col:d.col,x,y,vx:0,vy:0,r:d.r*Math.pow(GROW,-age),hp:d.hp*HPM()*(prey?.6:1),mhp:0,spawn:24,cd:rr(60,130),st:0,st2:0,ca:0,ta:0,tele:0,flash:0,
-    wob:R()*TAU,wa:R()*TAU,nk:(R()*15)|0,nav:null,dead:false,kids:0,made:0,parent:null,elite:0,sl:0,sn:null,frostT:0,alarmT:0,ivT:0,orbCd:0,dir:0};
+    wob:R()*TAU,wa:R()*TAU,nk:(R()*15)|0,nav:null,offT:0,hitT:G.t,dead:false,kids:0,made:0,parent:null,elite:0,sl:0,sn:null,frostT:0,alarmT:0,ivT:0,orbCd:0,dir:0};
   if(o)Object.assign(e,o);
   if(e.elite){e.hp*=3.2;e.r*=1.3;}
   e.mhp=e.hp;G.en.push(e);return e;}
 function confine(o,r){const dx=o.x,dy=o.y,d=Math.hypot(dx,dy),lim=PR-r;if(d>lim&&d>0){o.x=dx/d*lim;o.y=dy/d*lim;return[dx/d,dy/d];}return null;}
 function ebul(x,y,a,s,r,col){s*=1+.025*(G.isl-1);const b={x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,r,col:col||EBC,life:420,rot:0,gz:false};if(G.eb.length<600)G.eb.push(b);return b;}
 function ebulE(e,a,s){return ebul(e.x+Math.cos(a)*e.r*.8,e.y+Math.sin(a)*e.r*.8,a,s,Math.max(4.5,e.r*.32),EBC);}
+/* une proie ne se blesse pas : elle s'avale (les tirs la traversent, le tir automatique l'ignore) */
 function hurtEnemy(e,dmg,kx,ky,quiet){
-  if(e.dead||e.spawn>0)return;if(relais(e)){dmg*=RELAY_M;e.relT=G.t;}
+  if(e.dead||e.spawn>0||e.prey)return;if(relais(e)){dmg*=RELAY_M;e.relT=G.t;}e.hitT=G.t;
   if(R()<G.p.crit){dmg*=G.p.critM;e.crit=G.t;}
   e.hp-=dmg;e.flash=4;
   if(kx&&!(e.t==='spike'&&e.st===2)){const m=e.r>20?.35:1;e.vx+=kx*m;e.vy+=ky*m;}
@@ -228,6 +231,9 @@ function updEnemy(e){
   if(oh&&skyFalls(e,sp,oh))return;
   if(oh){const vn=e.vx*oh[0]+e.vy*oh[1];if(vn<0){e.vx-=vn*oh[0];e.vy-=vn*oh[1];}e.sl=20;e.sn=oh;if(e.t==='spike'&&e.st===2){e.st=0;e.cd=60;}}
   if(confine(e,e.r)&&e.t==='spike'&&e.st===2){e.st=0;e.cd=60;}
+  /* hors de vue 10 s, ou intouché 25 s (coincé derrière un rocher, ou trop prudent) : il reparaît à vue — une vague finit toujours */
+  const off=Math.abs(e.x-G.cx)>W/2/G.zoom+40||Math.abs(e.y-G.cy)>H/2/G.zoom+40;e.offT=off?e.offT+1:0;
+  if(e.offT>600||G.t-e.hitT>1500){const s=spawnSpot();e.x=s[0];e.y=s[1];e.vx=e.vy=0;e.spawn=24;e.offT=0;e.hitT=G.t;e.nav=null;}
 }
 /* ---------- navigation : carte des distances au joueur sur la grille des falaises (WC), refaite toutes les 20 images.
    Les massifs intérieurs de l'îlot sont des couverts ; sans elle, un ennemi né derrière l'un d'eux y restait collé. ---------- */
@@ -315,7 +321,7 @@ function updPlayer(){
 /* seulement ce qui est à l'écran : on ne tire jamais sur un ennemi qu'on ne voit pas */
 function findTarget(x,y,range){
   let best=null,bd=range*range;const hw=W/2/G.zoom,hh=H/2/G.zoom,off=(o,r)=>Math.abs(o.x-G.cx)>hw+r||Math.abs(o.y-G.cy)>hh+r;
-  for(const e of G.en){if(e.dead||e.spawn>0||off(e,-e.r))continue;let d=dist2(x,y,e.x,e.y);if(e.prey)d*=9;if(d<bd){bd=d;best=e;}}
+  for(const e of G.en){if(e.dead||e.spawn>0||e.prey||off(e,-e.r))continue;const d=dist2(x,y,e.x,e.y);if(d<bd){bd=d;best=e;}}
   for(const B of BIGS()){if(off(B,B.r*.5))continue;const d=Math.max(0,Math.hypot(x-B.x,y-B.y)-B.r*.6);if(d*d<bd){bd=d*d;best=B;}}
   return best;
 }
@@ -487,7 +493,7 @@ function updBullets(){
       for(const nd of B.nodes){if(nd.dead)continue;if(dist2(b.x,b.y,nd.x,nd.y)<(nd.r+b.r)**2){hitNode(nd,b.dmg);gone=true;break;}}
       if(!gone&&dist2(b.x,b.y,B.x,B.y)<(B.r+b.r)**2){if(bossHittable())hurtBoss(b.dmg);else sparks(b.x,b.y,COL.wh,3,2,10);gone=true;}}
     if(gone){if(b.kind===1)explode(b);else sparks(b.x,b.y,b.col,3,2.5,12);G.pb.splice(i,1);continue;}
-    for(const e of G.en){if(e.dead||e.spawn>0)continue;const rs=e.r+b.r;if(dist2(b.x,b.y,e.x,e.y)>=rs*rs)continue;
+    for(const e of G.en){if(e.dead||e.spawn>0||e.prey)continue;const rs=e.r+b.r;if(dist2(b.x,b.y,e.x,e.y)>=rs*rs)continue;
       if(b.hit&&b.hit.includes(e))continue;
       if(b.kind===1){explode(b);gone=true;break;}
       const sp=Math.hypot(b.vx,b.vy)||1;hurtEnemy(e,b.dmg,b.vx/sp*1.2,b.vy/sp*1.2);

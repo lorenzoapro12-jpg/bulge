@@ -178,7 +178,7 @@ window.__SIM_INPUT = function(){
   for (const e of G.en) { if (e.dead || e.spawn > 0) continue; const dx = P.x - e.x, dy = P.y - e.y, d = Math.hypot(dx, dy) || 1;
     if (e.prey || (P.gon > 0 && e.r < P.r)) { if (d < td) { td = d; tgt = e; } continue; }
     const R = e.r + P.r + 150; if (d < R) { vx += dx / d * (R - d) / R * 2.5; vy += dy / d * (R - d) / R * 2.5; } }
-  const B = G.boss; if (B && !B.dead && B.spawn <= 0) { const dx = P.x - B.x, dy = P.y - B.y, d = Math.hypot(dx, dy) || 1, R = B.r + 220; if (d < R) { vx += dx / d * (R - d) / R * 3; vy += dy / d * (R - d) / R * 3; } else if (d > viewR() + B.r * .4 - 30) { vx -= dx / d * .9; vy -= dy / d * .9; } }
+  const B = G.boss; if (B && !B.dead && B.spawn <= 0) { const dx = P.x - B.x, dy = P.y - B.y, d = Math.hypot(dx, dy) || 1, R = B.r + 220; if (d < R) { vx += dx / d * (R - d) / R * 3; vy += dy / d * (R - d) / R * 3; } else if (d > viewR() + B.r * .4 - 30) { const w = d > viewR() * 1.5 ? 2.5 : .9; vx -= dx / d * w; vy -= dy / d * w; } }
   else { let ne = null, nd = 1e18; for (const e of G.en) { if (e.dead || e.prey || e.spawn > 0) continue; const d = (e.x - P.x) ** 2 + (e.y - P.y) ** 2; if (d < nd) { nd = d; ne = e; } } if (ne && nd > (viewR() - 40) ** 2) { const d = Math.sqrt(nd); vx += (ne.x - P.x) / d * .7; vy += (ne.y - P.y) / d * .7; } }
   for (const q of G.pus) { const d = Math.hypot(q.x - P.x, q.y - P.y) * .6; if (d < td) { td = d; tgt = q; } }
   if (tgt) { const dx = tgt.x - P.x, dy = tgt.y - P.y, d = Math.hypot(dx, dy) || 1; vx += dx / d * .9; vy += dy / d * .9; }
