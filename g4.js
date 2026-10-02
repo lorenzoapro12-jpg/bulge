@@ -385,9 +385,10 @@ function frame(ts){
   if(G&&(G.state==='play'||G.state==='dying'||G.state==='trans')){
     DIAG_T+=dt;DIAG_N++;DIAG_CJS+=FWK+BKMS;DIAG_CDT+=dt;if(dt>DIAG_MX)DIAG_MX=dt;
     if(AU.ac&&AU.next!=null){const m=AU.next-AU.ac.currentTime;if(m<DIAG_AUM)DIAG_AUM=m;}
-    /* pire image : meme test que DIAG_MX (donc le meme nombre que « pire »), apparie au rappel PRECEDENT */
+    /* pire image : meme test que DIAG_MX (donc le meme nombre que « pire »), apparie au rappel PRECEDENT. Son retard (w[6]) vaut si
+       ce rappel a commence avant celui-ci (+rt) : Chromium donne a l'image N le tick passe PENDANT une longue tache (test/navigateur.js A4) */
     if(dt>DIAG_W[0]){const p=DIAG_PV,w=DIAG_W;w[0]=dt;w[1]=p[0];w[2]=p[1];w[3]=p[2];w[4]=p[0]<0?0:Math.max(0,WKN-p[4]);w[5]=p[3];
-      w[6]=p[0]>=0&&p[5]>=0&&p[5]<=dtb+1?p[5]:-1;const wm=p[0]>=0&&!!JSPROF.wkRecv;w[7]=wm?DIAG_WK[0]:-1;w[8]=wm?DIAG_WK[1]:0;w[9]=dtb;}
+      w[6]=p[0]>=0&&p[5]>=0&&p[5]<=dtb+rt+1?p[5]:-1;const wm=p[0]>=0&&!!JSPROF.wkRecv;w[7]=wm?DIAG_WK[0]:-1;w[8]=wm?DIAG_WK[1]:0;w[9]=dtb;}
     DIAG_PV[0]=FWK+BKMS;DIAG_PV[1]=DIAG_EV[0];DIAG_PV[2]=DIAG_EV[1];DIAG_PV[3]=CHNEW;DIAG_PV[4]=WKN;DIAG_PV[5]=rt;}
   else DIAG_PV[0]=-1;
   DIAG_EV[0]=DIAG_EV[1]=0;CHNEW=0;DIAG_WK[0]=DIAG_WK[1]=0;

@@ -101,6 +101,7 @@ td{padding:9px 6px;border-bottom:1px solid rgba(255,255,255,.07);text-align:left
 td.num{font-weight:700;color:var(--gd)}
 @media (max-width:520px){.stats{grid-template-columns:repeat(3,1fr)}.st .v{font-size:20px}.cards{grid-template-columns:1fr}.card{padding:14px}}
 @media (prefers-reduced-motion:reduce){.logo::before,.logo::after{animation:none}.ov.on{animation:none}.card:hover{transform:none}}
+@media (max-height:680px){#ov-evo{padding:12px}#ov-evo .in{gap:8px}#ov-evo h2{font-size:24px}#ov-evo .cards{gap:8px}#ov-evo .card{padding:9px 12px;gap:2px}#ov-evo .card .ic{font-size:20px}#ov-evo .card .nm{font-size:16px}#ov-evo .card .ds{font-size:12.5px;line-height:1.3}#ov-evo .btn{padding-top:8px;padding-bottom:8px}}
 </style>
 </head>
 <body>
@@ -187,7 +188,9 @@ const store={
   set(k,v){try{localStorage.setItem('bulge3_'+k,JSON.stringify(v));}catch(e){}}
 };
 const META0=()=>({runs:0,wins:0,best:0,bestIsl:0,lb:[],mute:false,kills:0,eats:0,seenHelp:false});
-let meta=Object.assign(META0(),store.get('meta',{})||{});
+/* une sauvegarde abîmée (ou d'une autre version) ne doit jamais casser le menu : on ne garde que des champs du bon type */
+let meta=(()=>{const m=META0(),s=store.get('meta',{});if(s&&typeof s==='object')for(const k in m)if(s[k]!=null&&typeof s[k]===typeof m[k]&&Array.isArray(s[k])===Array.isArray(m[k]))m[k]=s[k];
+  for(const k of ['fps','q','qAuto'])if(s&&s[k]!=null)m[k]=s[k];m.lb=m.lb.filter(e=>e&&typeof e.s==='number');return m;})();
 function saveMeta(){store.set('meta',meta);}
 
 /* ---------- données ---------- */
@@ -232,9 +235,7 @@ const SFX={
   shoot(){if(!can('sh',75))return;const t=AU.ac.currentTime;osc(AU.sfx,'square',900+Math.random()*250,420,t,.05,.010);},
   hit(){if(!can('hit',40))return;const t=AU.ac.currentTime;osc(AU.sfx,'triangle',620,260,t,.05,.026);},
   pop(big){if(!can(big?'popb':'pop',big?60:28))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',big?340:720,big?55:140,t,big?.3:.13,big?.16:.075);nz(AU.sfx,t,big?.35:.09,big?.14:.045,'bandpass',big?700:2600,1.4);},
-  pick(i){if(!can('pk',30))return;const t=AU.ac.currentTime,f=note(Math.min(i,24),330);osc(AU.sfx,'sine',f,f,t,.16,.04);osc(AU.sfx,'triangle',f*2,f*2,t,.07,.012);},
   lvl(){if(!can('lv',250))return;const t=AU.ac.currentTime;[0,4,7,12,16,19].forEach((s,k)=>osc(AU.sfx,'square',330*Math.pow(2,s/12),0,t+k*.045,.2,.03));nz(AU.sfx,t,.5,.06,'highpass',4000);osc(AU.sfx,'sine',110,440,t,.4,.08);},
-  delvl(){if(!can('dl',250))return;const t=AU.ac.currentTime;[12,7,3,0].forEach((s,k)=>osc(AU.sfx,'sawtooth',220*Math.pow(2,s/12),0,t+k*.06,.16,.03));},
   evo(){if(!can('ev',100))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',220,880,t,.35,.07);nz(AU.sfx,t,.3,.05,'bandpass',3000,2);},
   hurt(){if(!can('hu',90))return;const t=AU.ac.currentTime;nz(AU.sfx,t,.28,.25,'lowpass',1000);osc(AU.sfx,'sawtooth',200,55,t,.32,.09);},
   dash(){if(!can('da',100))return;const t=AU.ac.currentTime;nz(AU.sfx,t,.22,.12,'bandpass',1800,.8);osc(AU.sfx,'sine',300,900,t,.14,.04);},
@@ -460,7 +461,7 @@ function schedStep(s,t){
    Chaque îlot est généré dans SON repère : même rayon WR pour tous, la croissance (×1,4 par îlot)
    est portée par le jeu (g2.js : tailles des ennemis selon leur âge) et par la cinématique de
    passage (g3.js). Le sol garde donc la même résolution d'un îlot à l'autre : jamais plus de
-   ~25 chunks cuits, quel que soit l'îlot. Pur (mkRng/hash2 seulement) : le worker (gk.js) le
+   NC² = 81 chunks cuits (512², ~1 Mo chacun), quel que soit l'îlot. Pur (mkRng/hash2 seulement) : le worker (gk.js) le
    régénère à l'identique à partir de la graine de partie et du numéro d'îlot.
    ========================================================= */
 const WR=1050,CH=512,NC=Math.ceil(2*WR/CH)+4,COFF=NC>>1;
@@ -497,15 +498,16 @@ function genIslet(seed,k){
   buildWalls();buildMaps();
   if(ISLS!==seed){ISLM.clear();ISLS=seed;}ISLM.set(k,WD.mini);
 }
-function warpXY(x,y){const w=WD.warp;return[x+Math.sin(y*.0013+w[0])*190+Math.sin(y*.0041+w[1])*60,y+Math.sin(x*.0012+w[1])*190+Math.sin(x*.0037+w[0])*60];}
 /* un seul biome par îlot : les fonctions de lecture du monde gardent leur forme (art, audio, météo) */
-function siteAt(x,y){return WD.sites[0];}
 function biomeAt(x,y){return WD.sites[0].t;}
 function biomeMix(x,y){return[{b:WD.sites[0].t,w:1}];}
 /* carte 256² de l'îlot : couleur du sol, bord qui s'éteint dans le vide, relique au centre */
+/* Cartes en OffscreenCanvas quand il existe, comme dans le worker (mkBake, gw2.js) : clip() n'y est pas rasterisé
+   comme sur un canvas de page, et la relique cuite sur place différait d'un niveau de couleur de celle du worker (test/worker.js). */
+const mkM=(w,h)=>typeof OffscreenCanvas==='function'?new OffscreenCanvas(w,h):mkCanvas(w,h);
 function buildMaps(){
   const N=256,k=2*WR/N,B=BIO[WD.sites[0].t],c1=rgb(B.g);
-  const cm=mkCanvas(N,N);const gm=cm.getContext('2d'),img=gm.createImageData(N,N),d=img.data;
+  const cm=mkM(N,N);const gm=cm.getContext('2d'),img=gm.createImageData(N,N),d=img.data;
   for(let j=0;j<N;j++)for(let i=0;i<N;i++){
     const x=-WR+(i+.5)*k,y=-WR+(j+.5)*k,o=(j*N+i)*4,r0=Math.hypot(x,y);d[o+3]=255;
     if(r0>WR+80){d[o]=5;d[o+1]=3;d[o+2]=12;continue;}
@@ -514,14 +516,14 @@ function buildMaps(){
     for(let q2=0;q2<3;q2++)d[o+q2]=clamp(c1[q2]*n*e+5*(1-e),0,255);
   }
   gm.putImageData(img,0,0);
-  const bl=mkCanvas(N,N),bg=bl.getContext('2d');bg.fillStyle='#05030c';bg.fillRect(0,0,N,N);bg.filter='blur(2.2px)';bg.drawImage(cm,0,0);bg.filter='none';
+  const bl=mkM(N,N),bg=bl.getContext('2d');bg.fillStyle='#05030c';bg.fillRect(0,0,N,N);bg.filter='blur(2.2px)';bg.drawImage(cm,0,0);bg.filter='none';
   if(WD.relic)relicInto(bg,N/2,N/2,RELR/k,WD.relic,WD.relicB);
   WD.map=bl;
   /* la miniature (relique de l'îlot suivant) : la même carte, plus ses falaises en ombre, pour qu'on reconnaisse l'îlot quitté */
-  const wc=mkCanvas(N,N),wg=wc.getContext('2d'),q=WC/k;wg.fillStyle='rgb(5,3,12)';wg.beginPath();
+  const wc=mkM(N,N),wg=wc.getContext('2d'),q=WC/k;wg.fillStyle='rgb(5,3,12)';wg.beginPath();
   for(let j=0;j<NG;j++)for(let i=0;i<NG;i++)if(WD.wall[j*NG+i]){const x=(G0+(i+.5)*WC+WR)/k,y=(G0+(j+.5)*WC+WR)/k;wg.moveTo(x+q*.72,y);wg.arc(x,y,q*.72,0,TAU);}
   wg.fill();
-  const mi=mkCanvas(N,N),mg=mi.getContext('2d');mg.drawImage(bl,0,0);mg.filter='blur(1.2px)';mg.drawImage(wc,0,0);mg.filter='none';WD.mini=mi;
+  const mi=mkM(N,N),mg=mi.getContext('2d');mg.drawImage(bl,0,0);mg.filter='blur(1.2px)';mg.drawImage(wc,0,0);mg.filter='none';WD.mini=mi;
 }
 /* l'îlot précédent, réduit, dans un disque : ombre portée, liseré à la couleur de son biome */
 function relicInto(g,x,y,r,map,b){
@@ -1069,7 +1071,9 @@ function streamWorld(budget){
   while(Q&&Q.length&&performance.now()-t0<budget){const c=Q[0];if(!c.bake){if(W)break;bakeStep(c);continue;}let k=0;
     for(const o of c.obs){if(o.wall||o.spr)continue;if(performance.now()-t0>=budget){k=1;break;}obsSprite(o);o.su=1e9;OSPR.push(o);}
     if(!k)Q.shift();}
-  evictBakes(Math.max(60,n+8));evictSprites(Math.max(360,OSPR.length>600?360:600));BKMS=performance.now()-t0;
+  /* un îlot n'a que NC² chunks (81) : tous restent cuits jusqu'au passage. Plafonné à 60, il en évinçait puis en recuisait
+     la moitié (mesure test/cuisson.js du 02/10/2026 : 52 % du temps de cuisson en recuissons, surtout hors de l'îlot) */
+  evictBakes(Math.max(NC*NC,n+8));evictSprites(Math.max(360,OSPR.length>600?360:600));BKMS=performance.now()-t0;
 }
 
 /* ---------- obstacles : sprites illustrés avec ombre portée ---------- */
@@ -1213,7 +1217,7 @@ function newRun(){
 }
 /* WD vient d'être généré pour l'îlot G.isl : on vide l'arène et on y pose la bulle, au centre (sur la relique) */
 function islStart(){
-  const k=G.isl,P=G.p;G.biome=ISL[k-1];setBiome(G.biome);
+  const k=G.isl,P=G.p;G.biome=ISL[k-1];setBiome(G.biome);if(typeof drawWeather==='function'){WEA.length=0;WCX=null;}
   G.ph='arrive';G.phT=0;G.islT=0;G.wave=0;G.wq=null;G.en=[];G.eb=[];G.pb=[];G.pus=[];G.tele=[];G.marks=[];G.mines=[];G.trails=[];G.boss=null;G.wbn=null;
   G.dec=decor0();G.courant=null;if(G.biome==='sea'){const d=siteDir(0,0x5EA);G.courant={x:d[0],y:d[1]};}
   P.x=P.y=0;P.vx=P.vy=0;P.secUsed=false;P.dashing=0;G.cx=G.cy=0;G.zoom=zoomTarget();G.pcx=G.pcy=G.pzoom=null;G.lvx=G.lvy=0;
@@ -1247,17 +1251,19 @@ function waveTick(){
   if(Q.left<=0&&!G.marks.some(m=>!m.prey)&&alive===0){G.score+=100*k*G.wave;
     if(G.wave<NWAVE){G.ph='pause';G.phT=0;}else{G.ph='preboss';G.phT=0;G.marks=[];}}
 }
-/* un groupe annoncé : une marque au sol une demi-seconde, puis les ennemis sur le bord de l'îlot */
+/* où paraître : à vue, ni collé à la bulle ni au bout de l'îlot, sur un sol libre (sinon, le bord) */
+function spawnSpot(){const P=G.p;let x=0,y=0;
+  for(let tr=0;tr<40;tr++){if(tr<24){const a=R()*TAU,r=rr(330,540);x=P.x+Math.cos(a)*r;y=P.y+Math.sin(a)*r;if(Math.hypot(x,y)>PR-90)continue;}
+    else{const a=R()*TAU,r=tr<32?PR-110:PR-260;x=Math.cos(a)*r;y=Math.sin(a)*r;if(dist2(x,y,P.x,P.y)<(tr<32?460:300)**2)continue;}
+    if(!wallNear(x,y,56)&&!pointHit(x,y,44))break;}
+  return[x,y];}
+/* un groupe annoncé : une marque au sol (près d'une seconde), puis les ennemis */
 function spawnGroup(){
   const Q=G.wq,k=G.isl,P=G.p;let t,n,prey=false;
   const pt=[];for(let a=PREYA;a<GONEA;a++)if(k-a>=1)pt.push(ETL[k-a-1]);
   if(Q.prey>0&&pt.length&&(Q.left<=0||R()<.34)){t=pick(pt);prey=true;n=Math.min(Q.prey,t==='mite'?5:3);Q.prey-=n;}
   else{if(Q.left<=0)return;t=k>=2&&R()<.36?ETL[k-2]:ETL[k-1];const big=ET[t].r>=19;n=Math.min(Q.left,t==='mite'?4:big?1:2+(R()<.4?1:0));Q.left-=n;}
-  let x=0,y=0,ok=false;
-  /* à vue, ni collés ni au bout de l'îlot : la marque au sol laisse le temps de les voir venir (sinon, le bord) */
-  for(let tr=0;tr<40&&!ok;tr++){if(tr<24){const a=R()*TAU,r=rr(330,540);x=P.x+Math.cos(a)*r;y=P.y+Math.sin(a)*r;if(Math.hypot(x,y)>PR-90)continue;}
-    else{const a=R()*TAU,r=tr<32?PR-110:PR-260;x=Math.cos(a)*r;y=Math.sin(a)*r;if(dist2(x,y,P.x,P.y)<(tr<32?460:300)**2)continue;}
-    ok=!wallNear(x,y,56)&&!pointHit(x,y,44);}
+  const [x,y]=spawnSpot();
   let el=0;if(!prey&&!Q.eld&&Q.n-Q.left>=Q.el){Q.eld=true;el=1;}
   G.marks.push({x,y,t:0,max:prey?30:50,t2:t,n,prey,el,col:ET[t].col});
 }
@@ -1269,7 +1275,7 @@ function updMarks(){
 }
 /* îlot nettoyé : le boss est tombé */
 function islClear(){
-  G.ph='clear';G.phT=0;G.eb=[];G.tele=[];G.marks=[];G.wq=null;
+  G.ph='clear';G.phT=0;G.eb=[];G.tele=[];G.marks=[];G.wq=null;SFX.lvl();
   for(const e of G.en)if(!e.dead){e.dead=true;shards(e.x,e.y,e.col,5,3,e.r);G.score+=10;}G.en=[];
 }
 function clearTick(){
@@ -1304,15 +1310,16 @@ function zoomFull(){return Math.min(W,H)/(2*(WR+40));}
 /* age = îlots écoulés depuis l'arrivée du type : taille ÷1,4 par îlot ; à PREYA, proie */
 function mkEnemy(t,x,y,o){const d=ET[t],age=o&&o.age!=null?o.age:G.isl-d.isl,prey=age>=PREYA;
   const e={t,d,age,prey,col:d.col,x,y,vx:0,vy:0,r:d.r*Math.pow(GROW,-age),hp:d.hp*HPM()*(prey?.6:1),mhp:0,spawn:24,cd:rr(60,130),st:0,st2:0,ca:0,ta:0,tele:0,flash:0,
-    wob:R()*TAU,wa:R()*TAU,nk:(R()*15)|0,nav:null,dead:false,kids:0,made:0,parent:null,elite:0,sl:0,sn:null,frostT:0,alarmT:0,ivT:0,orbCd:0,dir:0};
+    wob:R()*TAU,wa:R()*TAU,nk:(R()*15)|0,nav:null,offT:0,hitT:G.t,dead:false,kids:0,made:0,parent:null,elite:0,sl:0,sn:null,frostT:0,alarmT:0,ivT:0,orbCd:0,dir:0};
   if(o)Object.assign(e,o);
   if(e.elite){e.hp*=3.2;e.r*=1.3;}
   e.mhp=e.hp;G.en.push(e);return e;}
 function confine(o,r){const dx=o.x,dy=o.y,d=Math.hypot(dx,dy),lim=PR-r;if(d>lim&&d>0){o.x=dx/d*lim;o.y=dy/d*lim;return[dx/d,dy/d];}return null;}
 function ebul(x,y,a,s,r,col){s*=1+.025*(G.isl-1);const b={x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,r,col:col||EBC,life:420,rot:0,gz:false};if(G.eb.length<600)G.eb.push(b);return b;}
 function ebulE(e,a,s){return ebul(e.x+Math.cos(a)*e.r*.8,e.y+Math.sin(a)*e.r*.8,a,s,Math.max(4.5,e.r*.32),EBC);}
+/* une proie ne se blesse pas : elle s'avale (les tirs la traversent, le tir automatique l'ignore) */
 function hurtEnemy(e,dmg,kx,ky,quiet){
-  if(e.dead||e.spawn>0)return;if(relais(e)){dmg*=RELAY_M;e.relT=G.t;}
+  if(e.dead||e.spawn>0||e.prey)return;if(relais(e)){dmg*=RELAY_M;e.relT=G.t;}e.hitT=G.t;
   if(R()<G.p.crit){dmg*=G.p.critM;e.crit=G.t;}
   e.hp-=dmg;e.flash=4;
   if(kx&&!(e.t==='spike'&&e.st===2)){const m=e.r>20?.35:1;e.vx+=kx*m;e.vy+=ky*m;}
@@ -1391,6 +1398,9 @@ function updEnemy(e){
   if(oh&&skyFalls(e,sp,oh))return;
   if(oh){const vn=e.vx*oh[0]+e.vy*oh[1];if(vn<0){e.vx-=vn*oh[0];e.vy-=vn*oh[1];}e.sl=20;e.sn=oh;if(e.t==='spike'&&e.st===2){e.st=0;e.cd=60;}}
   if(confine(e,e.r)&&e.t==='spike'&&e.st===2){e.st=0;e.cd=60;}
+  /* hors de vue 10 s, ou intouché 25 s (coincé derrière un rocher, ou trop prudent) : il reparaît à vue — une vague finit toujours */
+  const off=Math.abs(e.x-G.cx)>W/2/G.zoom+40||Math.abs(e.y-G.cy)>H/2/G.zoom+40;e.offT=off?e.offT+1:0;
+  if(e.offT>600||G.t-e.hitT>1500){const s=spawnSpot();e.x=s[0];e.y=s[1];e.vx=e.vy=0;e.spawn=24;e.offT=0;e.hitT=G.t;e.nav=null;}
 }
 /* ---------- navigation : carte des distances au joueur sur la grille des falaises (WC), refaite toutes les 20 images.
    Les massifs intérieurs de l'îlot sont des couverts ; sans elle, un ennemi né derrière l'un d'eux y restait collé. ---------- */
@@ -1446,7 +1456,7 @@ function clearNear(rad){const P=G.p;for(let i=G.eb.length-1;i>=0;i--){const b=G.
 function tryDash(){
   if(!G||G.state!=='play')return;const P=G.p;if(P.dashT>0||P.dead||P.noDash||P.dashing>0)return;
   let dx=G.inX,dy=G.inY;if(!dx&&!dy){dx=Math.cos(P.ang);dy=Math.sin(P.ang);}const l=Math.hypot(dx,dy)||1;dx/=l;dy/=l;
-  P.glisse=G.biome==='ice';P.dashing=P.glisse?ICE_DASH:12;if(P.glisse)G.dec.glisseT=G.t;P.dashT=P.dashMax;P.dvx=dx*P.spd*3.6;P.dvy=dy*P.spd*3.6;P.inv=Math.max(P.inv,P.dashing+4);P.dashHit=[];SFX.dash();
+  P.glisse=G.biome==='ice';P.dashing=P.glisse?ICE_DASH:12;if(P.glisse)G.dec.glisseT=G.t;P.dashT=P.dashMax;P.dvx=dx*P.spd*3.6;P.dvy=dy*P.spd*3.6;P.inv=Math.max(P.inv,18);P.dashHit=[];SFX.dash();
   ringFX(P.x,P.y,P.r,P.r*2.2,P.col,14,3);if(P.echo)clearNear(160);if(P.mines)layMine(P.x,P.y);
 }
 /* Gonfler : jauge pleine. La bulle double, devient invulnérable et avale ce qui est plus petit qu'elle ; à la fin, elle éclate. */
@@ -1478,7 +1488,7 @@ function updPlayer(){
 /* seulement ce qui est à l'écran : on ne tire jamais sur un ennemi qu'on ne voit pas */
 function findTarget(x,y,range){
   let best=null,bd=range*range;const hw=W/2/G.zoom,hh=H/2/G.zoom,off=(o,r)=>Math.abs(o.x-G.cx)>hw+r||Math.abs(o.y-G.cy)>hh+r;
-  for(const e of G.en){if(e.dead||e.spawn>0||off(e,-e.r))continue;let d=dist2(x,y,e.x,e.y);if(e.prey)d*=9;if(d<bd){bd=d;best=e;}}
+  for(const e of G.en){if(e.dead||e.spawn>0||e.prey||off(e,-e.r))continue;const d=dist2(x,y,e.x,e.y);if(d<bd){bd=d;best=e;}}
   for(const B of BIGS()){if(off(B,B.r*.5))continue;const d=Math.max(0,Math.hypot(x-B.x,y-B.y)-B.r*.6);if(d*d<bd){bd=d*d;best=B;}}
   return best;
 }
@@ -1509,7 +1519,6 @@ function playerFire(){
 }
 /* le boss est la seule « grande » cible ; ces trois noms servent aux armes de zone */
 function BIGS(){const B=G.boss;return B&&bossHittable()?[B]:[];}
-function bigHittable(o){return o===G.boss&&bossHittable();}
 function hurtBig(o,d,q){if(o===G.boss)hurtBoss(d,q);}
 function updWeapons(){
   const P=G.p,dm=P.dmg*(P.overload&&puAny()?1.4:1);
@@ -1566,7 +1575,7 @@ function nodeHit(b){const c=getChunk(Math.floor(b.x/CH),Math.floor(b.y/CH));if(!
 /* ---------- le décor mord : gueules (floral), circulation (urban), vide (sky) ----------
    Règles de TERRAIN de l'îlot (G.biome). Elles ne visent que G.en : le boss n'y est jamais, ni le joueur.
    Dégâts = fraction des PV max, appliqués hors hurtEnemy : ni critique ni bonus ne les dépassent. */
-const BLOOM_T=240,BLOOM_O=60,BLOOM_R=72,BLOOM_D=.3,CAR_D=.4,CAR_K=8,SKY_KB=4.5,FALL_T=20;
+const BLOOM_T=240,BLOOM_O=60,BLOOM_R=72,BLOOM_D=.3,CAR_D=.4,CAR_K=8,SKY_KB=3.5,FALL_T=20;
 /* gueule : 0 au repos, monte de 0 à 1 pendant l'ouverture (1 s) ; la morsure a lieu au tick où elle retombe à 0 */
 function bloomOpen(it,t){const k=(t+Math.floor(it.ph/TAU*BLOOM_T))%BLOOM_T;return k<BLOOM_O?k/BLOOM_O:0;}
 function bloomBites(it,t){return (t+Math.floor(it.ph/TAU*BLOOM_T))%BLOOM_T===BLOOM_O;}
@@ -1593,7 +1602,8 @@ function decorTick(){
         D.car.push({it,x:q[0],y:q[1],e,t});decorHurt(e,CAR_D);}}}
 }
 /* vide : un ennemi PROJETÉ contre un gouffre tombe. Recul = vitesse au-delà de sa propre allure `sp`
-   (ses déplacements seuls n'y parviennent jamais : la vitesse lissée ne dépasse pas sp). Élites exclues. */
+   (ses déplacements seuls n'y parviennent jamais : la vitesse lissée ne dépasse pas sp). Élites exclues. SKY_KB 3,5 : le dash et
+   l'éclat du gonflement (4,4), l'Onde (4,9) y suffisent, le tir de base (1,3) non (test/decor.js --mesure, 02/10/2026). */
 function skyFalls(e,sp,oh){
   if(G.biome!=='sky'||e.elite||Math.hypot(e.vx,e.vy)-sp<=SKY_KB||!wallNear(e.x,e.y,e.r+2))return false;
   e.fall=FALL_T;e.fdx=-oh[0];e.fdy=-oh[1];e.vx=e.vy=0;G.dec.fall.push(e);return true;
@@ -1650,7 +1660,7 @@ function updBullets(){
       for(const nd of B.nodes){if(nd.dead)continue;if(dist2(b.x,b.y,nd.x,nd.y)<(nd.r+b.r)**2){hitNode(nd,b.dmg);gone=true;break;}}
       if(!gone&&dist2(b.x,b.y,B.x,B.y)<(B.r+b.r)**2){if(bossHittable())hurtBoss(b.dmg);else sparks(b.x,b.y,COL.wh,3,2,10);gone=true;}}
     if(gone){if(b.kind===1)explode(b);else sparks(b.x,b.y,b.col,3,2.5,12);G.pb.splice(i,1);continue;}
-    for(const e of G.en){if(e.dead||e.spawn>0)continue;const rs=e.r+b.r;if(dist2(b.x,b.y,e.x,e.y)>=rs*rs)continue;
+    for(const e of G.en){if(e.dead||e.spawn>0||e.prey)continue;const rs=e.r+b.r;if(dist2(b.x,b.y,e.x,e.y)>=rs*rs)continue;
       if(b.hit&&b.hit.includes(e))continue;
       if(b.kind===1){explode(b);gone=true;break;}
       const sp=Math.hypot(b.vx,b.vy)||1;hurtEnemy(e,b.dmg,b.vx/sp*1.2,b.vy/sp*1.2);
@@ -1690,7 +1700,7 @@ function updDying(){
 function endRun(win){
   if(G.state==='end')return;
   G.state='end';G.win=win;
-  if(win){G.winBonus=10000+Math.max(0,1500-Math.floor(G.time/60))*10;G.score+=G.winBonus;}
+  if(win){SFX.ach();G.winBonus=10000+Math.max(0,1500-Math.floor(G.time/60))*10;G.score+=G.winBonus;}
   G.score=Math.round(G.score);
   meta.kills+=G.kills;meta.eats=(meta.eats||0)+G.eats;meta.runs++;if(win)meta.wins++;
   meta.lb.push({s:G.score,i:G.isl,w:win?1:0,t:Date.now(),d:G.time});
@@ -1870,8 +1880,9 @@ function pickCard(i){
 function reroll(){if(!G||G.state!=='pick'||G.rerolls<=0)return;G.rerolls--;G.choices=rollCards();renderPick();SFX.ui();}
 /* =========================================================
    BOSS : un par îlot. Le boss est l'ennemi de l'îlot, en géant (même forme, même couleur).
-   Toute attaque est ANNONCÉE avant de frapper : trait de visée, bande de charge, anneau au sol
-   (G.tele, dessinés par g3.js drawTele). Deux phases (trois pour l'Hypernoyau), à 50 % de vie.
+   Les tirs se voient venir ; tout coup qui n'est pas un tir est ANNONCÉ avant de frapper : trait de visée,
+   bande de charge, secteur de rafale, anneau au sol (G.tele, dessinés par g3.js drawTele ; vérifié par
+   test/headless.js). Deux phases (trois pour l'Hypernoyau), à 50 % de vie.
    ========================================================= */
 const BOSS=[
   {n:'Essaim-Mère',sub:'Elle charge en ligne droite : écarte-toi de la bande',t:'mite',r:52,hp:110},
@@ -2045,7 +2056,6 @@ function natSpr(src,key,n){const k=key+'|'+n;let S=NAT.get(k);if(S){NAT.delete(k
   S=mkCanvas(n,n);const g=S.getContext('2d');g.imageSmoothingEnabled=true;g.drawImage(src,0,0,n,n);if(NAT.size>=24)NAT.delete(NAT.keys().next().value);NAT.set(k,S);return S;}
 function natD(D){return Math.max(8,Math.round(Math.exp(Math.round(Math.log(D)/.0583)*.0583)));}
 function softPx(X,Y,D,col,a){if(!(D>=8))return;if(D>2048)D=2048;const n=natD(D);ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=a*LOWA;ctx.drawImage(natSpr(softSpr(col),'s'+col,n),Math.round(X-n/2),Math.round(Y-n/2));}
-function glowPx(X,Y,D,col,a){if(!(D>=8))return;if(D>2048)D=2048;const n=natD(D);ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=a*LOWA;ctx.drawImage(natSpr(glowSpr(col),'g'+col,n),Math.round(X-n/2),Math.round(Y-n/2));}
 /* halo en coordonnées du monde (appelant en worldTf) */
 function softW(x,y,r,col,a){const s=PS*RZ;softPx(PS*(W/2+RSX)+(x-CAM.x)*s,PS*(H/2+RSY)+(y-CAM.y)*s,2*r*s,col,a);worldTf();}
 function buildCaus(){const s=256,c=mkCanvas(s,s),g=c.getContext('2d');g.strokeStyle='rgba(170,240,255,.6)';g.lineWidth=2.2;
@@ -2096,7 +2106,7 @@ function drawLowGlows(){
 function chunksCover(){const c0=Math.floor(VL/CH),c1=Math.floor(VR/CH),r0=Math.floor(VT/CH),r1=Math.floor(VB/CH);
   for(let cx=c0;cx<=c1;cx++)for(let cy=r0;cy<=r1;cy++){const c=getChunk(cx,cy);if(!c||!c.bake&&!c.bk)return false;}return true;}
 /* Niveau de degradation decide par la boucle (g4.js) : 0 = tout dessiner, 1 = les postes
-   decoratifs cedent, 2 = en plus les halos et la mini-carte. Le jeu n'a aucun budget global
+   decoratifs cedent, 2 = en plus les halos. Le jeu n'a aucun budget global
    par image : seule la cuisson en avait un. Quand l'image ne tient pas dans son budget, ce
    sont les postes dont l'absence ne se voit pas qui doivent ceder, pas le monde ni le joueur.
    Le test typeof est volontaire : si la boucle n'expose pas SKIPD, on dessine tout (aucune
@@ -2301,7 +2311,7 @@ function drawLive(it){
    que skLev()>=1 (render). Sur un téléphone qui a dégradé sa qualité, seul ce qui est dessiné
    dans la passe du monde (drawChunks, drawObstacles, marques) reste visible.
    ========================================================= */
-/* intensité du Cœur : 1 sur l'Hypernoyau, décroît STRICTEMENT avec la distance (test/decor-vivant.js) */
+/* intensité du Cœur : 1 sur l'Hypernoyau, décroît STRICTEMENT avec la distance (test/decor-vue.js) */
 function coreK(x,y){if(!WD||!WD.core)return .5;const d=Math.hypot(x-WD.core.x,y-WD.core.y)/1800;return .3+.7/(1+d*d);}
 let EMK=.5;
 /* battement : une noire = 4 pas de séquenceur (STEP, g1.js) ; RT est en images à 60 i/s */
@@ -2809,7 +2819,8 @@ function drawHUD(){
       c.fillStyle='#fff';c.fillText('◉',gb.x,gb.y);c.globalAlpha=1;}
     else if(P.gauge>=1&&P.gon<=0){c.textAlign='center';c.textBaseline='bottom';c.font='700 14px '+FD;c.globalAlpha=.7+.3*Math.sin(RT*.2);c.fillStyle='#ffffff';c.fillText('E ou clic droit : gonfler',W/2,H-pad);c.globalAlpha=1;}
   }
-  if(meta.fps){c.textAlign='left';c.textBaseline='bottom';c.fillStyle='#8f89b3';
+  /* jusqu'à la copie de l'écran (trSnap), le compteur se tait aussi : sinon il s'imprime dans la relique de l'îlot suivant */
+  if(meta.fps&&!(G.state==='trans'&&G.tr&&G.tr.t<=TR_SNAP)){c.textAlign='left';c.textBaseline='bottom';c.fillStyle='#8f89b3';
     /* ---- Compteur de diagnostic : TOUT doit tenir dans la largeur du canvas -----------------
        Mesure sur Galaxy S22 (29/09/2026) : canvas de 617 px de large pour 411 px de largeur de
        DESSIN (PS 1.50). Les lignes « PS … marge audio » et « ou : … » debordaient des DEUX cotes
@@ -3332,9 +3343,10 @@ function frame(ts){
   if(G&&(G.state==='play'||G.state==='dying'||G.state==='trans')){
     DIAG_T+=dt;DIAG_N++;DIAG_CJS+=FWK+BKMS;DIAG_CDT+=dt;if(dt>DIAG_MX)DIAG_MX=dt;
     if(AU.ac&&AU.next!=null){const m=AU.next-AU.ac.currentTime;if(m<DIAG_AUM)DIAG_AUM=m;}
-    /* pire image : meme test que DIAG_MX (donc le meme nombre que « pire »), apparie au rappel PRECEDENT */
+    /* pire image : meme test que DIAG_MX (donc le meme nombre que « pire »), apparie au rappel PRECEDENT. Son retard (w[6]) vaut si
+       ce rappel a commence avant celui-ci (+rt) : Chromium donne a l'image N le tick passe PENDANT une longue tache (test/navigateur.js A4) */
     if(dt>DIAG_W[0]){const p=DIAG_PV,w=DIAG_W;w[0]=dt;w[1]=p[0];w[2]=p[1];w[3]=p[2];w[4]=p[0]<0?0:Math.max(0,WKN-p[4]);w[5]=p[3];
-      w[6]=p[0]>=0&&p[5]>=0&&p[5]<=dtb+1?p[5]:-1;const wm=p[0]>=0&&!!JSPROF.wkRecv;w[7]=wm?DIAG_WK[0]:-1;w[8]=wm?DIAG_WK[1]:0;w[9]=dtb;}
+      w[6]=p[0]>=0&&p[5]>=0&&p[5]<=dtb+rt+1?p[5]:-1;const wm=p[0]>=0&&!!JSPROF.wkRecv;w[7]=wm?DIAG_WK[0]:-1;w[8]=wm?DIAG_WK[1]:0;w[9]=dtb;}
     DIAG_PV[0]=FWK+BKMS;DIAG_PV[1]=DIAG_EV[0];DIAG_PV[2]=DIAG_EV[1];DIAG_PV[3]=CHNEW;DIAG_PV[4]=WKN;DIAG_PV[5]=rt;}
   else DIAG_PV[0]=-1;
   DIAG_EV[0]=DIAG_EV[1]=0;CHNEW=0;DIAG_WK[0]=DIAG_WK[1]=0;
@@ -3420,7 +3432,9 @@ const store={
   set(k,v){try{localStorage.setItem('bulge3_'+k,JSON.stringify(v));}catch(e){}}
 };
 const META0=()=>({runs:0,wins:0,best:0,bestIsl:0,lb:[],mute:false,kills:0,eats:0,seenHelp:false});
-let meta=Object.assign(META0(),store.get('meta',{})||{});
+/* une sauvegarde abîmée (ou d'une autre version) ne doit jamais casser le menu : on ne garde que des champs du bon type */
+let meta=(()=>{const m=META0(),s=store.get('meta',{});if(s&&typeof s==='object')for(const k in m)if(s[k]!=null&&typeof s[k]===typeof m[k]&&Array.isArray(s[k])===Array.isArray(m[k]))m[k]=s[k];
+  for(const k of ['fps','q','qAuto'])if(s&&s[k]!=null)m[k]=s[k];m.lb=m.lb.filter(e=>e&&typeof e.s==='number');return m;})();
 function saveMeta(){store.set('meta',meta);}
 
 /* ---------- données ---------- */
@@ -3465,9 +3479,7 @@ const SFX={
   shoot(){if(!can('sh',75))return;const t=AU.ac.currentTime;osc(AU.sfx,'square',900+Math.random()*250,420,t,.05,.010);},
   hit(){if(!can('hit',40))return;const t=AU.ac.currentTime;osc(AU.sfx,'triangle',620,260,t,.05,.026);},
   pop(big){if(!can(big?'popb':'pop',big?60:28))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',big?340:720,big?55:140,t,big?.3:.13,big?.16:.075);nz(AU.sfx,t,big?.35:.09,big?.14:.045,'bandpass',big?700:2600,1.4);},
-  pick(i){if(!can('pk',30))return;const t=AU.ac.currentTime,f=note(Math.min(i,24),330);osc(AU.sfx,'sine',f,f,t,.16,.04);osc(AU.sfx,'triangle',f*2,f*2,t,.07,.012);},
   lvl(){if(!can('lv',250))return;const t=AU.ac.currentTime;[0,4,7,12,16,19].forEach((s,k)=>osc(AU.sfx,'square',330*Math.pow(2,s/12),0,t+k*.045,.2,.03));nz(AU.sfx,t,.5,.06,'highpass',4000);osc(AU.sfx,'sine',110,440,t,.4,.08);},
-  delvl(){if(!can('dl',250))return;const t=AU.ac.currentTime;[12,7,3,0].forEach((s,k)=>osc(AU.sfx,'sawtooth',220*Math.pow(2,s/12),0,t+k*.06,.16,.03));},
   evo(){if(!can('ev',100))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',220,880,t,.35,.07);nz(AU.sfx,t,.3,.05,'bandpass',3000,2);},
   hurt(){if(!can('hu',90))return;const t=AU.ac.currentTime;nz(AU.sfx,t,.28,.25,'lowpass',1000);osc(AU.sfx,'sawtooth',200,55,t,.32,.09);},
   dash(){if(!can('da',100))return;const t=AU.ac.currentTime;nz(AU.sfx,t,.22,.12,'bandpass',1800,.8);osc(AU.sfx,'sine',300,900,t,.14,.04);},
@@ -3693,7 +3705,7 @@ function schedStep(s,t){
    Chaque îlot est généré dans SON repère : même rayon WR pour tous, la croissance (×1,4 par îlot)
    est portée par le jeu (g2.js : tailles des ennemis selon leur âge) et par la cinématique de
    passage (g3.js). Le sol garde donc la même résolution d'un îlot à l'autre : jamais plus de
-   ~25 chunks cuits, quel que soit l'îlot. Pur (mkRng/hash2 seulement) : le worker (gk.js) le
+   NC² = 81 chunks cuits (512², ~1 Mo chacun), quel que soit l'îlot. Pur (mkRng/hash2 seulement) : le worker (gk.js) le
    régénère à l'identique à partir de la graine de partie et du numéro d'îlot.
    ========================================================= */
 const WR=1050,CH=512,NC=Math.ceil(2*WR/CH)+4,COFF=NC>>1;
@@ -3730,15 +3742,16 @@ function genIslet(seed,k){
   buildWalls();buildMaps();
   if(ISLS!==seed){ISLM.clear();ISLS=seed;}ISLM.set(k,WD.mini);
 }
-function warpXY(x,y){const w=WD.warp;return[x+Math.sin(y*.0013+w[0])*190+Math.sin(y*.0041+w[1])*60,y+Math.sin(x*.0012+w[1])*190+Math.sin(x*.0037+w[0])*60];}
 /* un seul biome par îlot : les fonctions de lecture du monde gardent leur forme (art, audio, météo) */
-function siteAt(x,y){return WD.sites[0];}
 function biomeAt(x,y){return WD.sites[0].t;}
 function biomeMix(x,y){return[{b:WD.sites[0].t,w:1}];}
 /* carte 256² de l'îlot : couleur du sol, bord qui s'éteint dans le vide, relique au centre */
+/* Cartes en OffscreenCanvas quand il existe, comme dans le worker (mkBake, gw2.js) : clip() n'y est pas rasterisé
+   comme sur un canvas de page, et la relique cuite sur place différait d'un niveau de couleur de celle du worker (test/worker.js). */
+const mkM=(w,h)=>typeof OffscreenCanvas==='function'?new OffscreenCanvas(w,h):mkCanvas(w,h);
 function buildMaps(){
   const N=256,k=2*WR/N,B=BIO[WD.sites[0].t],c1=rgb(B.g);
-  const cm=mkCanvas(N,N);const gm=cm.getContext('2d'),img=gm.createImageData(N,N),d=img.data;
+  const cm=mkM(N,N);const gm=cm.getContext('2d'),img=gm.createImageData(N,N),d=img.data;
   for(let j=0;j<N;j++)for(let i=0;i<N;i++){
     const x=-WR+(i+.5)*k,y=-WR+(j+.5)*k,o=(j*N+i)*4,r0=Math.hypot(x,y);d[o+3]=255;
     if(r0>WR+80){d[o]=5;d[o+1]=3;d[o+2]=12;continue;}
@@ -3747,14 +3760,14 @@ function buildMaps(){
     for(let q2=0;q2<3;q2++)d[o+q2]=clamp(c1[q2]*n*e+5*(1-e),0,255);
   }
   gm.putImageData(img,0,0);
-  const bl=mkCanvas(N,N),bg=bl.getContext('2d');bg.fillStyle='#05030c';bg.fillRect(0,0,N,N);bg.filter='blur(2.2px)';bg.drawImage(cm,0,0);bg.filter='none';
+  const bl=mkM(N,N),bg=bl.getContext('2d');bg.fillStyle='#05030c';bg.fillRect(0,0,N,N);bg.filter='blur(2.2px)';bg.drawImage(cm,0,0);bg.filter='none';
   if(WD.relic)relicInto(bg,N/2,N/2,RELR/k,WD.relic,WD.relicB);
   WD.map=bl;
   /* la miniature (relique de l'îlot suivant) : la même carte, plus ses falaises en ombre, pour qu'on reconnaisse l'îlot quitté */
-  const wc=mkCanvas(N,N),wg=wc.getContext('2d'),q=WC/k;wg.fillStyle='rgb(5,3,12)';wg.beginPath();
+  const wc=mkM(N,N),wg=wc.getContext('2d'),q=WC/k;wg.fillStyle='rgb(5,3,12)';wg.beginPath();
   for(let j=0;j<NG;j++)for(let i=0;i<NG;i++)if(WD.wall[j*NG+i]){const x=(G0+(i+.5)*WC+WR)/k,y=(G0+(j+.5)*WC+WR)/k;wg.moveTo(x+q*.72,y);wg.arc(x,y,q*.72,0,TAU);}
   wg.fill();
-  const mi=mkCanvas(N,N),mg=mi.getContext('2d');mg.drawImage(bl,0,0);mg.filter='blur(1.2px)';mg.drawImage(wc,0,0);mg.filter='none';WD.mini=mi;
+  const mi=mkM(N,N),mg=mi.getContext('2d');mg.drawImage(bl,0,0);mg.filter='blur(1.2px)';mg.drawImage(wc,0,0);mg.filter='none';WD.mini=mi;
 }
 /* l'îlot précédent, réduit, dans un disque : ombre portée, liseré à la couleur de son biome */
 function relicInto(g,x,y,r,map,b){
@@ -4302,7 +4315,9 @@ function streamWorld(budget){
   while(Q&&Q.length&&performance.now()-t0<budget){const c=Q[0];if(!c.bake){if(W)break;bakeStep(c);continue;}let k=0;
     for(const o of c.obs){if(o.wall||o.spr)continue;if(performance.now()-t0>=budget){k=1;break;}obsSprite(o);o.su=1e9;OSPR.push(o);}
     if(!k)Q.shift();}
-  evictBakes(Math.max(60,n+8));evictSprites(Math.max(360,OSPR.length>600?360:600));BKMS=performance.now()-t0;
+  /* un îlot n'a que NC² chunks (81) : tous restent cuits jusqu'au passage. Plafonné à 60, il en évinçait puis en recuisait
+     la moitié (mesure test/cuisson.js du 02/10/2026 : 52 % du temps de cuisson en recuissons, surtout hors de l'îlot) */
+  evictBakes(Math.max(NC*NC,n+8));evictSprites(Math.max(360,OSPR.length>600?360:600));BKMS=performance.now()-t0;
 }
 
 /* ---------- obstacles : sprites illustrés avec ombre portée ---------- */

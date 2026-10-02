@@ -44,9 +44,12 @@ function genIslet(seed,k){
 function biomeAt(x,y){return WD.sites[0].t;}
 function biomeMix(x,y){return[{b:WD.sites[0].t,w:1}];}
 /* carte 256² de l'îlot : couleur du sol, bord qui s'éteint dans le vide, relique au centre */
+/* Cartes en OffscreenCanvas quand il existe, comme dans le worker (mkBake, gw2.js) : clip() n'y est pas rasterisé
+   comme sur un canvas de page, et la relique cuite sur place différait d'un niveau de couleur de celle du worker (test/worker.js). */
+const mkM=(w,h)=>typeof OffscreenCanvas==='function'?new OffscreenCanvas(w,h):mkCanvas(w,h);
 function buildMaps(){
   const N=256,k=2*WR/N,B=BIO[WD.sites[0].t],c1=rgb(B.g);
-  const cm=mkCanvas(N,N);const gm=cm.getContext('2d'),img=gm.createImageData(N,N),d=img.data;
+  const cm=mkM(N,N);const gm=cm.getContext('2d'),img=gm.createImageData(N,N),d=img.data;
   for(let j=0;j<N;j++)for(let i=0;i<N;i++){
     const x=-WR+(i+.5)*k,y=-WR+(j+.5)*k,o=(j*N+i)*4,r0=Math.hypot(x,y);d[o+3]=255;
     if(r0>WR+80){d[o]=5;d[o+1]=3;d[o+2]=12;continue;}
@@ -55,14 +58,14 @@ function buildMaps(){
     for(let q2=0;q2<3;q2++)d[o+q2]=clamp(c1[q2]*n*e+5*(1-e),0,255);
   }
   gm.putImageData(img,0,0);
-  const bl=mkCanvas(N,N),bg=bl.getContext('2d');bg.fillStyle='#05030c';bg.fillRect(0,0,N,N);bg.filter='blur(2.2px)';bg.drawImage(cm,0,0);bg.filter='none';
+  const bl=mkM(N,N),bg=bl.getContext('2d');bg.fillStyle='#05030c';bg.fillRect(0,0,N,N);bg.filter='blur(2.2px)';bg.drawImage(cm,0,0);bg.filter='none';
   if(WD.relic)relicInto(bg,N/2,N/2,RELR/k,WD.relic,WD.relicB);
   WD.map=bl;
   /* la miniature (relique de l'îlot suivant) : la même carte, plus ses falaises en ombre, pour qu'on reconnaisse l'îlot quitté */
-  const wc=mkCanvas(N,N),wg=wc.getContext('2d'),q=WC/k;wg.fillStyle='rgb(5,3,12)';wg.beginPath();
+  const wc=mkM(N,N),wg=wc.getContext('2d'),q=WC/k;wg.fillStyle='rgb(5,3,12)';wg.beginPath();
   for(let j=0;j<NG;j++)for(let i=0;i<NG;i++)if(WD.wall[j*NG+i]){const x=(G0+(i+.5)*WC+WR)/k,y=(G0+(j+.5)*WC+WR)/k;wg.moveTo(x+q*.72,y);wg.arc(x,y,q*.72,0,TAU);}
   wg.fill();
-  const mi=mkCanvas(N,N),mg=mi.getContext('2d');mg.drawImage(bl,0,0);mg.filter='blur(1.2px)';mg.drawImage(wc,0,0);mg.filter='none';WD.mini=mi;
+  const mi=mkM(N,N),mg=mi.getContext('2d');mg.drawImage(bl,0,0);mg.filter='blur(1.2px)';mg.drawImage(wc,0,0);mg.filter='none';WD.mini=mi;
 }
 /* l'îlot précédent, réduit, dans un disque : ombre portée, liseré à la couleur de son biome */
 function relicInto(g,x,y,r,map,b){

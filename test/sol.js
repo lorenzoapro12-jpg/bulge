@@ -22,16 +22,19 @@
         au chemin direct et de jeter la toile (Recif chez le proprietaire : solDraw 9,2 ms, 20 ms au pire) ;
      4. PAR DEFAUT, dans ce Chromium (copie des chunks presque gratuite pour le JS), le cache ne s'enclenche PAS :
         sur un canevas dessine par la carte graphique, il doublerait la surface remplie.
+   Refonte en ilots (02/10/2026) : newRun() sans profil (ilot 1, les plaines, camera au centre) ; en 4 la boucle tourne,
+   l'entree passe donc par START (test/worker.js) : sans le choix d'arrivee pris, l'ecran reste FIGE en etat « pick » et
+   aucune image n'est mesuree (SOLN resterait sous 30).
    ========================================================= */
 const path = require('path');
-const { launch } = require('./worker.js');
-const HTML = 'file://' + path.resolve(__dirname, '..', 'bulge.html');
+const { launch, START } = require('./worker.js');
+const HTML = 'file://' + path.resolve(process.env.BULGE_ROOT || path.resolve(__dirname, '..'), 'bulge.html');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let ok = true;
 const check = (label, cond, info) => { if (!cond) ok = false; console.log((cond ? '  OK    ' : '  ECHEC ') + label + (info ? '  — ' + info : '')); };
 
 /* entre en partie, arrete la boucle (render est appele a la main), fige camera et zoom */
-const SETUP = `(()=>{meta.q='high';applyQuality();refReset();newRun('bal',false);gsRunStart();gcRunStart();giRunStart();gxRunStart();gtRunStart();gvRunStart();show(null);G.state='play';
+const SETUP = `(()=>{meta.q='high';applyQuality();refReset();newRun();show(null);G.state='play';
   frame=function(){};G.kick=0;G.trauma=0;G.pcx=G.pcy=G.pzoom=null;
   window.__S={snap:null,want:false,hit:0,full:0};const sd=solDraw;solDraw=function(){const k=SOLK;const r=sd.apply(this,arguments);if(r){__S.hit++;if(!k||SOLK.s!==k.s)__S.full++;else if(SOLK.tx!==k.tx||SOLK.ty!==k.ty)__S.dec=(__S.dec||0)+1;}return r;};/* capture du sol seul : juste après drawChunks, le décor vivant et les décors de chunk étant coupés (avant le 01/10/2026 : à fleeBuild, retiré avec la faune) */drawLive=function(){};drawDeco=function(){};const dc=drawChunks;drawChunks=function(){const r=dc.apply(this,arguments);if(__S.want){__S.want=false;const g=MAINCTX;__S.snap=g.getImageData(0,0,cv.width,cv.height).data;}return r;};
   return {w:cv.width,h:cv.height,ps:PS};})()`;
@@ -45,10 +48,16 @@ const SETTLE = `(async()=>{for(let i=0;i<400;i++){render(0,16.7);await new Promi
 (async () => {
   const B = await launch();
   try {
-    await B.cdp('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
+    /* 1280x960 : l'echelle du jeu (zoomTarget, g2.js) y vaut 4/3, celle du scenario d'origine (1280x800 avant les ilots :
+       min(W,H)/600). A 1280x800 les ilots donnent 10/9, et les ecarts FAIBLES de filtrage du cache (aux bords francs des
+       falaises, <= 15/255, jamais > 16/255) montent a 830..1316 pixels selon la graine (8 graines, 02/10/2026), au ras de la
+       tolerance de 0,1 % calibree a 4/3 ; a 1280x960 : 0 pixel sur les 8 memes graines. Tolerance gardee, echelle d'origine
+       retrouvee ; l'ecart a 10/9 est signale, pas cache. */
+    await B.cdp('Emulation.setDeviceMetricsOverride', { width: 1280, height: 960, deviceScaleFactor: 1, mobile: false });
     /* ---- 4. defaut : pas de cache dans un navigateur ou la copie est gratuite ---- */
     await B.nav(HTML); await sleep(3000);
-    await B.ev(`(()=>{meta.q='high';applyQuality();refReset();newRun('bal',false);gsRunStart();gcRunStart();giRunStart();gxRunStart();gtRunStart();gvRunStart();show(null);G.state='play';return true;})()`);
+    /* une vraie partie, la boucle tourne : choix d'arrivee pris, sinon l'ecran est fige (etat « pick ») et rien n'est mesure */
+    for (let i = 0; i < 60; i++) { if (await B.ev(START("meta.q='high';")) === true) break; await sleep(250); }
     await sleep(4000);
     const d = await B.ev('({on:SOLON,n:SOLN,e:SOLE,m:SOLM})');
     check('4. par defaut (copie directe peu chere pour le JS), le cache NE s\'enclenche PAS', d.n >= 30 && !d.on && d.m === -1, `${d.n} images mesurees, copie directe ${d.e.toFixed(2)} ms (seuil 3 ms), SOLON=${d.on}`);
