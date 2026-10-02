@@ -31,7 +31,9 @@ const store={
   set(k,v){try{localStorage.setItem('bulge3_'+k,JSON.stringify(v));}catch(e){}}
 };
 const META0=()=>({runs:0,wins:0,best:0,bestIsl:0,lb:[],mute:false,kills:0,eats:0,seenHelp:false});
-let meta=Object.assign(META0(),store.get('meta',{})||{});
+/* une sauvegarde abîmée (ou d'une autre version) ne doit jamais casser le menu : on ne garde que des champs du bon type */
+let meta=(()=>{const m=META0(),s=store.get('meta',{});if(s&&typeof s==='object')for(const k in m)if(s[k]!=null&&typeof s[k]===typeof m[k]&&Array.isArray(s[k])===Array.isArray(m[k]))m[k]=s[k];
+  for(const k of ['fps','q','qAuto'])if(s&&s[k]!=null)m[k]=s[k];m.lb=m.lb.filter(e=>e&&typeof e.s==='number');return m;})();
 function saveMeta(){store.set('meta',meta);}
 
 /* ---------- données ---------- */
