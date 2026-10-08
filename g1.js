@@ -75,9 +75,12 @@ function can(k,ms){if(!AU.ac||meta.mute)return false;const n=performance.now();i
 const PENTA=[0,3,5,7,10];
 function note(i,base){const o=Math.floor(i/5),s=PENTA[((i%5)+5)%5];return base*Math.pow(2,(o*12+s)/12);}
 const SFX={
-  shoot(){if(!can('sh',75))return;const t=AU.ac.currentTime;osc(AU.sfx,'square',900+Math.random()*250,420,t,.05,.010);},
-  hit(){if(!can('hit',40))return;const t=AU.ac.currentTime;osc(AU.sfx,'triangle',620,260,t,.05,.026);},
-  pop(big){if(!can(big?'popb':'pop',big?60:28))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',big?340:720,big?55:140,t,big?.3:.13,big?.16:.075);nz(AU.sfx,t,big?.35:.09,big?.14:.045,'bandpass',big?700:2600,1.4);},
+  /* tir : audible (crête .03 au lieu de .010), plus grave pour un gros obus (bs : taille du tir), plus aigu en Emballement (em) */
+  shoot(bs,em){if(!can('sh',70))return;const t=AU.ac.currentTime,f=(760+Math.random()*80)*Math.sqrt(4.5/(bs||4.5))*(1+(em||0));osc(AU.sfx,'triangle',f,f*.42,t,.05,.03);nz(AU.sfx,t,.03,.022,'bandpass',2600,1.2);},
+  /* touche : q = part de vie restante, la note monte à mesure que la cible approche de la mort */
+  hit(q){if(!can('hit',40))return;const t=AU.ac.currentTime,f=520+560*(1-clamp(q==null?1:q,0,1));osc(AU.sfx,'triangle',f,f*.5,t,.05,.042);},
+  /* éclatement : le petit monte la gamme pentatonique avec la série c (440 à 1760 Hz sur dix kills) */
+  pop(big,c){if(!can(big?'popb':'pop',big?60:28))return;const t=AU.ac.currentTime,f=big?340:note(Math.min(c||0,10),440);osc(AU.sfx,'sine',f,big?55:f*.2,t,big?.3:.13,big?.16:.075);nz(AU.sfx,t,big?.35:.09,big?.14:.045,'bandpass',big?700:2600,1.4);},
   lvl(){if(!can('lv',250))return;const t=AU.ac.currentTime;[0,4,7,12,16,19].forEach((s,k)=>osc(AU.sfx,'square',330*Math.pow(2,s/12),0,t+k*.045,.2,.03));nz(AU.sfx,t,.5,.06,'highpass',4000);osc(AU.sfx,'sine',110,440,t,.4,.08);},
   evo(){if(!can('ev',100))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',220,880,t,.35,.07);nz(AU.sfx,t,.3,.05,'bandpass',3000,2);},
   hurt(){if(!can('hu',90))return;const t=AU.ac.currentTime;nz(AU.sfx,t,.28,.25,'lowpass',1000);osc(AU.sfx,'sawtooth',200,55,t,.32,.09);},
@@ -94,6 +97,8 @@ const SFX={
   ach(){if(!can('ac',300))return;const t=AU.ac.currentTime;[0,4,7,11,14].forEach((s,k)=>osc(AU.sfx,'triangle',523*Math.pow(2,s/12),0,t+k*.06,.35,.04));},
   death(){if(!can('de',500))return;const t=AU.ac.currentTime;osc(AU.sfx,'sawtooth',300,30,t,1.4,.15);nz(AU.sfx,t,1.2,.25,'lowpass',1200);},
   ui(){if(!can('ui',60))return;const t=AU.ac.currentTime;osc(AU.sfx,'triangle',880,1320,t,.06,.03);},
+  crit(){if(!can('cr',50))return;const t=AU.ac.currentTime;osc(AU.sfx,'triangle',1500,900,t,.06,.04);osc(AU.sfx,'sine',3000,3000,t,.03,.02);},
+  graze(){if(!can('gz',60))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',2200,2700,t,.03,.02);},
   absorb(){if(!can('ab',45))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',260,780,t,.12,.07);osc(AU.sfx,'triangle',520,1560,t+.03,.08,.02);},
   gonfle(){if(!can('go',400))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',70,240,t,.7,.2,.08);osc(AU.sfx,'sawtooth',110,330,t,.6,.05,.1);nz(AU.sfx,t,.7,.08,'bandpass',600,.6);},
   burst(){if(!can('bu',200))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',180,30,t,.7,.25);nz(AU.sfx,t,.6,.2,'lowpass',1400);osc(AU.sfx,'triangle',1400,200,t,.25,.05);},

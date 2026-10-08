@@ -339,6 +339,7 @@ const GARDES = [
   ['echelle.js', 'échelle 1 : le monde est posé au pixel entier (plus de sol ni de sprite étiré), passage d’îlot en demi-résolution'],
   ['rythme.js', 'rythme : temps morts d’un îlot courts, bulle vive, une série paie, la mite bondit'],
   ['plaisir.js', 'plaisir : l’Essaim-Mère a trois coups et une fenêtre de punition (sonnée ×2), œufs, esquive parfaite, jauge avant la vague finale'],
+  ['vivacite.js', 'vivacité : l’impact pèse, les ennemis frappent, les tirs se lisent, les récompenses tombent'],
   ['cadence.js', 'cadence : sur écran 120 Hz, une image trop lourde pour 8,3 ms passe à un dessin régulier toutes les 16,7 ms, et en revient'],
   ['menus.js', 'écrans d’interface : fond figé (menu, pause, choix, fin), plus de flou CSS ni de filtre animé'],
   ['ambiance.js', 'ambiance : surfaces posées par les effets d’environnement bornées sur chaque îlot'],

@@ -126,7 +126,7 @@ function render(A,dt){
   const inGame=!!(G&&G.p);
   if(inGame){RT=G.t+A;
     CAM.x=G.pcx==null?G.cx:G.pcx+(G.cx-G.pcx)*A;CAM.y=G.pcy==null?G.cy:G.pcy+(G.cy-G.pcy)*A;CAM.z=G.pzoom==null?G.zoom:G.pzoom+(G.zoom-G.pzoom)*A;
-    RSX=RSY=0;if(G.trauma>0){const s=G.trauma*G.trauma*16;RSX=fr(-s,s);RSY=fr(-s,s);}}
+    RSX=G.kx||0;RSY=G.ky||0;if(G.trauma>0){const s=G.trauma*G.trauma*16;RSX+=fr(-s,s);RSY+=fr(-s,s);}}
   else{if(MRT<0){MRT=performance.now()/16.67;BGN=0;}RT=MRT;CAM.x=Math.cos(RT*.0007)*RELR*1.6;CAM.y=Math.sin(RT*.00091)*RELR*1.3;CAM.z=Math.min(W,H)/760;RSX=RSY=0;}
   RZ=CAM.z;ONE=Math.abs(PS*RZ-1)<1e-3;TRX=inGame&&G.state==='trans'&&CAM.z<zoomTarget()*.8;if(inGame){lerpIn(A);markStep();}
   VL=CAM.x-(W/2+60)/RZ;VR=CAM.x+(W/2+60)/RZ;VT=CAM.y-(H/2+60)/RZ;VB=CAM.y+(H/2+60)/RZ;
@@ -608,6 +608,8 @@ function drawEnemy(e){
   if(e.prey){r*=1+Math.sin(RT*.15+e.wob*3)*.06;c.globalAlpha=.85;shapePath(c,e.t,e.x,e.y,r,a);c.fillStyle=e.flash>0?'#fff':pale(col);c.fill();c.globalAlpha=1;
     c.fillStyle='rgba(255,255,255,.9)';c.beginPath();c.arc(e.x,e.y,Math.max(1.5,r*.22),0,TAU);c.fill();return;}
   if(QL>=2||e.elite){c.globalCompositeOperation='lighter';glow(e.x,e.y,r*2.2,col,e.elite?.45:.25);c.globalCompositeOperation='source-over';c.globalAlpha=1;}
+  /* touché : le corps gonfle de 7 % puis revient en 4 images (tracés seuls : le halo garde sa taille, pas de nouveau sprite) */
+  if(e.flash>0)r*=1+.018*e.flash;
   /* annonces propres au type : visée de l'Épine, trait du Tireur */
   if(e.t==='spike'&&e.st===1){c.globalAlpha=.25+.5*(1-e.st2/SPK_AIM);c.strokeStyle=col;c.lineWidth=2;c.setLineDash([10,8]);c.beginPath();c.moveTo(e.x,e.y);c.lineTo(e.x+Math.cos(e.ca)*260,e.y+Math.sin(e.ca)*260);c.stroke();c.setLineDash([]);c.globalAlpha=1;}
   if(e.t==='sniper'&&e.tele>0){const f=1-e.tele/SNP_AIM;c.globalAlpha=.15+.7*f;c.strokeStyle=col;c.lineWidth=1+f*2.5;c.beginPath();c.moveTo(e.x,e.y);c.lineTo(e.x+Math.cos(e.ta)*1500,e.y+Math.sin(e.ta)*1500);c.stroke();c.globalAlpha=1;}
@@ -702,16 +704,19 @@ function drawBullets(){
   c.globalCompositeOperation='source-over';c.lineCap='butt';c.globalAlpha=1;
   for(const b of G.eb){if(!vis(b.x,b.y,20))continue;const s=b.r*2.9;if(TF1)img1(ebSpr(b.col),'e'+b.col,b.x,b.y,s);else c.drawImage(ebSpr(b.col),b.x-s,b.y-s,s*2,s*2);}
 }
+/* étincelles en trait (FX ty 7, lineSparks) groupées par couleur : un seul stroke par couleur et par image */
+const FX7={};
 function drawFX(){
-  const c=ctx;
+  const c=ctx;let n7=0;
   for(const f of G.fx){if(f.ty!==2&&f.ty!==3&&f.ty!==5)continue;if(!vis(f.x,f.y,40))continue;const a=f.life/f.max;
     if(f.ty===2)sphere(f.x,f.y,Math.max(.6,f.s*a),f.col,false,a);else if(f.ty===5)sphere(f.x,f.y,Math.max(1,f.r*a),pale(f.col),false,.4+.6*a);
     else{c.globalAlpha=a*.3;c.fillStyle=f.col;c.beginPath();c.arc(f.x,f.y,f.r,0,TAU);c.fill();}}
   c.globalCompositeOperation='lighter';
-  for(const f of G.fx){if(f.ty===2||f.ty===3||f.ty===5||f.ty===4)continue;if(!vis(f.x,f.y,f.r1||f.r||40))continue;const a=f.life/f.max;
+  for(const f of G.fx){if(f.ty===7){if(vis(f.x,f.y,20)){(FX7[f.col]||(FX7[f.col]=[])).push(f);n7++;}continue;}if(f.ty===2||f.ty===3||f.ty===5||f.ty===4)continue;if(!vis(f.x,f.y,f.r1||f.r||40))continue;const a=f.life/f.max;
     if(f.ty===0)glow(f.x,f.y,f.s*3,f.col,a);
     else if(f.ty===6){c.globalAlpha=a;c.strokeStyle=f.col;c.lineWidth=2.5;c.beginPath();c.moveTo(f.x,f.y);for(let k=1;k<5;k++){const t=k/5;c.lineTo(f.x+(f.x2-f.x)*t+fr(-9,9),f.y+(f.y2-f.y)*t+fr(-9,9));}c.lineTo(f.x2,f.y2);c.stroke();}
     else{const t=1-a,rr_=f.r+(f.r1-f.r)*(1-(1-t)*(1-t));c.globalAlpha=a;c.strokeStyle=f.col;c.lineWidth=f.w*a+.5;c.beginPath();c.arc(f.x,f.y,rr_,0,TAU);c.stroke();}}
+  if(n7){c.lineCap='round';c.lineWidth=2;c.globalAlpha=.9;for(const k in FX7){const L=FX7[k];if(!L.length)continue;c.strokeStyle=k;c.beginPath();for(const f of L){c.moveTo(f.x,f.y);c.lineTo(f.x-f.vx*1.8,f.y-f.vy*1.8);}c.stroke();L.length=0;}c.lineCap='butt';}
   c.globalAlpha=1;c.globalCompositeOperation='source-over';
 }
 /* ---------- météo (espace écran, parallaxe avant) ---------- */

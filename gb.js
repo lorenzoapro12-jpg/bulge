@@ -29,7 +29,7 @@ function spawnBoss(){
 }
 function bossHittable(){const B=G.boss;return !!B&&B.spawn<=0&&B.trans<=0&&!B.dead;}
 function hurtBoss(d,quiet){const B=G.boss;if(!bossHittable())return;if(R()<G.p.crit)d*=G.p.critM;if(B.stun>0)d*=STUNM;
-  if(B.k===8&&B.nodes.some(n=>!n.dead))d*=.4;B.hp-=d;B.flash=3;if(!quiet)SFX.hit();if(B.hp<=0){B.hp=0;bossDie();}}
+  if(B.k===8&&B.nodes.some(n=>!n.dead))d*=.4;B.hp-=d;B.flash=3;if(!quiet)SFX.hit(Math.max(0,B.hp/B.mhp));if(B.hp<=0){B.hp=0;bossDie();}}
 function hitNode(n,d){n.hp-=d;n.flash=4;SFX.hit();if(n.hp<=0&&!n.dead){n.dead=true;shards(n.x,n.y,COL.or,10,4,n.r);ringFX(n.x,n.y,n.r,n.r*3,COL.or,18,3);SFX.pop(true);G.score+=300;}}
 /* télégraphes : 'path' (bande de charge), 'beam' (trait fin puis rayon), 'ring' (anneau au sol), 'arc' (secteur de rafale) */
 function tele(o){o.t=0;G.tele.push(o);if(o.warn>=30)SFX.warn();return o;}

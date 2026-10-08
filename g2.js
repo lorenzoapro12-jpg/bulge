@@ -16,7 +16,7 @@ function decor0(){return{bite:[],car:[],fall:[],givre:[],glisseT:-1,sw:null,swO:
 function mkGame(seed){return{state:'play',t:0,time:0,seed,isl:1,ph:'arrive',phT:0,islT:0,wave:0,wq:null,
   p:null,en:[],eb:[],pb:[],pus:[],fx:[],tx:[],tele:[],marks:[],mines:[],trails:[],boss:null,
   score:0,kills:0,eats:0,hits:0,maxIsl:1,islHit:false,
-  trauma:0,freeze:0,glitch:0,hurtT:0,flash:0,timeScale:1,cx:0,cy:0,zoom:1,pcx:null,pcy:null,pzoom:null,
+  trauma:0,freeze:0,glitch:0,kx:0,ky:0,lastFz:-99,l4:-99,hurtT:0,flash:0,timeScale:1,cx:0,cy:0,zoom:1,pcx:null,pcy:null,pzoom:null,
   banner:null,toasts:[],choices:[],pickIsl:0,pickMid:0,pkMid:false,rerolls:1,picks:[],combo:0,comboT:-999,comboMx:0,
   win:false,tgt:null,tgtT:0,dieT:0,manual:false,slowF:1,
   inX:0,inY:0,aimMan:false,aimA:0,tut:{},tutOn:false,biome:'plains',wbn:null,
@@ -33,6 +33,11 @@ function mkPlayer(){return{x:0,y:0,vx:0,vy:0,r:PRAD,baseR:PRAD,ang:-Math.PI/2,co
 
 /* ---------- effets ---------- */
 function shake(a){G.trauma=Math.min(1,G.trauma+a*(REDUCED?.3:1));}
+/* coup de caméra : l'image est poussée d'un cran vers ce qu'on vient d'abattre (G.kx/G.ky, amorti dans updFX, ajouté au
+   décalage de tremblement dans render) ; étincelles en trait : un impact de tir projette 3 éclats vers le tireur (FX ty 7,
+   un seul stroke par couleur dans drawFX). Math.random (fr) : visuel seul, la suite de R() n'est pas touchée. */
+function kick(x,y,a){const P=G.p,dx=x-P.x,dy=y-P.y,d=Math.hypot(dx,dy)||1;a*=REDUCED?.3:1;G.kx=clamp(G.kx+dx/d*a,-10,10);G.ky=clamp(G.ky+dy/d*a,-10,10);}
+function lineSparks(x,y,a,n,col){for(let i=0;i<n;i++){const b=a+fr(-.6,.6),s=fr(3,6.5);FX({ty:7,x,y,vx:Math.cos(b)*s,vy:Math.sin(b)*s,life:8,max:8,col});}}
 function FX(o){const cap=QL>=3?520:QL===2?340:200;if(G.fx.length<cap)G.fx.push(o);}
 function sparks(x,y,col,n,sp,life){if(G.fx.length>180)n=Math.ceil(n/2);for(let i=0;i<n;i++){const a=Math.random()*TAU,s=Math.random()*sp;FX({ty:0,x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:life||fr(18,34),max:life||34,col,s:fr(1.5,3.5)});}}
 function ringFX(x,y,r0,r1,col,life,w){FX({ty:1,x,y,vx:0,vy:0,r:r0,r1,life,max:life,col,w:w||3});}
@@ -160,7 +165,7 @@ function hurtEnemy(e,dmg,kx,ky,quiet){
   if(R()<G.p.crit){dmg*=G.p.critM;e.crit=G.t;}
   e.hp-=dmg;e.flash=4;
   if(kx&&!(e.t==='spike'&&e.st===2)){const m=e.r>20?.35:1;e.vx+=kx*m;e.vy+=ky*m;}
-  if(!quiet)SFX.hit();
+  if(!quiet)SFX.hit(Math.max(0,e.hp/e.mhp));
   if(e.hp<=0)killEnemy(e);
 }
 function gain(v){const P=G.p;if(P.gon>0)return;const was=P.gauge<1;P.gauge=Math.min(1,P.gauge+v*P.gGain);
@@ -169,10 +174,12 @@ function killEnemy(e){
   if(e.dead)return;e.dead=true;if(e.parent&&!e.parent.dead)e.parent.kids--;
   const P=G.p;G.kills++;G.score+=Math.round(e.d.sc*(e.elite?4:1)*(e.prey?.5:1)*comboUp(e));gain(e.elite?.12:e.prey?.02:.05);
   if(e.elite){dropPU(e.x,e.y);if(P.luck&&R()<.3*P.luck)dropPU(e.x,e.y);if(P.trophy&&P.seg<P.segMax){P.seg++;SFX.seg();}}
-  FX({ty:4,x:e.x,y:e.y,vx:0,vy:0,r:e.r*7,life:14,max:14,col:e.col});
+  /* halo de mort : plus petit (×3,2, ×4,5 pour un gros ou une élite ; avant ×7) et un au plus toutes les 4 images */
+  if(G.t-G.l4>=4){G.l4=G.t;FX({ty:4,x:e.x,y:e.y,vx:0,vy:0,r:e.r*(e.elite||e.r>=20?4.5:3.2),life:14,max:14,col:e.col});}
   shards(e.x,e.y,e.col,6+Math.floor(e.r/3),3+e.r*.08,e.r);sparks(e.x,e.y,e.col,8,4);ringFX(e.x,e.y,e.r,e.r*2.4,e.col,18,3);
-  const big=e.r>=20;SFX.pop(big);
-  if(big){shake(.22);if(G.t-(G.lastFz||-99)>40){G.freeze=Math.max(G.freeze,2);G.lastFz=G.t;}}else shake(.05);
+  /* l'impact pèse : coup de caméra selon la taille, arrêt sur image (1 pas, 2 gros, 3 élite) pour tout ce qui n'est pas une Mite, 8 pas d'écart au moins */
+  const big=e.r>=20,mid=e.d.hp>=4||e.elite;SFX.pop(big,G.combo);kick(e.x,e.y,e.elite?7:big?5:mid?3:1.5);if(big||e.elite)shake(.25);
+  if(mid&&!e.prey&&G.t-G.lastFz>8){G.freeze=Math.max(G.freeze,e.elite?3:big?2:1);G.lastFz=G.t;}
 }
 /* COMBO : chaque ennemi abattu ou avalé moins de 1,5 s après le précédent fait monter la série ; le score est
    multiplié (×1 puis +0,5 toutes les 5, jusqu'à ×3). Affiché sous le score (g3.js drawHUD), annoncé à 10, 25, 50, 100. */
@@ -369,7 +376,7 @@ function playerFire(){
     pbul(P.x+ox,P.y+oy,a,{dmg:dm*(bg?4:1),r:P.bsize*(bg?2.2:1),pierce:thru||bg?99:P.pierce,thru:thru||bg});
     if(k===0||n<4)FX({ty:0,x:P.x+ox,y:P.y+oy,vx:Math.cos(a)*2+P.vx,vy:Math.sin(a)*2+P.vy,life:8,max:8,col:COL.wh,s:P.bsize*.9});}
   if(P.mirror){const a=P.ang+Math.PI;pbul(P.x+Math.cos(a)*P.r,P.y+Math.sin(a)*P.r,a,{dmg:dm*.8,thru});}
-  P.recoil=4;SFX.shoot();
+  P.recoil=4;SFX.shoot(P.bsize,0);
 }
 /* le boss est la seule « grande » cible ; ces trois noms servent aux armes de zone */
 function BIGS(){const B=G.boss;return B&&bossHittable()?[B]:[];}
@@ -518,7 +525,7 @@ function updBullets(){
       if(b.hit&&b.hit.includes(e))continue;
       if(b.kind===1){explode(b);gone=true;break;}
       const sp=Math.hypot(b.vx,b.vy)||1;hurtEnemy(e,b.dmg,b.vx/sp*1.2,b.vy/sp*1.2);
-      sparks(b.x,b.y,b.col,4,2.8,14);
+      lineSparks(b.x,b.y,Math.atan2(-b.vy,-b.vx),3,e.col);
       if(P.chain>0&&!b.shard&&R()<P.chain){let n2=null,bd=170*170;for(const f of G.en){if(f===e||f.dead||f.spawn>0)continue;const d=dist2(f.x,f.y,e.x,e.y);if(d<bd){bd=d;n2=f;}}
         if(n2){FX({ty:6,x:e.x,y:e.y,x2:n2.x,y2:n2.y,vx:0,vy:0,life:9,max:9,col:COL.wh});hurtEnemy(n2,b.dmg*.7,0,0,true);}}
       if(b.split>0&&!b.shard)for(let k=0;k<b.split*2+1;k++)pbul(b.x,b.y,R()*TAU,{dmg:b.dmg*.4,r:Math.max(2.5,b.r*.6),life:20,shard:true,split:0,pierce:0,rico:0,home:0,hit:[e]});
@@ -569,8 +576,8 @@ function endRun(win){
 /* ---------- boucle de simulation ---------- */
 function updFX(){
   G.trauma=Math.max(0,G.trauma-.025);if(G.glitch>0)G.glitch--;if(G.hurtT>0)G.hurtT--;if(G.flash>0)G.flash=Math.max(0,G.flash-.06);
-  const P=G.p;if(P.recoil>0)P.recoil*=.7;if(P.glow>0)P.glow*=.96;
-  {const F=G.fx;let w=0;for(let i=0;i<F.length;i++){const f=F[i];f.x+=f.vx;f.y+=f.vy;if(f.ty===0){f.vx*=.92;f.vy*=.92;}else if(f.ty===2){f.vx*=.95;f.vy*=.95;}if(--f.life>0)F[w++]=f;}F.length=w;}
+  const P=G.p;if(P.recoil>0)P.recoil*=.7;if(P.glow>0)P.glow*=.96;G.kx*=.6;G.ky*=.6;
+  {const F=G.fx;let w=0;for(let i=0;i<F.length;i++){const f=F[i];f.x+=f.vx;f.y+=f.vy;if(f.ty===0){f.vx*=.92;f.vy*=.92;}else if(f.ty===2){f.vx*=.95;f.vy*=.95;}else if(f.ty===7){f.vx*=.85;f.vy*=.85;}if(--f.life>0)F[w++]=f;}F.length=w;}
   for(let i=G.tx.length-1;i>=0;i--){const t=G.tx[i];t.y+=t.vy;t.vy*=.96;if(--t.life<=0)G.tx.splice(i,1);}
   if(G.banner&&++G.banner.t>=G.banner.max)G.banner=null;
   for(let i=G.toasts.length-1;i>=0;i--)if(++G.toasts[i].t>200)G.toasts.splice(i,1);
