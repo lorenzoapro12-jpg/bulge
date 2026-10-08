@@ -113,6 +113,10 @@ Outils complémentaires :
   virtuelle. Appelé par headless.js.
 - `node test/rythme.js` — garde-fou du **rythme** (`g2.js`) : temps morts d'un îlot < 6,5 s, bulle vive (vitesse,
   cadence de tir), série de kills qui multiplie le score, mite qui bondit. Appelé par headless.js.
+- `node test/plaisir.js` — garde-fou du **plaisir** (`gb.js`, `g2.js`, 08/10/2026, « pas amusant, le premier boss est
+  chiant ») : l'Essaim-Mère enchaîne charge, salve et ponte d'œufs ; une charge finie dans le bord ou un massif la laisse
+  sonnée (`B.stun`, dégâts ×`STUNM`, plus de contact) ; œufs qui éclosent, s'avalent, se cassent ; esquive parfaite au dash
+  (`perfect`) ; durée du combat bornée. Appelé par headless.js.
 - `node test/unused.js` — recensement du code mort (identifiants, `SFX`, `id` HTML,
   classes CSS, médias). À lancer avant d'affirmer qu'un symbole est utilisé.
 - `node test/compteur.js` — garde-fou du compteur de diagnostic (`meta.fps`) : chaque ligne doit

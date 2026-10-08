@@ -598,6 +598,12 @@ function drawEnemies(){for(const e of G.en)if(vis(e.x,e.y,e.r*3))drawEnemy(e);}
 function drawEnemy(e){
   const c=ctx,col=e.col,P=G.p;let r=e.r;
   if(e.spawn>0){const f=1-e.spawn/24;c.globalAlpha=f;shapePath(c,e.t,e.x,e.y,r*f,eAng(e));c.fillStyle=e.prey?pale(col):col;c.fill();c.globalAlpha=1;return;}
+  /* œuf (gb.js ponte) : pâle, il bat de plus en plus vite et se fend avant d'éclore */
+  if(e.egg>0){const f=1-e.egg/e.eggM,pu=1+Math.sin(RT*(.12+f*.45))*(.05+.1*f),rx=r*.9*pu,ry=r*1.15*pu;
+    c.beginPath();c.ellipse(e.x,e.y,rx,ry,0,0,TAU);c.fillStyle=e.flash>0?'#ffffff':'#ffe3f2';c.fill();c.strokeStyle=col;c.lineWidth=2.5;c.stroke();
+    c.fillStyle=col;c.globalAlpha=.55+.45*f;c.beginPath();c.arc(e.x,e.y+ry*.25,rx*.38,0,TAU);c.fill();c.globalAlpha=1;
+    if(f>.45){c.strokeStyle=EDK;c.lineWidth=1.5;c.beginPath();c.moveTo(e.x-rx*.8,e.y-ry*.1);c.lineTo(e.x-rx*.3,e.y-ry*.35);c.lineTo(e.x+rx*.1,e.y-ry*.05);if(f>.75){c.lineTo(e.x+rx*.5,e.y-ry*.4);c.lineTo(e.x+rx*.85,e.y-ry*.15);}c.stroke();}
+    return;}
   const a=eAng(e);
   if(e.prey){r*=1+Math.sin(RT*.15+e.wob*3)*.06;c.globalAlpha=.85;shapePath(c,e.t,e.x,e.y,r,a);c.fillStyle=e.flash>0?'#fff':pale(col);c.fill();c.globalAlpha=1;
     c.fillStyle='rgba(255,255,255,.9)';c.beginPath();c.arc(e.x,e.y,Math.max(1.5,r*.22),0,TAU);c.fill();return;}
@@ -643,7 +649,12 @@ function drawBoss(){
   if(!fl){c.globalAlpha=al*.3;shapePath(c,t,B.x-r*.18,B.y-r*.22,r*.5,a);c.fillStyle='#ffffff';c.fill();c.globalAlpha=al;}
   if(B.phase>1){c.strokeStyle=B.phase===3?'#fff3c4':'#ffd27a';c.lineWidth=2.5;c.beginPath();for(let k=0;k<5;k++){const b=k*1.3+.4;
     c.moveTo(B.x+Math.cos(b)*r*.35,B.y+Math.sin(b)*r*.35);c.lineTo(B.x+Math.cos(b+.2)*r*.7,B.y+Math.sin(b+.2)*r*.7);c.lineTo(B.x+Math.cos(b-.1)*r*.95,B.y+Math.sin(b-.1)*r*.95);}c.stroke();}
-  const er=r*(t==='sniper'?.4:.3);c.fillStyle='#fff';c.beginPath();c.arc(B.x,B.y,er,0,TAU);c.fill();c.fillStyle='#0c0412';c.beginPath();c.arc(B.x+Math.cos(aP)*er*.45,B.y+Math.sin(aP)*er*.45,er*.5,0,TAU);c.fill();
+  const er=r*(t==='sniper'?.4:.3);c.fillStyle='#fff';c.beginPath();c.arc(B.x,B.y,er,0,TAU);c.fill();
+  /* sonné (gb.js stunBoss) : l'œil tourne en spirale, une couronne d'étoiles dorées, un anneau qui bat = « tire maintenant » */
+  if(B.stun>0){c.strokeStyle='#0c0412';c.lineWidth=Math.max(2,er*.16);c.beginPath();for(let k=0;k<=18;k++){const b=RT*.3+k*.6,q=er*.8*k/18;if(k)c.lineTo(B.x+Math.cos(b)*q,B.y+Math.sin(b)*q);else c.moveTo(B.x,B.y);}c.stroke();
+    c.fillStyle=COL.gd;for(let k=0;k<4;k++){const b=RT*.09+k*TAU/4,sx=B.x+Math.cos(b)*r*.75,sy=B.y-r*1.25+Math.sin(b)*r*.22;c.beginPath();for(let j=0;j<10;j++){const q=j%2?3.5:9,g=j*Math.PI/5-Math.PI/2;if(j)c.lineTo(sx+Math.cos(g)*q,sy+Math.sin(g)*q);else c.moveTo(sx+Math.cos(g)*q,sy+Math.sin(g)*q);}c.fill();}
+    c.strokeStyle=COL.gd;c.globalAlpha=al*(.45+.35*Math.sin(RT*.35));c.lineWidth=4;c.beginPath();c.arc(B.x,B.y,r*1.5,-Math.PI/2,-Math.PI/2+TAU*B.stun/STUN);c.stroke();c.globalAlpha=al;}
+  else{c.fillStyle='#0c0412';c.beginPath();c.arc(B.x+Math.cos(aP)*er*.45,B.y+Math.sin(aP)*er*.45,er*.5,0,TAU);c.fill();}
   c.globalAlpha=1;
 }
 /* ---------- la bulle : membrane en segments (ta vie), jauge de gonflement au cœur, anneaux des power-ups actifs,
