@@ -71,6 +71,7 @@ p.sub{color:#c9c3ea;font-size:16px;max-width:52ch;line-height:1.4}
 .card .cat{font-size:12px;color:var(--dim);letter-spacing:.08em}
 .card .nm{font-weight:700;font-size:20px;line-height:1.15}
 .card .ds{font-size:14px;line-height:1.4;color:#c7c1e6}
+.card .dl{font-size:12px;line-height:1.3;color:#ffd75e}
 .card .key{position:absolute;top:10px;right:14px;font-size:12px;color:var(--dim)}
 .card.mut{background:linear-gradient(165deg,rgba(255,201,60,.16),rgba(18,10,34,.92) 55%);border-color:rgba(255,201,60,.55)}
 .card.mut .ic{color:var(--gd)}.card.mut:hover{border-color:var(--gd)}
@@ -85,7 +86,7 @@ p.sub{color:#c9c3ea;font-size:16px;max-width:52ch;line-height:1.4}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%}
 .st{display:flex;flex-direction:column;gap:2px;padding:10px 6px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px}
 .st .l{font-size:12px;color:var(--dim)}.st .v{font-size:24px;font-weight:700}
-.st.big{grid-column:1/-1}.st.big .v{font-size:42px;color:var(--gd)}
+.st.big{grid-column:1/-1}.st.big .v{font-size:42px;color:var(--gd)}.st:last-child:nth-child(3n+2){grid-column:1/-1}
 .rec{font-size:13px;color:#07030f;background:var(--gd);align-self:center;padding:2px 10px;border-radius:10px}
 .build{display:flex;flex-wrap:wrap;justify-content:center;gap:6px}
 .chip{font-size:13px;padding:4px 10px;border-radius:12px;background:rgba(45,226,255,.1);border:1px solid rgba(45,226,255,.3)}
@@ -99,9 +100,9 @@ p.sub{color:#c9c3ea;font-size:16px;max-width:52ch;line-height:1.4}
 table{width:100%;border-collapse:collapse;font-size:15px}
 td{padding:9px 6px;border-bottom:1px solid rgba(255,255,255,.07);text-align:left}
 td.num{font-weight:700;color:var(--gd)}
-@media (max-width:520px){.stats{grid-template-columns:repeat(3,1fr)}.st .v{font-size:20px}.cards{grid-template-columns:1fr}.card{padding:14px}}
+@media (max-width:520px){.stats{grid-template-columns:repeat(3,1fr)}.st .v{font-size:20px}.cards{grid-template-columns:1fr}.card{padding:14px;gap:4px}}
 @media (prefers-reduced-motion:reduce){.logo::before,.logo::after{animation:none}.ov.on{animation:none}.card:hover{transform:none}}
-@media (max-height:680px){#ov-evo{padding:12px}#ov-evo .in{gap:8px}#ov-evo h2{font-size:24px}#ov-evo .cards{gap:8px}#ov-evo .card{padding:9px 12px;gap:2px}#ov-evo .card .ic{font-size:20px}#ov-evo .card .nm{font-size:16px}#ov-evo .card .ds{font-size:12.5px;line-height:1.3}#ov-evo .btn{padding-top:8px;padding-bottom:8px}}
+@media (max-height:680px){#ov-evo{padding:12px}#ov-evo .in{gap:8px}#ov-evo h2{font-size:24px}#ov-evo .cards{gap:8px}#ov-evo .card{padding:9px 12px;gap:2px}#ov-evo .card .ic{font-size:20px}#ov-evo .card .nm{font-size:16px}#ov-evo .card .ds{font-size:12.5px;line-height:1.3}#ov-evo .card .dl{font-size:11px;line-height:1.2}#ov-evo .sub{font-size:14px}#ov-evo .btn{padding-top:8px;padding-bottom:8px}}
 </style>
 </head>
 <body>
@@ -187,7 +188,7 @@ const store={
   get(k,d){try{const v=localStorage.getItem('bulge3_'+k);return v==null?d:JSON.parse(v);}catch(e){return d;}},
   set(k,v){try{localStorage.setItem('bulge3_'+k,JSON.stringify(v));}catch(e){}}
 };
-const META0=()=>({runs:0,wins:0,best:0,bestIsl:0,lb:[],mute:false,kills:0,eats:0,seenHelp:false});
+const META0=()=>({runs:0,wins:0,best:0,bestIsl:0,lb:[],mute:false,kills:0,eats:0,seenHelp:false,bestCombo:0});
 /* une sauvegarde abîmée (ou d'une autre version) ne doit jamais casser le menu : on ne garde que des champs du bon type */
 let meta=(()=>{const m=META0(),s=store.get('meta',{});if(s&&typeof s==='object')for(const k in m)if(s[k]!=null&&typeof s[k]===typeof m[k]&&Array.isArray(s[k])===Array.isArray(m[k]))m[k]=s[k];
   for(const k of ['fps','q','qAuto'])if(s&&s[k]!=null)m[k]=s[k];m.lb=m.lb.filter(e=>e&&typeof e.s==='number');return m;})();
@@ -1194,7 +1195,7 @@ function mkGame(seed){return{state:'play',t:0,time:0,seed,isl:1,ph:'arrive',phT:
   inX:0,inY:0,aimMan:false,aimA:0,tut:{},tutOn:false,biome:'plains',wbn:null,
   dec:decor0(),courant:null,tr:null};}
 function mkPlayer(){return{x:0,y:0,vx:0,vy:0,r:PRAD,baseR:PRAD,ang:-Math.PI/2,col:COL.cy,
-  seg:SEG0,segMax:SEG0,spd:4.4,fireI:9,dmg:1,bspd:12.5,blife:58,bsize:4.5,pierce:0,turrets:1,spreadW:.16,homing:0,rico:0,split:0,crit:.03,critM:2.5,
+  seg:SEG0,segMax:SEG0,spd:4.4,fireI:9,dmg:1,bspd:12.5,blife:58,bsize:4.5,pierce:0,turrets:1,spreadW:.16,homing:0,rico:0,split:0,crit:.06,critM:2.5,ctr:0,
   aura:0,auraR:0,orbs:0,drones:0,dronesHome:false,missile:0,missileT:0,nova:0,novaT:0,mines:0,
   dashMax:55,dashT:0,dashing:0,dvx:0,dvy:0,dashDmg:0,dashHit:[],ghost:false,
   inv:0,fireT:0,flash:0,recoil:0,glow:0,shots:0,
@@ -1331,11 +1332,13 @@ function mkEnemy(t,x,y,o){const d=ET[t],age=o&&o.age!=null?o.age:G.isl-d.isl,pre
 function confine(o,r){const dx=o.x,dy=o.y,d=Math.hypot(dx,dy),lim=PR-r;if(d>lim&&d>0){o.x=dx/d*lim;o.y=dy/d*lim;return[dx/d,dy/d];}return null;}
 function ebul(x,y,a,s,r,col){s*=1+.025*(G.isl-1);const b={x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,r,col:col||EBC,life:420,rot:0,gz:false};if(G.eb.length<600)G.eb.push(b);return b;}
 function ebulE(e,a,s){return ebul(e.x+Math.cos(a)*e.r*.8,e.y+Math.sin(a)*e.r*.8,a,s,Math.max(4.5,e.r*.32),EBC);}
-/* une proie ne se blesse pas : elle s'avale (les tirs la traversent, le tir automatique l'ignore) */
-function hurtEnemy(e,dmg,kx,ky,quiet){
+/* une proie ne se blesse pas : elle s'avale (les tirs la traversent, le tir automatique l'ignore).
+   cr : le critique décidé au TIR (tir doré, playerFire) ; sans lui (aura, satellites, traînée, contact, ondes, explosions, arc,
+   débris, drones, missiles, éclats), il se tire à l'impact. Un critique se voit : anneau et éclats dorés, flash doré, coup de caméra. */
+function hurtEnemy(e,dmg,kx,ky,quiet,cr){
   if(e.dead||e.spawn>0||e.prey)return;if(relais(e)){dmg*=RELAY_M;e.relT=G.t;}e.hitT=G.t;
-  if(R()<G.p.crit){dmg*=G.p.critM;e.crit=G.t;}
-  e.hp-=dmg;e.flash=4;
+  const c=cr===undefined?R()<G.p.crit:cr;if(c){dmg*=G.p.critM;e.crit=G.t;ringFX(e.x,e.y,e.r*.6,e.r*2,COL.gd,10,2);lineSparks(e.x,e.y,Math.atan2(e.y-G.p.y,e.x-G.p.x),4,COL.gd);kick(e.x,e.y,1.5);SFX.crit();}
+  e.hp-=dmg;e.flash=c?6:4;
   if(kx&&!(e.t==='spike'&&e.st===2)){const m=e.r>20?.35:1;e.vx+=kx*m;e.vy+=ky*m;}
   if(!quiet)SFX.hit(Math.max(0,e.hp/e.mhp));
   if(e.hp<=0)killEnemy(e);
@@ -1349,6 +1352,7 @@ function killEnemy(e){
   /* halo de mort : plus petit (×3,2, ×4,5 pour un gros ou une élite ; avant ×7) et un au plus toutes les 4 images */
   if(G.t-G.l4>=4){G.l4=G.t;FX({ty:4,x:e.x,y:e.y,vx:0,vy:0,r:e.r*(e.elite||e.r>=20?4.5:3.2),life:14,max:14,col:e.col});}
   shards(e.x,e.y,e.col,6+Math.floor(e.r/3),3+e.r*.08,e.r);sparks(e.x,e.y,e.col,8,4);ringFX(e.x,e.y,e.r,e.r*2.4,e.col,18,3);
+  if(e.crit===G.t)ftext(e.x,e.y-e.r-8,'×'+String(G.p.critM).replace('.',','),COL.gd,14);
   /* l'impact pèse : coup de caméra selon la taille, arrêt sur image (1 pas, 2 gros, 3 élite) pour tout ce qui n'est pas une Mite, 8 pas d'écart au moins */
   const big=e.r>=20,mid=e.d.hp>=4||e.elite;SFX.pop(big,G.combo);kick(e.x,e.y,e.elite?7:big?5:mid?3:1.5);if(big||e.elite)shake(.25);
   if(mid&&!e.prey&&G.t-G.lastFz>8){G.freeze=Math.max(G.freeze,e.elite?3:big?2:1);G.lastFz=G.t;}
@@ -1487,15 +1491,17 @@ function tryDash(){
   ringFX(P.x,P.y,P.r,P.r*2.2,P.col,14,3);if(P.echo)clearNear(160);if(P.mines)layMine(P.x,P.y);
 }
 /* ESQUIVE PARFAITE (08/10/2026) : un coup (tir, contact, charge, rayon) qui t'aurait touché PENDANT le dash. Une fois par
-   dash : le dash se recharge aussitôt, la jauge prend PERF_G, le temps ralentit un instant. Le dash devient une arme. */
-const PERF_G=.14;
-function perfect(x,y){const P=G.p;if(P.perf)return;P.perf=1;P.dashT=0;gain(PERF_G);G.perfs=(G.perfs||0)+1;G.score+=50*G.isl;
+   dash : le dash se recharge aussitôt, la jauge prend PERF_G, le temps ralentit un instant. Le dash devient une arme.
+   CONTRE-ATTAQUE : pendant CTR pas (1,25 s), tous les tirs sont critiques, percent un ennemi de plus, cadence ×1/0,7 ; canons dorés. */
+const PERF_G=.14,CTR=75;
+function perfect(x,y){const P=G.p;if(P.perf)return;P.perf=1;P.dashT=0;P.ctr=CTR;gain(PERF_G);G.perfs=(G.perfs||0)+1;G.score+=50*G.isl;
   G.timeScale=Math.min(G.timeScale,.55);ringFX(P.x,P.y,P.r,P.r*3.2,COL.gd,20,4);sparks(x,y,COL.gd,10,4);ftext(P.x,P.y-P.r-18,'Parfait !',COL.gd,17);SFX.evo();
-  if(!G.tut.perf){G.tut.perf=1;toast('Esquive parfaite : ton dash se recharge aussitôt.');}}
+  if(!G.tut.perf){G.tut.perf=1;toast('Esquive parfaite : ton dash se recharge aussitôt.');}
+  if(!G.tut.ctr){G.tut.ctr=1;toast('Contre-attaque : après une esquive parfaite, tous tes tirs sont critiques.');}}
 /* Gonfler : jauge pleine. La bulle double, devient invulnérable et avale ce qui est plus petit qu'elle ; à la fin, elle éclate. */
 function tryGonfle(){
   if(!G||G.state!=='play')return;const P=G.p;if(P.gauge<1||P.gon>0||P.dead)return;
-  P.gauge=0;P.gon=P.gonMax=P.gDur;SFX.gonfle();shake(.35);G.glitch=Math.max(G.glitch,10);
+  P.gauge=0;G.gonN=(G.gonN||0)+1;P.gon=P.gonMax=P.gDur;SFX.gonfle();shake(.35);G.glitch=Math.max(G.glitch,10);
   ringFX(P.x,P.y,P.r,P.r*P.gScale*1.6,COL.wh,24,5);clearNear(P.r*P.gScale+20);
 }
 function gonBurst(){const P=G.p;shockwave(P.x,P.y,300+60*(P.gScale-2),P.dmg*14,true);ringFX(P.x,P.y,P.r,P.r*6,COL.cy,30,7);SFX.burst();shake(.6);G.flash=Math.max(G.flash,.35);}
@@ -1516,7 +1522,7 @@ function updPlayer(){
   const oh=collideCircle(P,P.r*.92);if(oh){const vn=P.vx*oh[0]+P.vy*oh[1];if(vn<0){P.vx-=vn*oh[0];P.vy-=vn*oh[1];}}
   const cn=confine(P,P.r);if(cn){const vn=P.vx*cn[0]+P.vy*cn[1];if(vn>0){P.vx-=vn*cn[0]*1.6;P.vy-=vn*cn[1]*1.6;}}
   P.r=lerp(P.r,P.baseR*(P.gon>0?P.gScale:1)*(P.titan?1.12:1),P.gon>0?.12:.1);
-  aimUpdate();playerFire();
+  aimUpdate();playerFire();if(P.ctr>0)P.ctr--;
 }
 /* seulement ce qui est à l'écran : on ne tire jamais sur un ennemi qu'on ne voit pas */
 function findTarget(x,y,range){
@@ -1541,13 +1547,14 @@ function pbul(x,y,a,o){const P=G.p;const b={x,y,vx:Math.cos(a)*P.bspd,vy:Math.si
 function playerFire(){
   const P=G.p;if(P.fireT>0){P.fireT--;return;}
   if(!G.manual&&!G.tgt)return;
-  P.fireT+=P.fireI/(P.pu.rapid>0?2:1);
+  const ct=P.ctr>0;P.fireT+=P.fireI/(P.pu.rapid>0?2:1)*(ct?.7:1);
   const n=P.turrets+(P.pu.triple>0?2:0),w=P.spreadW*(n>3?.85:1),thru=P.pu.pierce>0,dm=P.dmg*(P.overload&&puAny()?1.4:1);
   P.shots++;const big=P.burst>0&&P.shots%(6-P.burst)===0;
-  for(let k=0;k<n;k++){const a=P.ang+(k-(n-1)/2)*w,ox=Math.cos(a)*P.r*1.1,oy=Math.sin(a)*P.r*1.1,bg=big&&k===(n>>1);
-    pbul(P.x+ox,P.y+oy,a,{dmg:dm*(bg?4:1),r:P.bsize*(bg?2.2:1),pierce:thru||bg?99:P.pierce,thru:thru||bg});
+  /* critique tiré au départ (doré, ×1,3) : l'impact le reprend tel quel (updBullets → hurtEnemy/hurtBoss) */
+  for(let k=0;k<n;k++){const a=P.ang+(k-(n-1)/2)*w,ox=Math.cos(a)*P.r*1.1,oy=Math.sin(a)*P.r*1.1,bg=big&&k===(n>>1),cr=ct||R()<P.crit;
+    pbul(P.x+ox,P.y+oy,a,{dmg:dm*(bg?4:1),r:P.bsize*(bg?2.2:1)*(cr?1.3:1),pierce:thru||bg?99:P.pierce+(ct?1:0),thru:thru||bg,crit:cr,col:cr?COL.gd:COL.cy});
     if(k===0||n<4)FX({ty:0,x:P.x+ox,y:P.y+oy,vx:Math.cos(a)*2+P.vx,vy:Math.sin(a)*2+P.vy,life:8,max:8,col:COL.wh,s:P.bsize*.9});}
-  if(P.mirror){const a=P.ang+Math.PI;pbul(P.x+Math.cos(a)*P.r,P.y+Math.sin(a)*P.r,a,{dmg:dm*.8,thru});}
+  if(P.mirror){const a=P.ang+Math.PI,cr=ct||R()<P.crit;pbul(P.x+Math.cos(a)*P.r,P.y+Math.sin(a)*P.r,a,{dmg:dm*.8,thru,r:P.bsize*(cr?1.3:1),pierce:P.pierce+(ct?1:0),crit:cr,col:cr?COL.gd:COL.cy});}
   P.recoil=4;SFX.shoot(P.bsize,0);
 }
 /* le boss est la seule « grande » cible ; ces trois noms servent aux armes de zone */
@@ -1691,12 +1698,12 @@ function updBullets(){
     let gone=false;
     if(B&&!B.dead&&B.spawn<=0){
       for(const nd of B.nodes){if(nd.dead)continue;if(dist2(b.x,b.y,nd.x,nd.y)<(nd.r+b.r)**2){hitNode(nd,b.dmg);gone=true;break;}}
-      if(!gone&&dist2(b.x,b.y,B.x,B.y)<(B.r+b.r)**2){if(bossHittable())hurtBoss(b.dmg);else sparks(b.x,b.y,COL.wh,3,2,10);gone=true;}}
+      if(!gone&&dist2(b.x,b.y,B.x,B.y)<(B.r+b.r)**2){if(bossHittable())hurtBoss(b.dmg,false,b.crit);else sparks(b.x,b.y,COL.wh,3,2,10);gone=true;}}
     if(gone){if(b.kind===1)explode(b);else sparks(b.x,b.y,b.col,3,2.5,12);G.pb.splice(i,1);continue;}
     for(const e of G.en){if(e.dead||e.spawn>0||e.prey)continue;const rs=e.r+b.r;if(dist2(b.x,b.y,e.x,e.y)>=rs*rs)continue;
       if(b.hit&&b.hit.includes(e))continue;
       if(b.kind===1){explode(b);gone=true;break;}
-      const sp=Math.hypot(b.vx,b.vy)||1;hurtEnemy(e,b.dmg,b.vx/sp*1.2,b.vy/sp*1.2);
+      const sp=Math.hypot(b.vx,b.vy)||1;hurtEnemy(e,b.dmg,b.vx/sp*1.2,b.vy/sp*1.2,false,b.crit);
       lineSparks(b.x,b.y,Math.atan2(-b.vy,-b.vx),3,e.col);
       if(P.chain>0&&!b.shard&&R()<P.chain){let n2=null,bd=170*170;for(const f of G.en){if(f===e||f.dead||f.spawn>0)continue;const d=dist2(f.x,f.y,e.x,e.y);if(d<bd){bd=d;n2=f;}}
         if(n2){FX({ty:6,x:e.x,y:e.y,x2:n2.x,y2:n2.y,vx:0,vy:0,life:9,max:9,col:COL.wh});hurtEnemy(n2,b.dmg*.7,0,0,true);}}
@@ -1740,6 +1747,7 @@ function endRun(win){
   meta.lb.sort((a,b)=>b.s-a.s);meta.lb=meta.lb.slice(0,10);
   G.newBest=G.score>meta.best;if(G.newBest)meta.best=G.score;
   G.newIsl=G.isl>(meta.bestIsl||0)||win&&!(meta.wins>1);if(G.isl>(meta.bestIsl||0))meta.bestIsl=G.isl;
+  G.newCombo=G.comboMx>=10&&G.comboMx>(meta.bestCombo||0);meta.bestCombo=Math.max(meta.bestCombo||0,G.comboMx);
   saveMeta();setMusic(0);
   if(SIMF()){window.__SIM_END&&window.__SIM_END(win);return;}
   setTimeout(showEnd,600);
@@ -1807,7 +1815,7 @@ function dropPU(x,y,k){if(G.pus.length>=8)return;const a=R()*TAU;G.pus.push({x,y
 /* un power-up chronométré est-il actif ? (Surcharge) */
 function puAny(){const p=G.p.pu;for(const k in p)if(p[k]>0)return true;return false;}
 function takePU(q){
-  const P=G.p,D=PU[q.k];SFX.power();FX({ty:1,x:P.x,y:P.y,vx:0,vy:0,r:P.r,r1:P.r*3,life:16,max:16,col:PUC,w:3});
+  const P=G.p,D=PU[q.k];G.puN=(G.puN||0)+1;SFX.power();FX({ty:1,x:P.x,y:P.y,vx:0,vy:0,r:P.r,r1:P.r*3,life:16,max:16,col:PUC,w:3});
   ftext(P.x,P.y-P.r-16,D.n,PUC,15);G.score+=50;
   if(q.k==='wave'){shockwave(P.x,P.y,340,P.dmg*4,true);return;}
   if(q.k==='repair'){if(P.seg<P.segMax){P.seg++;SFX.seg();}return;}
@@ -1942,7 +1950,7 @@ function spawnBoss(){
   banner(D.n,D.sub,bossCol(B),170);setMusic(2);SFX.bossIn();shake(.5);G.glitch=25;
 }
 function bossHittable(){const B=G.boss;return !!B&&B.spawn<=0&&B.trans<=0&&!B.dead;}
-function hurtBoss(d,quiet){const B=G.boss;if(!bossHittable())return;if(R()<G.p.crit)d*=G.p.critM;if(B.stun>0)d*=STUNM;
+function hurtBoss(d,quiet,cr){const B=G.boss;if(!bossHittable())return;const c=cr===undefined?R()<G.p.crit:cr;if(c){d*=G.p.critM;ringFX(B.x,B.y,B.r*.5,B.r*1.4,COL.gd,10,3);SFX.crit();}if(B.stun>0)d*=STUNM;
   if(B.k===8&&B.nodes.some(n=>!n.dead))d*=.4;B.hp-=d;B.flash=3;if(!quiet)SFX.hit(Math.max(0,B.hp/B.mhp));if(B.hp<=0){B.hp=0;bossDie();}}
 function hitNode(n,d){n.hp-=d;n.flash=4;SFX.hit();if(n.hp<=0&&!n.dead){n.dead=true;shards(n.x,n.y,COL.or,10,4,n.r);ringFX(n.x,n.y,n.r,n.r*3,COL.or,18,3);SFX.pop(true);G.score+=300;}}
 /* télégraphes : 'path' (bande de charge), 'beam' (trait fin puis rayon), 'ring' (anneau au sol), 'arc' (secteur de rafale) */
@@ -2690,7 +2698,7 @@ function drawEnemy(e){
   if(e.t==='sniper'&&e.tele>0){const f=1-e.tele/SNP_AIM;c.globalAlpha=.15+.7*f;c.strokeStyle=col;c.lineWidth=1+f*2.5;c.beginPath();c.moveTo(e.x,e.y);c.lineTo(e.x+Math.cos(e.ta)*1500,e.y+Math.sin(e.ta)*1500);c.stroke();c.globalAlpha=1;}
   if(e.t==='orbit'){c.fillStyle=col;for(let k=0;k<2;k++){const b=e.wob*5+k*Math.PI;c.beginPath();c.arc(e.x+Math.cos(b)*r*1.7,e.y+Math.sin(b)*r*1.7,r*.26,0,TAU);c.fill();}}
   const fl=e.flash>0;
-  shapePath(c,e.t,e.x,e.y,r,a);c.strokeStyle=e.elite?'#ffffff':EDK;c.lineWidth=e.elite?Math.max(3,r*.24):Math.max(2,r*.18);c.stroke();c.fillStyle=fl?'#ffffff':col;c.fill();
+  shapePath(c,e.t,e.x,e.y,r,a);c.strokeStyle=e.elite?'#ffffff':EDK;c.lineWidth=e.elite?Math.max(3,r*.24):Math.max(2,r*.18);c.stroke();c.fillStyle=fl?(G.t-(e.crit||-99)<6?COL.gd:'#ffffff'):col;c.fill();
   if(!fl){c.globalAlpha=.3;shapePath(c,e.t,e.x-r*.18,e.y-r*.22,r*.5,a);c.fillStyle='#ffffff';c.fill();c.globalAlpha=1;}
   c.fillStyle=EDK;
   switch(e.t){
@@ -2745,8 +2753,9 @@ function drawPlayer(){
   c.globalCompositeOperation='lighter';glow(P.x,P.y,r*2.6,pu.inv>0?COL.gd:col,(.35+P.glow*.35)*base);c.globalCompositeOperation='source-over';c.globalAlpha=1;
   const n=P.turrets+(pu.triple>0?2:0),w=P.spreadW*(n>3?.85:1),rc=P.recoil*.5;c.lineCap='round';c.globalAlpha=base;
   const barrel=(a,cl)=>{c.strokeStyle='#0b1c26';c.lineWidth=r*.44;c.beginPath();c.moveTo(P.x+Math.cos(a)*r*.5,P.y+Math.sin(a)*r*.5);c.lineTo(P.x+Math.cos(a)*(r*1.42-rc),P.y+Math.sin(a)*(r*1.42-rc));c.stroke();c.strokeStyle=cl;c.lineWidth=r*.24;c.stroke();};
-  for(let k=0;k<n;k++){const i=k-(n-1)/2;barrel(P.ang+i*w,Math.abs(i)>(P.turrets-1)/2?PUC:col);}
-  if(P.mirror)barrel(P.ang+Math.PI,col);
+  /* Contre-attaque (P.ctr) : canons dorés */
+  const bc=P.ctr>0?COL.gd:col;for(let k=0;k<n;k++){const i=k-(n-1)/2;barrel(P.ang+i*w,Math.abs(i)>(P.turrets-1)/2?PUC:bc);}
+  if(P.mirror)barrel(P.ang+Math.PI,bc);
   c.lineCap='butt';
   sphere(P.x,P.y,r,col,P.flash>0,base);
   c.globalAlpha=base;
@@ -3127,13 +3136,26 @@ function renderMenu(){
   $('mHint').textContent=COARSE?'Pouce gauche : bouger. Le tir est automatique. ⚡ : dash. ◉ : gonfler quand la jauge est pleine.':'ZQSD ou flèches : bouger. Le tir vise seul (la souris reprend la main). Espace : dash. E ou clic droit : gonfler.';
 }
 const ROMAN=['','I','II','III','IV','V','VI','VII','VIII','IX','X'];
+/* ce qu'une carte change, en chiffres (avant → après) : son effet est joué sur une COPIE du joueur (les f() de gp.js n'écrivent
+   que des champs simples ; pu, puMax, cards et dashHit sont copiés quand même), au plus deux lignes. Rien pour une carte sans
+   chiffre de ce tableau (tête chercheuse, aura…). Les deux nombres d'une ligne ont la même précision : « 6,0 → 7,2 » ; espaces
+   insécables dans une ligne : on ne coupe qu'entre deux lignes, jamais « Canons / 1 → 3 ». */
+const CDT=[['Cadence',p=>60/(p.fireI+1),' tirs/s'],['Dégâts',p=>p.dmg,''],['Critique',p=>p.crit*100,' %'],['Canons',p=>p.turrets,''],['Perçage',p=>p.pierce,''],
+  ['Membrane',p=>p.segMax,' segments'],['Vitesse',p=>p.spd*60,' u/s'],['Dash',p=>p.dashMax/60,' s'],['Jauge',p=>p.gGain*100,' %'],['Gonflement',p=>p.gDur/60,' s'],['Power-ups',p=>p.puDur*100,' %']];
+function cardDelta(u){
+  const P=G.p,q=Object.assign({},P,{pu:Object.assign({},P.pu),puMax:Object.assign({},P.puMax),cards:Object.assign({},P.cards),dashHit:[]});try{u.f(q);}catch(e){return '';}
+  const L=[];for(const [l,g,un] of CDT){if(L.length>=2)break;const a=Math.round(g(P)*100)/100,b=Math.round(g(q)*100)/100;if(!(Math.abs(b-a)>1e-6))continue;
+    const d=Number.isInteger(a)&&Number.isInteger(b)?0:Math.max(Math.abs(a),Math.abs(b))<10?1:0,nf=v=>v.toFixed(d).replace('.',','),s0=nf(a),s1=nf(b);
+    if(s0!==s1)L.push((l+' '+s0+' → '+s1+(un===' segments'&&b<2?' segment':un)).replace(/ /g,'\u00a0'));}
+  return L.length?'<span class="dl">'+L.join(' · ')+'</span>':'';
+}
 /* le choix d'un bonus (gp.js openPick) : bleu = bonus, or = fusion de deux bonus possédés, rouge = pacte (un prix) */
 function renderPick(){
   const P=G.p;
   $('evoT').textContent=G.pkMid?'Mutation avant la vague finale':G.isl===1?'Première mutation':'Îlot '+G.isl+' : '+BIO[G.biome].n;
   $('evoS').textContent=G.isl===1&&!G.pkMid?'Choisis un bonus. Tu en gagnes deux par îlot : à l’arrivée et avant la dernière vague.':'Choisis un bonus. Il te suit jusqu’au bout de la partie ('+(G.picks.length+1)+'ᵉ sur '+2*NISL+').';
   $('evoCards').innerHTML=G.choices.map((ch,i)=>{const u=ch.u,n=P.cards[u.id]||0,cat=ch.k==='f'?'Fusion : '+CARDS[u.a].u.n+' + '+CARDS[u.b].u.n:ch.k==='p'?'Pacte':u.c;
-    return '<button class="card'+(ch.k==='f'?' mut':ch.k==='p'?' pact':'')+'" data-i="'+i+'"><span class="key">'+(i+1)+'</span><span class="ic">'+u.ic+'</span><span class="cat">'+cat+'</span><span class="nm">'+u.n+(n>0?' '+ROMAN[n+1]:'')+'</span><span class="ds">'+u.d+'</span>'+(ch.k==='p'?'<span class="cost">Prix : '+u.cost+'</span>':'')+'</button>';}).join('');
+    return '<button class="card'+(ch.k==='f'?' mut':ch.k==='p'?' pact':'')+'" data-i="'+i+'"><span class="key">'+(i+1)+'</span><span class="ic">'+u.ic+'</span><span class="cat">'+cat+'</span><span class="nm">'+u.n+(n>0?' '+ROMAN[n+1]:'')+'</span><span class="ds">'+u.d+'</span>'+cardDelta(u)+(ch.k==='p'?'<span class="cost">Prix : '+u.cost+'</span>':'')+'</button>';}).join('');
   const rb=$('bReroll');rb.hidden=!(G.rerolls>0);rb.textContent='Relancer ('+G.rerolls+')'+(COARSE?'':' · R');
 }
 function buildSummary(){
@@ -3154,7 +3176,11 @@ function showEnd(){
     '<div class="st big"><span class="l">Score</span><span class="v">'+fmt(G.score)+'</span>'+(G.newBest?'<span class="rec">Nouveau record</span>':'')+'</div>'+
     '<div class="st"><span class="l">Îlot</span><span class="v">'+G.isl+' / '+NISL+'</span>'+(G.newIsl?'<span class="rec">Plus loin que jamais</span>':'')+'</div>'+
     '<div class="st"><span class="l">Absorptions</span><span class="v">'+G.eats+'</span></div>'+
-    '<div class="st"><span class="l">Éclatés</span><span class="v">'+G.kills+'</span></div>';
+    '<div class="st"><span class="l">Éclatés</span><span class="v">'+G.kills+'</span></div>'+
+    '<div class="st"><span class="l">Esquives parfaites</span><span class="v">'+(G.perfs||0)+'</span></div>'+
+    '<div class="st"><span class="l">Gonflements</span><span class="v">'+(G.gonN||0)+'</span></div>'+
+    '<div class="st"><span class="l">Power-ups</span><span class="v">'+(G.puN||0)+'</span></div>'+
+    '<div class="st"><span class="l">Meilleure série</span><span class="v">'+(G.comboMx||0)+'</span>'+(G.newCombo?'<span class="rec">Record</span>':'')+'</div>';
   $('endBuild').innerHTML=buildSummary();
   show('ov-end');
 }
@@ -3546,7 +3572,7 @@ const store={
   get(k,d){try{const v=localStorage.getItem('bulge3_'+k);return v==null?d:JSON.parse(v);}catch(e){return d;}},
   set(k,v){try{localStorage.setItem('bulge3_'+k,JSON.stringify(v));}catch(e){}}
 };
-const META0=()=>({runs:0,wins:0,best:0,bestIsl:0,lb:[],mute:false,kills:0,eats:0,seenHelp:false});
+const META0=()=>({runs:0,wins:0,best:0,bestIsl:0,lb:[],mute:false,kills:0,eats:0,seenHelp:false,bestCombo:0});
 /* une sauvegarde abîmée (ou d'une autre version) ne doit jamais casser le menu : on ne garde que des champs du bon type */
 let meta=(()=>{const m=META0(),s=store.get('meta',{});if(s&&typeof s==='object')for(const k in m)if(s[k]!=null&&typeof s[k]===typeof m[k]&&Array.isArray(s[k])===Array.isArray(m[k]))m[k]=s[k];
   for(const k of ['fps','q','qAuto'])if(s&&s[k]!=null)m[k]=s[k];m.lb=m.lb.filter(e=>e&&typeof e.s==='number');return m;})();

@@ -24,7 +24,7 @@ function dropPU(x,y,k){if(G.pus.length>=8)return;const a=R()*TAU;G.pus.push({x,y
 /* un power-up chronométré est-il actif ? (Surcharge) */
 function puAny(){const p=G.p.pu;for(const k in p)if(p[k]>0)return true;return false;}
 function takePU(q){
-  const P=G.p,D=PU[q.k];SFX.power();FX({ty:1,x:P.x,y:P.y,vx:0,vy:0,r:P.r,r1:P.r*3,life:16,max:16,col:PUC,w:3});
+  const P=G.p,D=PU[q.k];G.puN=(G.puN||0)+1;SFX.power();FX({ty:1,x:P.x,y:P.y,vx:0,vy:0,r:P.r,r1:P.r*3,life:16,max:16,col:PUC,w:3});
   ftext(P.x,P.y-P.r-16,D.n,PUC,15);G.score+=50;
   if(q.k==='wave'){shockwave(P.x,P.y,340,P.dmg*4,true);return;}
   if(q.k==='repair'){if(P.seg<P.segMax){P.seg++;SFX.seg();}return;}

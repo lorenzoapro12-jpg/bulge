@@ -117,10 +117,12 @@ Outils complémentaires :
   chiant ») : l'Essaim-Mère enchaîne charge, salve et ponte d'œufs ; une charge finie dans le bord ou un massif la laisse
   sonnée (`B.stun`, dégâts ×`STUNM`, plus de contact) ; œufs qui éclosent, s'avalent, se cassent ; esquive parfaite au dash
   (`perfect`) ; durée du combat bornée. Appelé par headless.js.
-- `node test/vivacite.js` — garde-fou de la **vivacité** (`g1.js`, `g2.js`, `g3.js`, `gb.js`, 08/10/2026, « ennemis pas
+- `node test/vivacite.js` — garde-fou de la **vivacité** (`g1.js`, `g2.js`, `g3.js`, `g4.js`, `gb.js`, 08/10/2026, « ennemis pas
   intéressants, tirs ennuyeux, pas récompensé, lent ») : l'impact pèse (arrêt sur image hors Mite, coup de caméra
   `G.kx/G.ky`, halo de mort borné, étincelles en trait d'un seul `stroke` par couleur), le son suit (tir audible, « pop »
-  qui monte avec la série, touche qui monte vers la mort). Chaque changement du plan y ajoute ses critères, vus en ECHEC
+  qui monte avec la série, touche qui monte vers la mort), les cartes chiffrent leur effet (`cardDelta`, sur une copie du
+  joueur) et l'écran de fin raconte la partie (`meta.bestCombo`), le critique se voit (tir doré, décidé au tir) et
+  l'esquive parfaite lance la Contre-attaque (`P.ctr`). Chaque changement du plan y ajoute ses critères, vus en ECHEC
   avec `--ref=379e0fb` ; `--long` est réservé à la passe d'équilibrage. Appelé par headless.js.
 - `node test/unused.js` — recensement du code mort (identifiants, `SFX`, `id` HTML,
   classes CSS, médias). À lancer avant d'affirmer qu'un symbole est utilisé.

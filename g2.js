@@ -22,7 +22,7 @@ function mkGame(seed){return{state:'play',t:0,time:0,seed,isl:1,ph:'arrive',phT:
   inX:0,inY:0,aimMan:false,aimA:0,tut:{},tutOn:false,biome:'plains',wbn:null,
   dec:decor0(),courant:null,tr:null};}
 function mkPlayer(){return{x:0,y:0,vx:0,vy:0,r:PRAD,baseR:PRAD,ang:-Math.PI/2,col:COL.cy,
-  seg:SEG0,segMax:SEG0,spd:4.4,fireI:9,dmg:1,bspd:12.5,blife:58,bsize:4.5,pierce:0,turrets:1,spreadW:.16,homing:0,rico:0,split:0,crit:.03,critM:2.5,
+  seg:SEG0,segMax:SEG0,spd:4.4,fireI:9,dmg:1,bspd:12.5,blife:58,bsize:4.5,pierce:0,turrets:1,spreadW:.16,homing:0,rico:0,split:0,crit:.06,critM:2.5,ctr:0,
   aura:0,auraR:0,orbs:0,drones:0,dronesHome:false,missile:0,missileT:0,nova:0,novaT:0,mines:0,
   dashMax:55,dashT:0,dashing:0,dvx:0,dvy:0,dashDmg:0,dashHit:[],ghost:false,
   inv:0,fireT:0,flash:0,recoil:0,glow:0,shots:0,
@@ -159,11 +159,13 @@ function mkEnemy(t,x,y,o){const d=ET[t],age=o&&o.age!=null?o.age:G.isl-d.isl,pre
 function confine(o,r){const dx=o.x,dy=o.y,d=Math.hypot(dx,dy),lim=PR-r;if(d>lim&&d>0){o.x=dx/d*lim;o.y=dy/d*lim;return[dx/d,dy/d];}return null;}
 function ebul(x,y,a,s,r,col){s*=1+.025*(G.isl-1);const b={x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,r,col:col||EBC,life:420,rot:0,gz:false};if(G.eb.length<600)G.eb.push(b);return b;}
 function ebulE(e,a,s){return ebul(e.x+Math.cos(a)*e.r*.8,e.y+Math.sin(a)*e.r*.8,a,s,Math.max(4.5,e.r*.32),EBC);}
-/* une proie ne se blesse pas : elle s'avale (les tirs la traversent, le tir automatique l'ignore) */
-function hurtEnemy(e,dmg,kx,ky,quiet){
+/* une proie ne se blesse pas : elle s'avale (les tirs la traversent, le tir automatique l'ignore).
+   cr : le critique décidé au TIR (tir doré, playerFire) ; sans lui (aura, satellites, traînée, contact, ondes, explosions, arc,
+   débris, drones, missiles, éclats), il se tire à l'impact. Un critique se voit : anneau et éclats dorés, flash doré, coup de caméra. */
+function hurtEnemy(e,dmg,kx,ky,quiet,cr){
   if(e.dead||e.spawn>0||e.prey)return;if(relais(e)){dmg*=RELAY_M;e.relT=G.t;}e.hitT=G.t;
-  if(R()<G.p.crit){dmg*=G.p.critM;e.crit=G.t;}
-  e.hp-=dmg;e.flash=4;
+  const c=cr===undefined?R()<G.p.crit:cr;if(c){dmg*=G.p.critM;e.crit=G.t;ringFX(e.x,e.y,e.r*.6,e.r*2,COL.gd,10,2);lineSparks(e.x,e.y,Math.atan2(e.y-G.p.y,e.x-G.p.x),4,COL.gd);kick(e.x,e.y,1.5);SFX.crit();}
+  e.hp-=dmg;e.flash=c?6:4;
   if(kx&&!(e.t==='spike'&&e.st===2)){const m=e.r>20?.35:1;e.vx+=kx*m;e.vy+=ky*m;}
   if(!quiet)SFX.hit(Math.max(0,e.hp/e.mhp));
   if(e.hp<=0)killEnemy(e);
@@ -177,6 +179,7 @@ function killEnemy(e){
   /* halo de mort : plus petit (×3,2, ×4,5 pour un gros ou une élite ; avant ×7) et un au plus toutes les 4 images */
   if(G.t-G.l4>=4){G.l4=G.t;FX({ty:4,x:e.x,y:e.y,vx:0,vy:0,r:e.r*(e.elite||e.r>=20?4.5:3.2),life:14,max:14,col:e.col});}
   shards(e.x,e.y,e.col,6+Math.floor(e.r/3),3+e.r*.08,e.r);sparks(e.x,e.y,e.col,8,4);ringFX(e.x,e.y,e.r,e.r*2.4,e.col,18,3);
+  if(e.crit===G.t)ftext(e.x,e.y-e.r-8,'×'+String(G.p.critM).replace('.',','),COL.gd,14);
   /* l'impact pèse : coup de caméra selon la taille, arrêt sur image (1 pas, 2 gros, 3 élite) pour tout ce qui n'est pas une Mite, 8 pas d'écart au moins */
   const big=e.r>=20,mid=e.d.hp>=4||e.elite;SFX.pop(big,G.combo);kick(e.x,e.y,e.elite?7:big?5:mid?3:1.5);if(big||e.elite)shake(.25);
   if(mid&&!e.prey&&G.t-G.lastFz>8){G.freeze=Math.max(G.freeze,e.elite?3:big?2:1);G.lastFz=G.t;}
@@ -315,15 +318,17 @@ function tryDash(){
   ringFX(P.x,P.y,P.r,P.r*2.2,P.col,14,3);if(P.echo)clearNear(160);if(P.mines)layMine(P.x,P.y);
 }
 /* ESQUIVE PARFAITE (08/10/2026) : un coup (tir, contact, charge, rayon) qui t'aurait touché PENDANT le dash. Une fois par
-   dash : le dash se recharge aussitôt, la jauge prend PERF_G, le temps ralentit un instant. Le dash devient une arme. */
-const PERF_G=.14;
-function perfect(x,y){const P=G.p;if(P.perf)return;P.perf=1;P.dashT=0;gain(PERF_G);G.perfs=(G.perfs||0)+1;G.score+=50*G.isl;
+   dash : le dash se recharge aussitôt, la jauge prend PERF_G, le temps ralentit un instant. Le dash devient une arme.
+   CONTRE-ATTAQUE : pendant CTR pas (1,25 s), tous les tirs sont critiques, percent un ennemi de plus, cadence ×1/0,7 ; canons dorés. */
+const PERF_G=.14,CTR=75;
+function perfect(x,y){const P=G.p;if(P.perf)return;P.perf=1;P.dashT=0;P.ctr=CTR;gain(PERF_G);G.perfs=(G.perfs||0)+1;G.score+=50*G.isl;
   G.timeScale=Math.min(G.timeScale,.55);ringFX(P.x,P.y,P.r,P.r*3.2,COL.gd,20,4);sparks(x,y,COL.gd,10,4);ftext(P.x,P.y-P.r-18,'Parfait !',COL.gd,17);SFX.evo();
-  if(!G.tut.perf){G.tut.perf=1;toast('Esquive parfaite : ton dash se recharge aussitôt.');}}
+  if(!G.tut.perf){G.tut.perf=1;toast('Esquive parfaite : ton dash se recharge aussitôt.');}
+  if(!G.tut.ctr){G.tut.ctr=1;toast('Contre-attaque : après une esquive parfaite, tous tes tirs sont critiques.');}}
 /* Gonfler : jauge pleine. La bulle double, devient invulnérable et avale ce qui est plus petit qu'elle ; à la fin, elle éclate. */
 function tryGonfle(){
   if(!G||G.state!=='play')return;const P=G.p;if(P.gauge<1||P.gon>0||P.dead)return;
-  P.gauge=0;P.gon=P.gonMax=P.gDur;SFX.gonfle();shake(.35);G.glitch=Math.max(G.glitch,10);
+  P.gauge=0;G.gonN=(G.gonN||0)+1;P.gon=P.gonMax=P.gDur;SFX.gonfle();shake(.35);G.glitch=Math.max(G.glitch,10);
   ringFX(P.x,P.y,P.r,P.r*P.gScale*1.6,COL.wh,24,5);clearNear(P.r*P.gScale+20);
 }
 function gonBurst(){const P=G.p;shockwave(P.x,P.y,300+60*(P.gScale-2),P.dmg*14,true);ringFX(P.x,P.y,P.r,P.r*6,COL.cy,30,7);SFX.burst();shake(.6);G.flash=Math.max(G.flash,.35);}
@@ -344,7 +349,7 @@ function updPlayer(){
   const oh=collideCircle(P,P.r*.92);if(oh){const vn=P.vx*oh[0]+P.vy*oh[1];if(vn<0){P.vx-=vn*oh[0];P.vy-=vn*oh[1];}}
   const cn=confine(P,P.r);if(cn){const vn=P.vx*cn[0]+P.vy*cn[1];if(vn>0){P.vx-=vn*cn[0]*1.6;P.vy-=vn*cn[1]*1.6;}}
   P.r=lerp(P.r,P.baseR*(P.gon>0?P.gScale:1)*(P.titan?1.12:1),P.gon>0?.12:.1);
-  aimUpdate();playerFire();
+  aimUpdate();playerFire();if(P.ctr>0)P.ctr--;
 }
 /* seulement ce qui est à l'écran : on ne tire jamais sur un ennemi qu'on ne voit pas */
 function findTarget(x,y,range){
@@ -369,13 +374,14 @@ function pbul(x,y,a,o){const P=G.p;const b={x,y,vx:Math.cos(a)*P.bspd,vy:Math.si
 function playerFire(){
   const P=G.p;if(P.fireT>0){P.fireT--;return;}
   if(!G.manual&&!G.tgt)return;
-  P.fireT+=P.fireI/(P.pu.rapid>0?2:1);
+  const ct=P.ctr>0;P.fireT+=P.fireI/(P.pu.rapid>0?2:1)*(ct?.7:1);
   const n=P.turrets+(P.pu.triple>0?2:0),w=P.spreadW*(n>3?.85:1),thru=P.pu.pierce>0,dm=P.dmg*(P.overload&&puAny()?1.4:1);
   P.shots++;const big=P.burst>0&&P.shots%(6-P.burst)===0;
-  for(let k=0;k<n;k++){const a=P.ang+(k-(n-1)/2)*w,ox=Math.cos(a)*P.r*1.1,oy=Math.sin(a)*P.r*1.1,bg=big&&k===(n>>1);
-    pbul(P.x+ox,P.y+oy,a,{dmg:dm*(bg?4:1),r:P.bsize*(bg?2.2:1),pierce:thru||bg?99:P.pierce,thru:thru||bg});
+  /* critique tiré au départ (doré, ×1,3) : l'impact le reprend tel quel (updBullets → hurtEnemy/hurtBoss) */
+  for(let k=0;k<n;k++){const a=P.ang+(k-(n-1)/2)*w,ox=Math.cos(a)*P.r*1.1,oy=Math.sin(a)*P.r*1.1,bg=big&&k===(n>>1),cr=ct||R()<P.crit;
+    pbul(P.x+ox,P.y+oy,a,{dmg:dm*(bg?4:1),r:P.bsize*(bg?2.2:1)*(cr?1.3:1),pierce:thru||bg?99:P.pierce+(ct?1:0),thru:thru||bg,crit:cr,col:cr?COL.gd:COL.cy});
     if(k===0||n<4)FX({ty:0,x:P.x+ox,y:P.y+oy,vx:Math.cos(a)*2+P.vx,vy:Math.sin(a)*2+P.vy,life:8,max:8,col:COL.wh,s:P.bsize*.9});}
-  if(P.mirror){const a=P.ang+Math.PI;pbul(P.x+Math.cos(a)*P.r,P.y+Math.sin(a)*P.r,a,{dmg:dm*.8,thru});}
+  if(P.mirror){const a=P.ang+Math.PI,cr=ct||R()<P.crit;pbul(P.x+Math.cos(a)*P.r,P.y+Math.sin(a)*P.r,a,{dmg:dm*.8,thru,r:P.bsize*(cr?1.3:1),pierce:P.pierce+(ct?1:0),crit:cr,col:cr?COL.gd:COL.cy});}
   P.recoil=4;SFX.shoot(P.bsize,0);
 }
 /* le boss est la seule « grande » cible ; ces trois noms servent aux armes de zone */
@@ -519,12 +525,12 @@ function updBullets(){
     let gone=false;
     if(B&&!B.dead&&B.spawn<=0){
       for(const nd of B.nodes){if(nd.dead)continue;if(dist2(b.x,b.y,nd.x,nd.y)<(nd.r+b.r)**2){hitNode(nd,b.dmg);gone=true;break;}}
-      if(!gone&&dist2(b.x,b.y,B.x,B.y)<(B.r+b.r)**2){if(bossHittable())hurtBoss(b.dmg);else sparks(b.x,b.y,COL.wh,3,2,10);gone=true;}}
+      if(!gone&&dist2(b.x,b.y,B.x,B.y)<(B.r+b.r)**2){if(bossHittable())hurtBoss(b.dmg,false,b.crit);else sparks(b.x,b.y,COL.wh,3,2,10);gone=true;}}
     if(gone){if(b.kind===1)explode(b);else sparks(b.x,b.y,b.col,3,2.5,12);G.pb.splice(i,1);continue;}
     for(const e of G.en){if(e.dead||e.spawn>0||e.prey)continue;const rs=e.r+b.r;if(dist2(b.x,b.y,e.x,e.y)>=rs*rs)continue;
       if(b.hit&&b.hit.includes(e))continue;
       if(b.kind===1){explode(b);gone=true;break;}
-      const sp=Math.hypot(b.vx,b.vy)||1;hurtEnemy(e,b.dmg,b.vx/sp*1.2,b.vy/sp*1.2);
+      const sp=Math.hypot(b.vx,b.vy)||1;hurtEnemy(e,b.dmg,b.vx/sp*1.2,b.vy/sp*1.2,false,b.crit);
       lineSparks(b.x,b.y,Math.atan2(-b.vy,-b.vx),3,e.col);
       if(P.chain>0&&!b.shard&&R()<P.chain){let n2=null,bd=170*170;for(const f of G.en){if(f===e||f.dead||f.spawn>0)continue;const d=dist2(f.x,f.y,e.x,e.y);if(d<bd){bd=d;n2=f;}}
         if(n2){FX({ty:6,x:e.x,y:e.y,x2:n2.x,y2:n2.y,vx:0,vy:0,life:9,max:9,col:COL.wh});hurtEnemy(n2,b.dmg*.7,0,0,true);}}
@@ -568,6 +574,7 @@ function endRun(win){
   meta.lb.sort((a,b)=>b.s-a.s);meta.lb=meta.lb.slice(0,10);
   G.newBest=G.score>meta.best;if(G.newBest)meta.best=G.score;
   G.newIsl=G.isl>(meta.bestIsl||0)||win&&!(meta.wins>1);if(G.isl>(meta.bestIsl||0))meta.bestIsl=G.isl;
+  G.newCombo=G.comboMx>=10&&G.comboMx>(meta.bestCombo||0);meta.bestCombo=Math.max(meta.bestCombo||0,G.comboMx);
   saveMeta();setMusic(0);
   if(SIMF()){window.__SIM_END&&window.__SIM_END(win);return;}
   setTimeout(showEnd,600);
