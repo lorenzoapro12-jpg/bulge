@@ -3,10 +3,14 @@
    Les tirs se voient venir ; tout coup qui n'est pas un tir est ANNONCÉ avant de frapper : trait de visée,
    bande de charge, secteur de rafale, anneau au sol (G.tele, dessinés par g3.js drawTele ; vérifié par
    test/headless.js). Deux phases (trois pour l'Hypernoyau), à 50 % de vie.
+   FENÊTRE DE PUNITION (08/10/2026, « le premier boss est chiant ») : une charge qui finit dans le bord ou dans un rocher
+   laisse le boss SONNÉ (B.stun, STUN pas) : il ne bouge plus, ne blesse plus au contact et prend des dégâts ×STUNM.
+   Esquiver devient une attaque. Une charge pulvérise les rochers cassables qu'elle traverse (test/plaisir.js).
    ========================================================= */
+const STUN=110,STUNM=2;
 const BOSS=[
-  {n:'Essaim-Mère',sub:'Elle charge en ligne droite : écarte-toi de la bande',t:'mite',r:52,hp:110},
-  {n:'Grande Épine',sub:'Ses charges rebondissent sur le bord',t:'spike',r:56,hp:125},
+  {n:'Essaim-Mère',sub:'Esquive sa charge : contre le bord, elle reste sonnée',t:'mite',r:52,hp:90,run:170,p2:'Elle enrage : charges enchaînées'},
+  {n:'Grande Épine',sub:'Ses charges rebondissent ; au dernier choc, elle est sonnée',t:'spike',r:56,hp:125,run:110},
   {n:'Batterie',sub:'Des éventails qui tournent : glisse entre les branches',t:'spread',r:58,hp:135},
   {n:'L’Œil',sub:'Un trait fin, puis le rayon : sors de la ligne',t:'sniper',r:54,hp:145},
   {n:'Satellite',sub:'Il tourne autour de l’arène',t:'orbit',r:50,hp:150},
@@ -18,13 +22,13 @@ const BOSSCOL='#ff3355';
 function bossCol(B){return B.k===8?BOSSCOL:ET[B.D.t].col;}
 function spawnBoss(){
   const k=G.isl,D=BOSS[k-1],hp=Math.round(1.3*D.hp*Math.pow(GROWD,k-1)*(1+.14*(k-1)));
-  const B={k,D,x:0,y:0,vx:0,vy:0,r:D.r,hp,mhp:hp,phase:1,t:0,st:0,st2:0,ca:0,cn:0,trans:0,spawn:110,flash:0,ang:0,dead:false,gone:false,dieT:0,nodes:[],dir:1,wob:0};
+  const B={k,D,x:0,y:0,vx:0,vy:0,r:D.r,hp,mhp:hp,phase:1,t:0,st:0,st2:0,ca:0,cn:0,trans:0,spawn:110,flash:0,ang:0,dead:false,gone:false,dieT:0,nodes:[],dir:1,wob:0,stun:0,chain:0,cyc:0,cd:60,lay:0};
   if(k===8)for(let i=0;i<6;i++){const nh=Math.round(18*Math.pow(GROWD,k-1));B.nodes.push({x:0,y:0,r:15,hp:nh,mhp:nh,dead:false,cd:rr(60,160),flash:0});}
   G.boss=B;G.ph='boss';
   banner(D.n,D.sub,bossCol(B),170);setMusic(2);SFX.bossIn();shake(.5);G.glitch=25;
 }
 function bossHittable(){const B=G.boss;return !!B&&B.spawn<=0&&B.trans<=0&&!B.dead;}
-function hurtBoss(d,quiet){const B=G.boss;if(!bossHittable())return;if(R()<G.p.crit)d*=G.p.critM;
+function hurtBoss(d,quiet){const B=G.boss;if(!bossHittable())return;if(R()<G.p.crit)d*=G.p.critM;if(B.stun>0)d*=STUNM;
   if(B.k===8&&B.nodes.some(n=>!n.dead))d*=.4;B.hp-=d;B.flash=3;if(!quiet)SFX.hit();if(B.hp<=0){B.hp=0;bossDie();}}
 function hitNode(n,d){n.hp-=d;n.flash=4;SFX.hit();if(n.hp<=0&&!n.dead){n.dead=true;shards(n.x,n.y,COL.or,10,4,n.r);ringFX(n.x,n.y,n.r,n.r*3,COL.or,18,3);SFX.pop(true);G.score+=300;}}
 /* télégraphes : 'path' (bande de charge), 'beam' (trait fin puis rayon), 'ring' (anneau au sol), 'arc' (secteur de rafale) */
@@ -42,28 +46,40 @@ function updTele(){
 }
 function bossShot(B,a,s,col,r){return ebul(B.x+Math.cos(a)*B.r*.8,B.y+Math.sin(a)*B.r*.8,a,s,r||7,col||bossCol(B));}
 function bossRing(B,n,s,gap,off,rot){for(let k=0;k<n;k++){const a=(off||0)+k*TAU/n;if(gap!=null&&Math.abs(angDiff(a,gap))<.42)continue;const b=bossShot(B,a,s);if(rot)b.rot=rot;}SFX.bshot();}
-/* charge annoncée : bande pendant `w` pas, puis course à vitesse `sp` ; bonds = rebonds sur le bord */
-function chargeStart(B,w,bonds){B.st=1;B.st2=w;B.ca=Math.atan2(G.p.y-B.y,G.p.x-B.x);B.cn=bonds||0;tele({ty:'path',x:B.x,y:B.y,a:B.ca,len:900,w:B.r*2,warn:w,col:bossCol(B)});}
+/* charge annoncée : bande pendant `w` pas, puis course à vitesse `sp` (D.run pas au plus, 70 par défaut) ; bonds = rebonds sur le bord */
+function chargeStart(B,w,bonds){B.st=1;B.st2=w;B.bump=0;B.ca=Math.atan2(G.p.y-B.y,G.p.x-B.x);B.cn=bonds||0;tele({ty:'path',x:B.x,y:B.y,a:B.ca,len:900,w:B.r*2,warn:w,col:bossCol(B)});}
 function chargeRun(B,sp,onBond){
-  if(B.st===1){if(--B.st2<=0){B.st=2;B.st2=70;shake(.2);}return true;}
+  if(B.st===1){if(--B.st2<=0){B.st=2;B.st2=B.D.run||70;shake(.2);}return true;}
   if(B.st===2){B.vx=Math.cos(B.ca)*sp;B.vy=Math.sin(B.ca)*sp;B.x+=B.vx*G.slowF;B.y+=B.vy*G.slowF;if(G.t%2===0)FX({ty:3,x:B.x,y:B.y,vx:0,vy:0,r:B.r,life:12,max:12,col:bossCol(B)});
+    /* rochers : un cassable vole en éclats, un massif l'arrête net (après une longueur de corps : pas au départ) */
+    const o=(B.D.run||70)-B.st2>8?pointHit(B.x,B.y,B.r*.55):null;
+    if(o){if(o.brk)breakObs(o);else{B.x-=B.vx*2;B.y-=B.vy*2;B.st=0;B.vx=B.vy=0;shake(.35);if(onBond)onBond();if(!(B.chain>0))stunBoss(B);return false;}}
     const n=confine(B,B.r);
-    if(n){if(B.cn>0){B.cn--;const vn=Math.cos(B.ca)*n[0]+Math.sin(B.ca)*n[1];let vx=Math.cos(B.ca)-2*vn*n[0],vy=Math.sin(B.ca)-2*vn*n[1];B.ca=Math.atan2(vy,vx);shake(.25);if(onBond)onBond();B.st2=70;
+    if(n){if(B.cn>0){B.cn--;const vn=Math.cos(B.ca)*n[0]+Math.sin(B.ca)*n[1];let vx=Math.cos(B.ca)-2*vn*n[0],vy=Math.sin(B.ca)-2*vn*n[1];B.ca=Math.atan2(vy,vx);shake(.25);if(onBond)onBond();B.st2=B.D.run||70;
         tele({ty:'path',x:B.x,y:B.y,a:B.ca,len:900,w:B.r*2,warn:18,col:bossCol(B)});}
-      else{B.st=0;B.vx=B.vy=0;shake(.3);if(onBond)onBond();return false;}}
+      else{B.st=0;B.vx=B.vy=0;shake(.3);if(onBond)onBond();if(!(B.chain>0))stunBoss(B);return false;}}
     if(--B.st2<=0){B.st=0;B.vx*=.2;B.vy*=.2;return false;}return true;}
   return false;
 }
+/* sonné : étoiles, « ×2 », plus de contact ni d'attaque (updBoss) */
+function stunBoss(B){B.stun=STUN;B.flash=6;G.freeze=Math.max(G.freeze,4);SFX.brk();ringFX(B.x,B.y,B.r,B.r*2.6,COL.gd,22,5);sparks(B.x,B.y,COL.gd,16,5);
+  ftext(B.x,B.y-B.r-22,'Sonnée ! dégâts ×'+STUNM,COL.gd,18);if(!G.tut.stun){G.tut.stun=1;toast('Sonné, le boss prend double dégâts : tire !');}}
 function drift(B,tx,ty,sp){const dx=tx-B.x,dy=ty-B.y,d=Math.hypot(dx,dy)||1;B.vx=lerp(B.vx,dx/d*Math.min(sp,d*.05),.05);B.vy=lerp(B.vy,dy/d*Math.min(sp,d*.05),.05);B.x+=B.vx*G.slowF;B.y+=B.vy*G.slowF;confine(B,B.r+10);}
 /* l'IA de chaque boss : appelée une fois par pas, B.t avance au rythme du ralenti */
 const BOSSAI=[
-  /* 1 Essaim-Mère : charges annoncées ; phase 2, nuées de Mites et anneau après chaque charge */
+  /* 1 Essaim-Mère : un cycle de trois coups, chacun lisible — CHARGE (annoncée ; finie dans le bord ou un massif, elle est
+     sonnée), SALVE (éventail), PONTE (des œufs lancés autour de toi : tire-les ou avale-les avant l'éclosion, sinon des
+     Mites). Phase 2 : charges par deux (la seconde re-vise), le choc contre le bord lâche un anneau, ponte plus fournie. */
   (B,P,aP)=>{const p2=B.phase>1;
-    if(B.st){if(!chargeRun(B,9.5,null)&&p2)bossRing(B,12,2.2,R()*TAU);return;}
-    drift(B,P.x+Math.cos(B.t*.01)*240,P.y+Math.sin(B.t*.013)*240,1.3);
-    if(B.t%(p2?120:160)===0)chargeStart(B,48);
-    if(p2&&B.t%260===130){let n=0;for(const e of G.en)if(!e.dead&&e.t==='mite')n++;if(n<12)for(let k=0;k<5;k++){const a=k*TAU/5;mkEnemy('mite',B.x+Math.cos(a)*(B.r+16),B.y+Math.sin(a)*(B.r+16),{age:0,spawn:20,boss:1});}}
-    if(B.t%90===45)for(let k=-1;k<=1;k++)bossShot(B,aP+k*.25,2.6);},
+    if(B.st){if(!chargeRun(B,p2?11.5:10,()=>{if(p2&&!(B.chain>0))bossRing(B,14,2.3,Math.atan2(P.y-B.y,P.x-B.x),R()*TAU);})){
+        if(B.chain>0){B.chain--;chargeStart(B,28);}else B.cd=p2?30:45;}return;}
+    if(B.lay>0){B.vx*=.9;B.vy*=.9;if(--B.lay===0)ponte(B,p2?6:4,p2?160:210);return;}
+    drift(B,P.x+Math.cos(B.t*.01)*240,P.y+Math.sin(B.t*.013)*240,p2?1.9:1.4);
+    if(--B.cd>0)return;
+    const a=B.cyc++%3;
+    if(a===0){B.chain=p2?1:0;chargeStart(B,p2?38:46);}
+    else if(a===1){const n=p2?7:5;for(let k=0;k<n;k++)bossShot(B,aP+(k-(n-1)/2)*.2,2.9);SFX.bshot();B.cd=p2?40:55;}
+    else{B.lay=32;B.cd=p2?50:70;SFX.warn();ringFX(B.x,B.y,B.r,B.r*1.8,COL.wh,30,3);}},
   /* 2 Grande Épine : charge qui rebondit sur le bord ; phase 2, chaque rebond projette une étoile d'épines */
   (B,P,aP)=>{const p2=B.phase>1;
     if(B.st){chargeRun(B,8.5,()=>{if(p2)bossRing(B,10,2.6,null,R()*TAU);});return;}
@@ -108,11 +124,16 @@ const BOSSAI=[
 ];
 /* la couronne : un anneau de tirs autour de toi qui se resserre, avec une brèche */
 function crownAt(x,y,r){const n=30,gap=R()*TAU;for(let k=0;k<n;k++){const a=k*TAU/n;if(Math.abs(angDiff(a,gap))<.36)continue;const b=ebul(x+Math.cos(a)*r,y+Math.sin(a)*r,a+Math.PI,1.7,6,G.boss?bossCol(G.boss):COL.mg);b.life=Math.round(r*1.6/1.7);}SFX.bshot();}
+/* la ponte : des œufs (des Mites qui couvent, e.egg pas) lancés autour de la bulle ; écrasés ou avalés, ils remplissent la jauge */
+function ponte(B,n,hatch){const P=G.p;SFX.pop(true);shake(.15);
+  for(let k=0;k<n;k++){let x=P.x,y=P.y;for(let tr=0;tr<8;tr++){const a=k*TAU/n+rr(-.4,.4),r=rr(110,230);x=P.x+Math.cos(a)*r;y=P.y+Math.sin(a)*r;const d=Math.hypot(x,y);if(d>PR-60){x*=(PR-60)/d;y*=(PR-60)/d;}if(!pointHit(x,y,16))break;}
+    mkEnemy('mite',B.x,B.y,{age:0,spawn:0,boss:1,egg:hatch+k*6,eggM:hatch+k*6,ex:x,ey:y,r:11});}
+  if(!G.tut.egg){G.tut.egg=1;toast('Des œufs ! Tire-les ou avale-les avant qu’ils éclosent.');}}
 function bossPhase(n){
-  const B=G.boss;B.phase=n;B.trans=80;B.st=0;B.vx=B.vy=0;
+  const B=G.boss;B.phase=n;B.trans=80;B.st=0;B.vx=B.vy=0;B.stun=0;B.lay=0;B.chain=0;B.cd=40;
   for(const b of G.eb)sparks(b.x,b.y,b.col,1,1.5,12);G.eb=[];G.tele=[];
   G.glitch=40;shake(.8);G.freeze=6;SFX.phase();setMusic(3);
-  banner('Phase '+n,n===3?'Il fonce sur toi':'Il change de rythme',bossCol(B),110);ringFX(B.x,B.y,B.r,B.r*6,bossCol(B),40,6);
+  banner('Phase '+n,n===3?'Il fonce sur toi':B.D.p2||'Il change de rythme',bossCol(B),110);ringFX(B.x,B.y,B.r,B.r*6,bossCol(B),40,6);
   if(n===3)for(const nd of B.nodes)if(!nd.dead){nd.dead=true;shards(nd.x,nd.y,COL.or,8,4,nd.r);}
 }
 function updBoss(){
@@ -123,6 +144,7 @@ function updBoss(){
   if(B.k===8){B.ang+=.01+.006*B.phase;const nr=B.r+36;B.nodes.forEach((n,k)=>{const a=B.ang+k*TAU/6;n.x=B.x+Math.cos(a)*nr;n.y=B.y+Math.sin(a)*nr;if(n.flash>0)n.flash--;});}
   if(B.spawn>0){B.spawn--;return;}
   if(B.trans>0){B.trans--;if(B.trans%6===0)sparks(B.x+fr(-B.r,B.r),B.y+fr(-B.r,B.r),bossCol(B),6,4);return;}
+  if(B.stun>0){B.stun--;B.vx*=.85;B.vy*=.85;if(B.stun%9===0)sparks(B.x+fr(-B.r,B.r)*.6,B.y-B.r*.8,COL.gd,2,2,16);return;}
   if(G.slowF<1&&G.t%2)return;
   B.t++;const f=B.hp/B.mhp;
   if(B.k===8){if(B.phase===1&&f<.67){bossPhase(2);return;}if(B.phase===2&&f<.34){bossPhase(3);return;}}

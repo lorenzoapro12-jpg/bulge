@@ -76,14 +76,14 @@ function updIslet(){
   if(G.wbn&&++G.wbn.t>150)G.wbn=null;
 }
 function waveStart(w){
-  const k=G.isl,n=3+3*w+Math.ceil(k*.9);G.wave=w;G.ph='wave';G.phT=0;
+  const k=G.isl,n=4+4*w+k;G.wave=w;G.ph='wave';G.phT=0;
   G.wq={left:n,n,el:Math.ceil(n*.55),eld:false,prey:k>=PREYA+1?Math.round(n*.5):0,nextT:0};
   G.wbn={w,t:0};SFX.wave();
-  if(w===2&&k===1&&G.tutOn)toast(inp.touch?'Bouton ⚡ : dash. Tu es invulnérable pendant.':'Espace ou Maj : dash. Tu es invulnérable pendant.');
+  if(w===2&&k===1&&G.tutOn)toast(inp.touch?'Bouton ⚡ : dash, invulnérable. Frôle un tir en dash : esquive parfaite.':'Espace ou Maj : dash, invulnérable. Frôle un tir en dash : esquive parfaite.');
 }
 function waveTick(){
   const Q=G.wq,k=G.isl;let alive=0;for(const e of G.en)if(!e.dead&&!e.prey)alive++;
-  const cap=4+Math.ceil(k*1.1);
+  const cap=5+Math.ceil(k*1.4);
   if((Q.left>0||Q.prey>0&&Q.left<Q.n)&&G.marks.length<3&&G.phT>=Q.nextT&&(alive<cap||G.phT>=Q.nextT+200)){spawnGroup();Q.nextT=G.phT+Math.round(rr(38,72));}
   if(Q.left<=0&&!G.marks.some(m=>!m.prey)&&alive===0){G.score+=100*k*G.wave;
     if(G.wave<NWAVE){G.ph='pause';G.phT=0;}else{G.ph='preboss';G.phT=0;G.marks=[];}}
@@ -167,7 +167,7 @@ function gain(v){const P=G.p;if(P.gon>0)return;const was=P.gauge<1;P.gauge=Math.
   if(was&&P.gauge>=1){SFX.evo();ringFX(P.x,P.y,P.r,P.r*2.4,COL.wh,18,3);if(!G.tut.gon){G.tut.gon=1;toast(inp.touch?'Jauge pleine : bouton ◉ pour gonfler !':'Jauge pleine : E ou clic droit pour gonfler !');}}}
 function killEnemy(e){
   if(e.dead)return;e.dead=true;if(e.parent&&!e.parent.dead)e.parent.kids--;
-  const P=G.p;G.kills++;G.score+=Math.round(e.d.sc*(e.elite?4:1)*(e.prey?.5:1)*comboUp(e));gain(e.elite?.12:e.prey?.02:.035);
+  const P=G.p;G.kills++;G.score+=Math.round(e.d.sc*(e.elite?4:1)*(e.prey?.5:1)*comboUp(e));gain(e.elite?.12:e.prey?.02:.05);
   if(e.elite){dropPU(e.x,e.y);if(P.luck&&R()<.3*P.luck)dropPU(e.x,e.y);if(P.trophy&&P.seg<P.segMax){P.seg++;SFX.seg();}}
   FX({ty:4,x:e.x,y:e.y,vx:0,vy:0,r:e.r*7,life:14,max:14,col:e.col});
   shards(e.x,e.y,e.col,6+Math.floor(e.r/3),3+e.r*.08,e.r);sparks(e.x,e.y,e.col,8,4);ringFX(e.x,e.y,e.r,e.r*2.4,e.col,18,3);
@@ -204,6 +204,8 @@ function updEnemy(e){
   if(e.flash>0)e.flash--;
   const tf=G.slowF*(e.frostT>G.t?.45:1);
   if(e.prey){preyMove(e,tf);return;}
+  /* œuf de l'Essaim-Mère (gb.js ponte) : il vole jusqu'à sa place, couve, puis éclot en Mite qui bondit presque aussitôt */
+  if(e.egg>0){e.x=lerp(e.x,e.ex,.1);e.y=lerp(e.y,e.ey,.1);e.wob+=.05;if((e.egg-=tf)<=0){e.egg=0;e.r=e.d.r;e.cd=rr(25,45);sparks(e.x,e.y,e.col,8,3);ringFX(e.x,e.y,e.r,e.r*2.5,e.col,14,2);SFX.pop(false);}return;}
   const P=G.p,d=e.d,dx=P.x-e.x,dy=P.y-e.y,dd=Math.hypot(dx,dy)||1,aP=Math.atan2(dy,dx);let ax=dx/dd,ay=dy/dd;
   /* un massif entre lui et toi : il suit la carte des distances (flowDir) au lieu de foncer dans la falaise */
   if(G.t%15===e.nk)e.nav=losWall(e.x,e.y,P.x,P.y)?flowDir(e.x,e.y):null;if(e.nav){ax=e.nav[0];ay=e.nav[1];}
@@ -274,13 +276,13 @@ function updEnemies(){
   /* Trou noir : gonflé, tu aspires les ennemis proches */
   if(P.gon>0&&P.hole)for(const e of G.en){if(e.dead||e.spawn>0)continue;const dx=P.x-e.x,dy=P.y-e.y,d=Math.hypot(dx,dy)||1;if(d<340){e.vx+=dx/d*.7;e.vy+=dy/d*.7;e.x+=dx/d*1.6;e.y+=dy/d*1.6;}}
   if(G.state==='play'&&!P.dead)for(const e of G.en){if(e.dead||e.spawn>0||e.fall>0)continue;const d2=dist2(e.x,e.y,P.x,P.y);
-    if(e.prey){if(d2<(P.r+e.r+6+30*P.glouton)**2)absorb(e);continue;}
+    if(e.prey||e.egg>0){if(d2<(P.r+e.r+6+30*P.glouton)**2)absorb(e);continue;}
     const rs=e.r+P.r*.85;if(d2>=rs*rs)continue;
     if(P.gon>0&&e.r<P.r){absorb(e);continue;}
     if(P.appetit&&e.hp<e.mhp*.3&&e.r<P.r*1.1){absorb(e);continue;}
     const dx=P.x-e.x,dy=P.y-e.y,d=Math.sqrt(d2)||1,o=rs-d;
     if(P.gon>0||P.pu.inv>0){if(e.ivT<=G.t){e.ivT=G.t+8;hurtEnemy(e,P.dmg*4,-dx/d*3,-dy/d*3,true);}e.x-=dx/d*o;e.y-=dy/d*o;continue;}
-    if(P.dashing>0||P.inv>0){e.x-=dx/d*o*.5;e.y-=dy/d*o*.5;continue;}
+    if(P.dashing>0||P.inv>0){if(P.dashing>0)perfect(e.x,e.y);e.x-=dx/d*o*.5;e.y-=dy/d*o*.5;continue;}
     hurtPlayer(e.x,e.y);
     if(e.t==='mite')killEnemy(e);else{P.x+=dx/d*o*.5;P.y+=dy/d*o*.5;e.x-=dx/d*o*.5;e.y-=dy/d*o*.5;}}
   decorTick();
@@ -289,7 +291,7 @@ function updEnemies(){
 
 /* ---------- joueur ---------- */
 function hurtPlayer(sx,sy){
-  const P=G.p;if(G.state!=='play'||P.inv>0||P.dashing>0||P.dead||P.gon>0||P.pu.inv>0)return;
+  const P=G.p;if(P.dashing>0&&G.state==='play'&&!P.dead)perfect(sx,sy);if(G.state!=='play'||P.inv>0||P.dashing>0||P.dead||P.gon>0||P.pu.inv>0)return;
   if(P.pu.shield>0){delete P.pu.shield;P.inv=45;SFX.shield();ringFX(P.x,P.y,P.r*1.2,P.r*3.4,COL.wh,20,4);clearNear(120);return;}
   P.seg--;G.islHit=true;G.hits++;
   P.inv=60;P.flash=10;shake(.5);G.freeze=Math.max(G.freeze,3);G.glitch=Math.max(G.glitch,8);G.hurtT=22;SFX.hurt();
@@ -302,9 +304,15 @@ function clearNear(rad){const P=G.p;for(let i=G.eb.length-1;i>=0;i--){const b=G.
 function tryDash(){
   if(!G||G.state!=='play')return;const P=G.p;if(P.dashT>0||P.dead||P.noDash||P.dashing>0)return;
   let dx=G.inX,dy=G.inY;if(!dx&&!dy){dx=Math.cos(P.ang);dy=Math.sin(P.ang);}const l=Math.hypot(dx,dy)||1;dx/=l;dy/=l;
-  P.glisse=G.biome==='ice';P.dashing=P.glisse?ICE_DASH:12;if(P.glisse)G.dec.glisseT=G.t;P.dashT=P.dashMax;P.dvx=dx*P.spd*3.2;P.dvy=dy*P.spd*3.2;P.inv=Math.max(P.inv,18);P.dashHit=[];SFX.dash();
+  P.perf=0;P.glisse=G.biome==='ice';P.dashing=P.glisse?ICE_DASH:12;if(P.glisse)G.dec.glisseT=G.t;P.dashT=P.dashMax;P.dvx=dx*P.spd*3.2;P.dvy=dy*P.spd*3.2;P.inv=Math.max(P.inv,18);P.dashHit=[];SFX.dash();
   ringFX(P.x,P.y,P.r,P.r*2.2,P.col,14,3);if(P.echo)clearNear(160);if(P.mines)layMine(P.x,P.y);
 }
+/* ESQUIVE PARFAITE (08/10/2026) : un coup (tir, contact, charge, rayon) qui t'aurait touché PENDANT le dash. Une fois par
+   dash : le dash se recharge aussitôt, la jauge prend PERF_G, le temps ralentit un instant. Le dash devient une arme. */
+const PERF_G=.14;
+function perfect(x,y){const P=G.p;if(P.perf)return;P.perf=1;P.dashT=0;gain(PERF_G);G.perfs=(G.perfs||0)+1;G.score+=50*G.isl;
+  G.timeScale=Math.min(G.timeScale,.55);ringFX(P.x,P.y,P.r,P.r*3.2,COL.gd,20,4);sparks(x,y,COL.gd,10,4);ftext(P.x,P.y-P.r-18,'Parfait !',COL.gd,17);SFX.evo();
+  if(!G.tut.perf){G.tut.perf=1;toast('Esquive parfaite : ton dash se recharge aussitôt.');}}
 /* Gonfler : jauge pleine. La bulle double, devient invulnérable et avale ce qui est plus petit qu'elle ; à la fin, elle éclate. */
 function tryGonfle(){
   if(!G||G.state!=='play')return;const P=G.p;if(P.gauge<1||P.gon>0||P.dead)return;
@@ -527,7 +535,7 @@ function updBullets(){
     if((G.t+i)%2===0&&pointHit(b.x,b.y,b.r*.6)){sparks(b.x,b.y,b.col,2,1.5,10);G.eb.splice(i,1);continue;}
     if(G.state!=='play'||P.dead)continue;
     const rs=P.r*(big?1:.72)+b.r,d2=dist2(b.x,b.y,P.x,P.y);
-    if(d2<rs*rs){if(P.dashing>0)continue;if(big||P.pu.inv>0){sparks(b.x,b.y,COL.wh,3,2,10);G.eb.splice(i,1);continue;}
+    if(d2<rs*rs){if(P.dashing>0){perfect(b.x,b.y);continue;}if(big||P.pu.inv>0){sparks(b.x,b.y,COL.wh,3,2,10);G.eb.splice(i,1);continue;}
       sparks(b.x,b.y,b.col,8,3);G.eb.splice(i,1);hurtPlayer(b.x,b.y);continue;}
     if(!b.gz&&d2<(rs+16)**2){b.gz=true;G.score+=2;}
   }
