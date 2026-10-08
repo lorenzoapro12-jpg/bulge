@@ -5,7 +5,8 @@
 
    Ce que ce test défend :
      R1. les temps morts d'un îlot (arrivée, pauses entre vagues, avant le boss, îlot nettoyé : aucun ennemi à combattre)
-         durent moins de TMORT secondes par îlot (avant : 10,5 s ; maintenant 5,3 s) — partie assistée, îlots 1 à 3 ;
+         durent moins de TMORT secondes par îlot (avant : 10,5 s ; 5,3 s le 02/10/2026 ; 4,1 s depuis le 08/10, test/vivacite.js
+         V5 exige ≤ 4,3 s) — partie assistée, îlots 1 à 3 ;
      R2. la bulle est vive : vitesse ≥ VMIN unités/s (avant : 195) et cadence de tir ≥ TIRMIN tirs/s (avant : 4,3) ;
      R3. tuer vite paie : une SÉRIE (kills ou proies à moins de 1,5 s d'écart) multiplie le score — le 10ᵉ kill d'une
          série rapporte au moins 1,5 × le premier (avant : pas de série, tous égaux) ;

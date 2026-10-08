@@ -16,6 +16,12 @@
          gonflements, power-ups) ;
      V4. CRIT : un critique se voit (tir doré, anneau doré, « ×2,5 »), base 6 % ; une esquive parfaite déclenche la
          Contre-attaque (75 pas de tirs tous critiques, cadence ≥ 1,3 ×) ; le boss prend le critique décidé au tir.
+     V5. TEMPO : temps morts d'un îlot ≤ 4,3 s (5,3 s avant ; pilote assisté comme R1) ; bulle à ≥ 290 u/s, dash rechargé
+         en ≤ 45 pas ; un ennemi éclot en 14 pas (24 avant), sa marque au sol dure 30 pas (24 pour des proies) ; le boss
+         entre en 80 pas (110) et change de phase en 55 (80) ; l'îlot nettoyé rend son segment à 40 pas (55) ;
+     V6. VISÉE : le tir automatique préfère l'ennemi qu'il peut toucher (ligne de tir libre de tout obstacle solide), sinon
+         le plus proche ; il change de cible dès que la sienne meurt ; un tireur hors de l'écran ne tire pas et revient
+         ≥ 2 × plus vite ; un tir de base ne pousse plus l'ennemi que de ≤ 0,45 u/pas (1,2 avant).
 
    node test/vivacite.js                arbre de travail
    node test/vivacite.js --ref=<commit> code d'un commit (379e0fb : tous les critères ECHOUENT)
@@ -182,6 +188,98 @@ check('V4 boss : hurtBoss(d, quiet, true) fait ×2,5 et pose un anneau doré ; h
   const r = J(H, `(()=>{const B=G.boss;B.stun=0;G.p.crit=1;G.fx=[];let h=B.hp;hurtBoss(1,true,false);const dN=h-B.hp;h=B.hp;hurtBoss(1,true,true);const dC=h-B.hp;
     return JSON.stringify({dN,dC,ring:G.fx.some(f=>f.ty===1&&f.col===COL.gd)});})()`);
   return { ok: r.dN === 1 && r.dC === 2.5 && r.ring, detail: 'sans critique ' + r.dN + ', critique ' + r.dC + ', anneau doré ' + r.ring };
+});
+
+/* ================= V5 : TEMPO =================
+   moins de temps morts : arrivée, pauses, avant le boss, apparitions, entrée du boss et changement de phase ; bulle plus vive. */
+check('V5 temps morts d’un îlot ≤ 4,3 s (arrivée, pauses, avant le boss, nettoyé ; pilote assisté comme R1, îlots 1 à 3)', () => {
+  const H = L.mkGame({ ref: REF, seed: 4242 }); H.win.__SIM_PICK = c => c[0];
+  H.ai(true); H.call('window.__SIM_BOOST=4'); H.start();
+  const mort = {}, MORT = new Set(['arrive', 'pause', 'preboss', 'clear']);
+  H.steps(60 * 60 * 15, () => {
+    const s = H.call("G.state==='play'?G.isl+':'+G.ph:''");
+    if (s) { const [k, ph] = s.split(':'); if (MORT.has(ph)) mort[k] = (mort[k] || 0) + 1; }
+    return H.call('G.isl>3||G.state==="end"');
+  });
+  const sec = ['1', '2', '3'].map(k => (mort[k] || 0) / 60);
+  return { ok: sec.every(s => s > 0 && s <= 4.3), detail: sec.map((s, i) => 'îlot ' + (i + 1) + ' : ' + s.toFixed(2) + ' s').join(' · ') };
+});
+check('V5 la bulle est plus vive : ≥ 290 u/s, dash rechargé en ≤ 45 pas', () => {
+  const H = arene(4263);
+  const r = J(H, 'JSON.stringify({v:mkPlayer().spd*60,d:mkPlayer().dashMax})');
+  return { ok: r.v >= 290 && r.d <= 45, detail: 'vitesse ' + r.v.toFixed(0) + ' u/s, dash ' + r.d + ' pas' };
+});
+check('V5 apparition : marque au sol 30 pas (24 pour des proies), puis l’ennemi éclot en 14 pas', () => {
+  const H = arene(4264);
+  const r = J(H, `(()=>{G.wq={left:9,n:9,el:99,eld:true,prey:0,nextT:0};G.marks=[];spawnGroup();const m=G.marks[0]||{};
+    const k0=G.isl;G.isl=4;G.wq={left:0,n:9,el:99,eld:true,prey:5,nextT:0};G.marks=[];spawnGroup();const q=G.marks[0]||{};G.isl=k0;G.marks=[];
+    return JSON.stringify({m:m.max,mp:!!m.prey,q:q.max,qp:!!q.prey,s:mkEnemy('spread',G.p.x+300,G.p.y).spawn});})()`);
+  return { ok: r.m === 30 && !r.mp && r.q === 24 && r.qp && r.s === 14, detail: 'marque ' + r.m + ' pas, de proies ' + r.q + ' pas (proie ' + r.qp + ') ; éclosion ' + r.s + ' pas' };
+});
+check('V5 boss : entrée en 80 pas, changement de phase en 55 ; îlot nettoyé : le segment revient à 40 pas', () => {
+  const H = arene(4265);
+  const r = J(H, `(()=>{spawnBoss();const s=G.boss.spawn;bossPhase(2);const t=G.boss.trans;G.boss=null;G.freeze=0;G.p.seg=G.p.segMax-1;islClear();window.__s0=G.p.seg;return JSON.stringify({s,t});})()`);
+  let n = 0; for (; n < 120 && H.call('G.p.seg===window.__s0'); n++) H.steps(1);
+  return { ok: r.s === 80 && r.t === 55 && n === 40, detail: 'entrée ' + r.s + ' pas, phase ' + r.t + ' pas ; segment rendu après ' + n + ' pas' };
+});
+
+/* ================= V6 : VISÉE =================
+   des tirs qui tuent au lieu de pousser : le tir automatique vise ce qu'il peut toucher et change de cible aussitôt ;
+   un tireur hors de l'écran revient sans tirer ; le recul d'un tir de base est léger. */
+check('V6 le tir automatique préfère l’ennemi à découvert (330 u) à celui caché derrière un massif (200 u) ; seul, le caché est visé', () => {
+  const H = arene(4266);
+  const r = J(H, `(()=>{const P=G.p,hw=W/2/G.zoom,hh=H/2/G.zoom;
+    const free=(x,y,r)=>Math.hypot(x,y)<PR-60&&!pointHit(x,y,r)&&!wallNear(x,y,r);
+    const clr=(x0,y0,x1,y1,r)=>{const n=Math.ceil(Math.hypot(x1-x0,y1-y0)/4);for(let k=0;k<=n;k++){const t=k/n;if(pointHit(x0+(x1-x0)*t,y0+(y1-y0)*t,r))return false;}return true;};
+    for(let k=1;k<=8;k++){if(k>1){genIslet(G.seed,k);G.isl=k;G.pickIsl=k;islStart();G.en=[];G.eb=[];G.marks=[];G.wq=null;G.ph='pause';G.phT=-1e9;}
+      for(let cx=-3;cx<=3;cx++)for(let cy=-3;cy<=3;cy++){const c=getChunk(cx,cy);if(!c)continue;
+        for(const o of c.obs){if(o.brk||o.gone)continue;
+          for(let i=0;i<16;i++){const u=i*TAU/16,ux=Math.cos(u),uy=Math.sin(u),ax=o.cx-ux*100,ay=o.cy-uy*100,ex=ax+ux*200,ey=ay+uy*200;
+            if(!free(ax,ay,P.r+6)||!free(ex,ey,20))continue;
+            for(let j=0;j<32;j++){const v=j*TAU/32,bx=ax+Math.cos(v)*330,by=ay+Math.sin(v)*330;
+              if(Math.abs(bx-ax)>hw-30||Math.abs(by-ay)>hh-30||!free(bx,by,20)||!clr(ax,ay,bx,by,4))continue;
+              const q=pointHit(o.cx,o.cy,2);P.x=ax;P.y=ay;P.vx=P.vy=0;G.cx=ax;G.cy=ay;G.en=[];
+              const e1=mkEnemy('mite',ex,ey,{spawn:0,age:0}),e2=mkEnemy('mite',bx,by,{spawn:0,age:0});
+              G.tgtT=0;aimUpdate();const a=G.tgt===e2?'découvert':G.tgt===e1?'caché':String(G.tgt);
+              G.en=G.en.filter(e=>e!==e2);G.tgtT=0;aimUpdate();const b=G.tgt===e1?'caché':String(G.tgt);
+              return JSON.stringify({k,obs:o.wall?'falaise':'rocher R '+Math.round(o.R),solide:!!q&&!q.brk,a,b});}}}}}
+    return 'null';})()`);
+  if (!r) return { ok: false, detail: 'aucune scène trouvée (massif solide entre la bulle et un ennemi, l’autre à découvert)' };
+  return { ok: r.solide && r.a === 'découvert' && r.b === 'caché', detail: 'îlot ' + r.k + ', ' + r.obs + ' : les deux à l’écran, visé ' + r.a + ' ; sans l’ennemi à découvert, visé ' + r.b };
+});
+check('V6 la cible meurt : la visée passe à l’ennemi suivant dès le pas d’après', () => {
+  const H = arene(4267);
+  const t0 = H.call(`(()=>{const P=G.p;G.cx=P.x;G.cy=P.y;const a=mkEnemy('mite',P.x+150,P.y,{spawn:0,age:0}),b=mkEnemy('mite',P.x-260,P.y+40,{spawn:0,age:0});a.cd=b.cd=1e9;
+    window.__A=a;window.__B=b;G.tgtT=0;aimUpdate();const ok=G.tgt===a;G.tgtT=5;killEnemy(a);G.freeze=0;return ok;})()`);
+  H.steps(1);
+  const t1 = H.call('G.tgt===window.__B?"l’ennemi vivant":G.tgt===window.__A?"la cible morte":String(G.tgt)');
+  return { ok: t0 && t1 === 'l’ennemi vivant', detail: 'avant : ' + (t0 ? 'la plus proche visée' : 'visée inattendue') + ' ; un pas après sa mort : ' + t1 };
+});
+check('V6 un Tireur hors de l’écran ne tire pas (cd forcé à 0, 240 pas) et revient ≥ 2 × plus vite qu’à l’écran', () => {
+  const H = arene(4268);
+  /* un couloir dégagé presque horizontal (la vue est plus large que haute) depuis la bulle, au centre de l'îlot */
+  const a = J(H, `(()=>{const P=G.p;P.x=P.y=0;G.cx=G.cy=0;for(let i=0;i<40;i++){const a=(i&1?Math.PI:0)+((i>>1)&1?-1:1)*(i>>2)*.06,ux=Math.cos(a),uy=Math.sin(a);let ok=true;
+      for(let s=0;s<=780&&ok;s+=8){const x=ux*s,y=uy*s;if(Math.hypot(x,y)>PR-60||pointHit(x,y,40)||wallNear(x,y,40))ok=false;}if(ok)return String(a);}return 'null';})()`);
+  if (a == null) return { ok: false, detail: 'aucun couloir dégagé' };
+  const pin = 'G.p.x=G.p.y=0;G.p.vx=G.p.vy=0;G.cx=G.cy=0;G.p.inv=1e9;';
+  /* 1. tenu à 700 u (hors de l'écran) 240 pas, cd forcé à 0 : aucun tir */
+  H.call(`G.en=[];G.eb=[];${pin}window.__T=mkEnemy('spread',Math.cos(${a})*700,Math.sin(${a})*700,{spawn:0,age:0});`);
+  for (let i = 0; i < 240; i++) { H.call(`${pin}{const e=window.__T;e.x=Math.cos(${a})*700;e.y=Math.sin(${a})*700;e.vx=e.vy=0;e.cd=0;}`); H.steps(1); }
+  const tirs = H.call('G.eb.length');
+  /* 2. distance gagnée en 40 pas, au repos au départ : à 440 u (à l'écran) puis à 700 u (hors de l'écran) */
+  const appr = d0 => { H.call(`G.en=[];G.eb=[];${pin}window.__T=mkEnemy('spread',Math.cos(${a})*${d0},Math.sin(${a})*${d0},{spawn:0,age:0});`);
+    for (let i = 0; i < 40; i++) { H.call(`${pin}window.__T.cd=0;`); H.steps(1); }
+    return d0 - H.call('Math.hypot(window.__T.x,window.__T.y)'); };
+  const dIn = appr(440), dOut = appr(700);
+  return { ok: tirs === 0 && dOut >= 2 * dIn && dIn > 5, detail: 'hors de l’écran : ' + tirs + ' tir(s) ennemi(s) en 240 pas ; en 40 pas, ' + dOut.toFixed(1) + ' u gagnés hors de l’écran contre ' + dIn.toFixed(1) + ' à l’écran (×' + (dOut / dIn).toFixed(2) + ')' };
+});
+check('V6 un tir de base (r 4,5) ne pousse l’ennemi que de ≤ 0,45 u/pas', () => {
+  const H = arene(4269);
+  H.call(`G.p.crit=0;{const e=mkEnemy('spread',G.p.x+160,G.p.y,{spawn:0,age:0});e.cd=1e9;e.hp=e.mhp=100;e.d=Object.assign({},e.d,{spd:0});window.__E=e;
+    const b=pbul(e.x-e.r-6,e.y,0,{pierce:0,rico:0,split:0,home:0});window.__R=b.r;}`);
+  let v = 0; for (let i = 0; i < 4; i++) { H.steps(1); v = Math.max(v, H.call('Math.hypot(window.__E.vx,window.__E.vy)')); }
+  const hp = H.call('window.__E.hp'), r = H.call('window.__R');
+  return { ok: hp < 100 && r === 4.5 && v <= .45, detail: 'tir r ' + r + ', vie ' + hp.toFixed(1) + '/100 ; vitesse donnée ' + v.toFixed(3) + ' u/pas' };
 });
 
 if (LONG) { /* réservé : passe d'équilibrage de COURBE */ }

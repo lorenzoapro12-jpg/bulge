@@ -8,6 +8,8 @@
    Esquiver devient une attaque. Une charge pulvérise les rochers cassables qu'elle traverse (test/plaisir.js).
    ========================================================= */
 const STUN=110,STUNM=2;
+/* BSPN : pas d'entrée du boss (110 avant le 08/10/2026, « c'est lent ») ; le changement de phase dure 55 pas (80) */
+const BSPN=80;
 const BOSS=[
   {n:'Essaim-Mère',sub:'Esquive sa charge : contre le bord, elle reste sonnée',t:'mite',r:52,hp:90,run:170,p2:'Elle enrage : charges enchaînées'},
   {n:'Grande Épine',sub:'Ses charges rebondissent ; au dernier choc, elle est sonnée',t:'spike',r:56,hp:125,run:110},
@@ -22,7 +24,7 @@ const BOSSCOL='#ff3355';
 function bossCol(B){return B.k===8?BOSSCOL:ET[B.D.t].col;}
 function spawnBoss(){
   const k=G.isl,D=BOSS[k-1],hp=Math.round(1.3*D.hp*Math.pow(GROWD,k-1)*(1+.14*(k-1)));
-  const B={k,D,x:0,y:0,vx:0,vy:0,r:D.r,hp,mhp:hp,phase:1,t:0,st:0,st2:0,ca:0,cn:0,trans:0,spawn:110,flash:0,ang:0,dead:false,gone:false,dieT:0,nodes:[],dir:1,wob:0,stun:0,chain:0,cyc:0,cd:60,lay:0};
+  const B={k,D,x:0,y:0,vx:0,vy:0,r:D.r,hp,mhp:hp,phase:1,t:0,st:0,st2:0,ca:0,cn:0,trans:0,spawn:BSPN,flash:0,ang:0,dead:false,gone:false,dieT:0,nodes:[],dir:1,wob:0,stun:0,chain:0,cyc:0,cd:60,lay:0};
   if(k===8)for(let i=0;i<6;i++){const nh=Math.round(18*Math.pow(GROWD,k-1));B.nodes.push({x:0,y:0,r:15,hp:nh,mhp:nh,dead:false,cd:rr(60,160),flash:0});}
   G.boss=B;G.ph='boss';
   banner(D.n,D.sub,bossCol(B),170);setMusic(2);SFX.bossIn();shake(.5);G.glitch=25;
@@ -130,7 +132,7 @@ function ponte(B,n,hatch){const P=G.p;SFX.pop(true);shake(.15);
     mkEnemy('mite',B.x,B.y,{age:0,spawn:0,boss:1,egg:hatch+k*6,eggM:hatch+k*6,ex:x,ey:y,r:11});}
   if(!G.tut.egg){G.tut.egg=1;toast('Des œufs ! Tire-les ou avale-les avant qu’ils éclosent.');}}
 function bossPhase(n){
-  const B=G.boss;B.phase=n;B.trans=80;B.st=0;B.vx=B.vy=0;B.stun=0;B.lay=0;B.chain=0;B.cd=40;
+  const B=G.boss;B.phase=n;B.trans=55;B.st=0;B.vx=B.vy=0;B.stun=0;B.lay=0;B.chain=0;B.cd=40;
   for(const b of G.eb)sparks(b.x,b.y,b.col,1,1.5,12);G.eb=[];G.tele=[];
   G.glitch=40;shake(.8);G.freeze=6;SFX.phase();setMusic(3);
   banner('Phase '+n,n===3?'Il fonce sur toi':B.D.p2||'Il change de rythme',bossCol(B),110);ringFX(B.x,B.y,B.r,B.r*6,bossCol(B),40,6);

@@ -7,8 +7,9 @@
 let G=null;
 /* PRAD : rayon de la bulle ; SEG0 : segments de membrane au départ ; GROW : croissance par îlot (taille), GROWD (puissance :
    les dégâts de la bulle suivent la vie des ennemis, HPM, pour que les bonus restent un vrai gain) ;
-   PREYA : écart d'îlots à partir duquel un type devient proie ; GONEA : écart où il quitte le jeu */
-const PRAD=18,SEG0=5,NWAVE=3,GROW=1.4,GROWD=1.2,PREYA=2,GONEA=4,EBC='#ff5a2d',SPK_AIM=30,SNP_AIM=45;
+   PREYA : écart d'îlots à partir duquel un type devient proie ; GONEA : écart où il quitte le jeu ;
+   SPN : pas d'éclosion d'un ennemi, une fois sa marque au sol passée (24 avant le 08/10/2026) */
+const PRAD=18,SEG0=5,NWAVE=3,GROW=1.4,GROWD=1.2,PREYA=2,GONEA=4,EBC='#ff5a2d',SPK_AIM=30,SNP_AIM=45,SPN=14;
 /* vie des ennemis selon l'îlot : au pas des dégâts de la bulle (GROWD), +12 % par îlot (deux bonus par îlot depuis le
    02/10/2026 : la construction grandit deux fois plus vite), et ×1,2 contre la cadence de tir plus rapide */
 const HPM=()=>1.2*Math.pow(GROWD,G.isl-1)*(1+.12*(G.isl-1));
@@ -22,9 +23,9 @@ function mkGame(seed){return{state:'play',t:0,time:0,seed,isl:1,ph:'arrive',phT:
   inX:0,inY:0,aimMan:false,aimA:0,tut:{},tutOn:false,biome:'plains',wbn:null,
   dec:decor0(),courant:null,tr:null};}
 function mkPlayer(){return{x:0,y:0,vx:0,vy:0,r:PRAD,baseR:PRAD,ang:-Math.PI/2,col:COL.cy,
-  seg:SEG0,segMax:SEG0,spd:4.4,fireI:9,dmg:1,bspd:12.5,blife:58,bsize:4.5,pierce:0,turrets:1,spreadW:.16,homing:0,rico:0,split:0,crit:.06,critM:2.5,ctr:0,
+  seg:SEG0,segMax:SEG0,spd:4.9,fireI:9,dmg:1,bspd:12.5,blife:58,bsize:4.5,pierce:0,turrets:1,spreadW:.16,homing:0,rico:0,split:0,crit:.06,critM:2.5,ctr:0,
   aura:0,auraR:0,orbs:0,drones:0,dronesHome:false,missile:0,missileT:0,nova:0,novaT:0,mines:0,
-  dashMax:55,dashT:0,dashing:0,dvx:0,dvy:0,dashDmg:0,dashHit:[],ghost:false,
+  dashMax:45,dashT:0,dashing:0,dvx:0,dvy:0,dashDmg:0,dashHit:[],ghost:false,
   inv:0,fireT:0,flash:0,recoil:0,glow:0,shots:0,
   gauge:0,gon:0,gonMax:1,gGain:1,gDur:240,gScale:2,
   pu:{},puMax:{},puDur:1,luck:0,magnet:0,regen:0,regenT:0,digest:0,digN:0,
@@ -67,15 +68,16 @@ function arriveBanner(){const b=BIO[G.biome];banner(b.n,'Îlot '+G.isl+' sur '+N
   if(G.isl===1&&G.tutOn)toast(inp.touch?'Pouce gauche : bouger. Le tir est automatique.':'ZQSD ou flèches : bouger. Le tir est automatique.');}
 /* déroulé d'un îlot (G.ph) : arrive → wave (×3, séparées par pause) → preboss → boss → clear.
    Rythme (02/10/2026, « trop lent, peu dynamique ») : arrivée 2,5 s → 1,25 s, pauses 1,7 s → 0,75 s, avant le boss
-   1,7 s → 0,9 s, îlot nettoyé 3 s → 1,7 s. Un DEUXIÈME bonus se choisit après la vague 2 (avant la dernière) :
-   seize choix par partie au lieu de huit, la bulle change de forme deux fois par îlot. */
+   1,7 s → 0,9 s, îlot nettoyé 3 s → 1,7 s ; puis (08/10/2026, « c'est lent ») arrivée 0,83 s, pauses 0,5 s, avant le boss
+   0,6 s, segment rendu à 0,67 s de l'îlot nettoyé (qui dure 1,7 s : l'explosion du boss s'y joue). Un DEUXIÈME bonus se
+   choisit après la vague 2 (avant la dernière) : seize choix par partie au lieu de huit, la bulle change de forme deux fois par îlot. */
 function updIslet(){
   G.phT++;G.islT++;
   switch(G.ph){
-    case 'arrive':if(G.phT===12&&G.pickIsl!==G.isl){openPick();if(G.state!=='play')return;}if(G.phT>=75)waveStart(1);break;
+    case 'arrive':if(G.phT===12&&G.pickIsl!==G.isl){openPick();if(G.state!=='play')return;}if(G.phT>=50)waveStart(1);break;
     case 'wave':waveTick();break;
-    case 'pause':if(G.phT===8&&G.wave===NWAVE-1&&G.pickMid!==G.isl){openPick(true);if(G.state!=='play')return;}if(G.phT>=45)waveStart(G.wave+1);break;
-    case 'preboss':if(G.phT>=55)spawnBoss();break;
+    case 'pause':if(G.phT===8&&G.wave===NWAVE-1&&G.pickMid!==G.isl){openPick(true);if(G.state!=='play')return;}if(G.phT>=30)waveStart(G.wave+1);break;
+    case 'preboss':if(G.phT>=35)spawnBoss();break;
     case 'clear':clearTick();break;
   }
   if(G.wbn&&++G.wbn.t>150)G.wbn=null;
@@ -107,7 +109,7 @@ function spawnGroup(){
   else{if(Q.left<=0)return;t=k>=2&&R()<.36?ETL[k-2]:ETL[k-1];const big=ET[t].r>=19;n=Math.min(Q.left,t==='mite'?5:big?1+(R()<.35?1:0):2+(R()<.6?1:0));Q.left-=n;}
   const [x,y]=spawnSpot();
   let el=0;if(!prey&&!Q.eld&&Q.n-Q.left>=Q.el){Q.eld=true;el=1;}
-  G.marks.push({x,y,t:0,max:prey?30:38,t2:t,n,prey,el,col:ET[t].col});
+  G.marks.push({x,y,t:0,max:prey?24:30,t2:t,n,prey,el,col:ET[t].col});
 }
 function updMarks(){
   for(let i=G.marks.length-1;i>=0;i--){const m=G.marks[i];if(++m.t<m.max)continue;G.marks.splice(i,1);
@@ -123,7 +125,7 @@ function islClear(){
 function clearTick(){
   const P=G.p;if(G.phT===35)G.timeScale=1;
   for(const q of G.pus)q.life=Math.min(q.life,90);
-  if(G.phT===55){if(!P.noRegen&&P.seg<P.segMax){P.seg++;SFX.seg();ringFX(P.x,P.y,P.r,P.r*3,COL.cy,24,4);ftext(P.x,P.y-P.r-14,'+1 segment',COL.cy,16);}
+  if(G.phT===40){if(!P.noRegen&&P.seg<P.segMax){P.seg++;SFX.seg();ringFX(P.x,P.y,P.r,P.r*3,COL.cy,24,4);ftext(P.x,P.y-P.r-14,'+1 segment',COL.cy,16);}
     G.score+=500*G.isl;if(!G.islHit){G.score+=1000*G.isl;toast('Îlot sans une égratignure');}}
   if(G.phT>=100){if(G.isl>=NISL){G.win=true;endRun(true);}else transStart();}
 }
@@ -151,7 +153,7 @@ function zoomFull(){return Math.min(W,H)/(2*(WR+40));}
 /* ---------- ennemis ---------- */
 /* age = îlots écoulés depuis l'arrivée du type : taille ÷1,4 par îlot ; à PREYA, proie */
 function mkEnemy(t,x,y,o){const d=ET[t],age=o&&o.age!=null?o.age:G.isl-d.isl,prey=age>=PREYA;
-  const e={t,d,age,prey,col:d.col,x,y,vx:0,vy:0,r:d.r*Math.pow(GROW,-age),hp:d.hp*HPM()*(prey?.6:1),mhp:0,spawn:24,cd:rr(60,130),st:0,st2:0,ca:0,ta:0,tele:0,flash:0,
+  const e={t,d,age,prey,col:d.col,x,y,vx:0,vy:0,r:d.r*Math.pow(GROW,-age),hp:d.hp*HPM()*(prey?.6:1),mhp:0,spawn:SPN,cd:rr(60,130),st:0,st2:0,ca:0,ta:0,tele:0,flash:0,
     wob:R()*TAU,wa:R()*TAU,nk:(R()*15)|0,nav:null,offT:0,hitT:G.t,dead:false,kids:0,made:0,parent:null,elite:0,sl:0,sn:null,frostT:0,alarmT:0,ivT:0,orbCd:0,dir:0};
   if(o)Object.assign(e,o);
   if(e.elite){e.hp*=3.2;e.r*=1.3;}
@@ -222,7 +224,10 @@ function updEnemy(e){
   /* plus vifs d'îlot en îlot (+4 % par îlot) : la bulle grandit, eux aussi */
   let tx=0,ty=0,sp=d.spd*(e.alarmT>G.t?SW_SP:1)*(1+.04*(G.isl-1));const vr=viewR();
   e.wob+=.03*tf;
-  const fire=()=>(e.cd-=tf)<=0;
+  /* un tireur hors de l'écran ne tire pas (son cd est gelé) et revient vite (×2,2) : on ne prend plus de tirs d'un ennemi
+     qu'on ne voit pas. La Mite et l'Épine (corps à corps) gardent leur allure. */
+  const os=e.t!=='mite'&&e.t!=='spike'&&(Math.abs(e.x-G.cx)>W/2/G.zoom-e.r||Math.abs(e.y-G.cy)>H/2/G.zoom-e.r);if(os)sp*=2.2;
+  const fire=()=>!os&&(e.cd-=tf)<=0;
   switch(e.t){
     /* Mite : essaim qui zigzague, puis BONDIT droit sur toi (×2,4 pendant ¼ s) quand tu es à portée — on l'esquive au dash */
     case 'mite':if(e.st===1){sp*=2.4;tx=Math.cos(e.ca);ty=Math.sin(e.ca);if(G.t%3===0)FX({ty:3,x:e.x,y:e.y,vx:0,vy:0,r:e.r,life:9,max:9,col:e.col});if((e.st2-=tf)<=0){e.st=0;e.cd=rr(70,120);}}
@@ -256,9 +261,9 @@ function updEnemy(e){
   if(oh&&skyFalls(e,sp,oh))return;
   if(oh){const vn=e.vx*oh[0]+e.vy*oh[1];if(vn<0){e.vx-=vn*oh[0];e.vy-=vn*oh[1];}e.sl=20;e.sn=oh;if(e.t==='spike'&&e.st===2){e.st=0;e.cd=60;}}
   if(confine(e,e.r)&&e.t==='spike'&&e.st===2){e.st=0;e.cd=60;}
-  /* hors de vue 10 s, ou intouché 25 s (coincé derrière un rocher, ou trop prudent) : il reparaît à vue — une vague finit toujours */
+  /* hors de vue 5 s, ou intouché 15 s (coincé derrière un rocher, ou trop prudent) : il reparaît à vue — une vague finit toujours */
   const off=Math.abs(e.x-G.cx)>W/2/G.zoom+40||Math.abs(e.y-G.cy)>H/2/G.zoom+40;e.offT=off?e.offT+1:0;
-  if(e.offT>600||G.t-e.hitT>1500){const s=spawnSpot();e.x=s[0];e.y=s[1];e.vx=e.vy=0;e.spawn=24;e.offT=0;e.hitT=G.t;e.nav=null;}
+  if(e.offT>300||G.t-e.hitT>900){const s=spawnSpot();e.x=s[0];e.y=s[1];e.vx=e.vy=0;e.spawn=SPN;e.offT=0;e.hitT=G.t;e.nav=null;}
 }
 /* ---------- navigation : carte des distances au joueur sur la grille des falaises (WC), refaite toutes les 20 images.
    Les massifs intérieurs de l'îlot sont des couverts ; sans elle, un ennemi né derrière l'un d'eux y restait collé. ---------- */
@@ -351,17 +356,23 @@ function updPlayer(){
   P.r=lerp(P.r,P.baseR*(P.gon>0?P.gScale:1)*(P.titan?1.12:1),P.gon>0?.12:.1);
   aimUpdate();playerFire();if(P.ctr>0)P.ctr--;
 }
-/* seulement ce qui est à l'écran : on ne tire jamais sur un ennemi qu'on ne voit pas */
-function findTarget(x,y,range){
-  let best=null,bd=range*range;const hw=W/2/G.zoom,hh=H/2/G.zoom,off=(o,r)=>Math.abs(o.x-G.cx)>hw+r||Math.abs(o.y-G.cy)>hh+r;
-  for(const e of G.en){if(e.dead||e.spawn>0||e.prey||off(e,-e.r))continue;const d=dist2(x,y,e.x,e.y);if(d<bd){bd=d;best=e;}}
-  for(const B of BIGS()){if(off(B,B.r*.5))continue;const d=Math.max(0,Math.hypot(x-B.x,y-B.y)-B.r*.6);if(d*d<bd){bd=d*d;best=B;}}
-  return best;
+/* ligne de tir : un point tous les 20 u jusqu'au bord de la cible ; un obstacle solide (rocher massif, falaise) la coupe,
+   un cassable non (le tirer paie) */
+function lineClear(x0,y0,x1,y1,stop){const dx=x1-x0,dy=y1-y0,d=Math.hypot(dx,dy)||1,n=Math.floor((d-stop)/20);for(let k=1;k<n;k++){const t=k*20/d,o=pointHit(x0+dx*t,y0+dy*t,2);if(o&&!o.brk)return false;}return true;}
+/* seulement ce qui est à l'écran : on ne tire jamais sur un ennemi qu'on ne voit pas. los (la visée de la bulle seule) :
+   le plus proche qu'on peut TOUCHER (bc), sinon le plus proche ; la ligne n'est testée que pour un candidat plus proche
+   que le meilleur à découvert */
+function findTarget(x,y,range,los){
+  let best=null,bd=range*range,bc=null,bcd=bd;const hw=W/2/G.zoom,hh=H/2/G.zoom,off=(o,r)=>Math.abs(o.x-G.cx)>hw+r||Math.abs(o.y-G.cy)>hh+r;
+  for(const e of G.en){if(e.dead||e.spawn>0||e.prey||off(e,-e.r))continue;const d=dist2(x,y,e.x,e.y);if(d<bd){bd=d;best=e;}if(los&&d<bcd&&lineClear(x,y,e.x,e.y,e.r)){bcd=d;bc=e;}}
+  for(const B of BIGS()){if(off(B,B.r*.5))continue;const d=Math.max(0,Math.hypot(x-B.x,y-B.y)-B.r*.6);if(d*d<bd){bd=d*d;best=B;}if(los&&d*d<bcd){bcd=d*d;bc=B;}}
+  return los?(bc||best):best;
 }
 function leadAng(sx,sy,tg,spd){let tx=tg.x,ty=tg.y;const vx=tg.vx||0,vy=tg.vy||0;for(let k=0;k<2;k++){const t=Math.min(60,Math.hypot(tx-sx,ty-sy)/spd);tx=tg.x+vx*t;ty=tg.y+vy*t;}return Math.atan2(ty-sy,tx-sx);}
 function aimUpdate(){
   const P=G.p;
-  if(--G.tgtT<=0){G.tgtT=6;G.tgt=findTarget(P.x,P.y,700);}
+  /* toutes les 6 images, et AUSSITÔT quand la cible meurt (avant : jusqu'à 6 images sans viser) */
+  if(--G.tgtT<=0||G.tgt&&(G.tgt.dead||G.tgt.prey)){G.tgtT=6;G.tgt=findTarget(P.x,P.y,700,true);}
   if(G.tgt&&G.tgt.dead)G.tgt=null;
   let want=null;G.manual=false;
   if(G.aimMan){want=G.aimA;G.manual=true;}
@@ -530,7 +541,9 @@ function updBullets(){
     for(const e of G.en){if(e.dead||e.spawn>0||e.prey)continue;const rs=e.r+b.r;if(dist2(b.x,b.y,e.x,e.y)>=rs*rs)continue;
       if(b.hit&&b.hit.includes(e))continue;
       if(b.kind===1){explode(b);gone=true;break;}
-      const sp=Math.hypot(b.vx,b.vy)||1;hurtEnemy(e,b.dmg,b.vx/sp*1.2,b.vy/sp*1.2,false,b.crit);
+      /* recul léger (0,4 pour un tir de base, jusqu'à ×2,2 pour un gros tir ; 1,2 avant : sous le feu, l'ennemi reculait plus vite
+         qu'il n'avance) : le tir tue au lieu de pousser. Dash, explosions, Onde et gonflement gardent leur poussée (SKY_KB) */
+      const sp=Math.hypot(b.vx,b.vy)||1,kb=.4*clamp(b.r/4.5,1,2.2);hurtEnemy(e,b.dmg,b.vx/sp*kb,b.vy/sp*kb,false,b.crit);
       lineSparks(b.x,b.y,Math.atan2(-b.vy,-b.vx),3,e.col);
       if(P.chain>0&&!b.shard&&R()<P.chain){let n2=null,bd=170*170;for(const f of G.en){if(f===e||f.dead||f.spawn>0)continue;const d=dist2(f.x,f.y,e.x,e.y);if(d<bd){bd=d;n2=f;}}
         if(n2){FX({ty:6,x:e.x,y:e.y,x2:n2.x,y2:n2.y,vx:0,vy:0,life:9,max:9,col:COL.wh});hurtEnemy(n2,b.dmg*.7,0,0,true);}}

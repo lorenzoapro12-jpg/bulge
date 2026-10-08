@@ -597,7 +597,7 @@ const EDK='rgba(12,4,18,.9)';
 function drawEnemies(){for(const e of G.en)if(vis(e.x,e.y,e.r*3))drawEnemy(e);}
 function drawEnemy(e){
   const c=ctx,col=e.col,P=G.p;let r=e.r;
-  if(e.spawn>0){const f=1-e.spawn/24;c.globalAlpha=f;shapePath(c,e.t,e.x,e.y,r*f,eAng(e));c.fillStyle=e.prey?pale(col):col;c.fill();c.globalAlpha=1;return;}
+  if(e.spawn>0){const f=Math.max(0,1-e.spawn/SPN);c.globalAlpha=f;shapePath(c,e.t,e.x,e.y,r*f,eAng(e));c.fillStyle=e.prey?pale(col):col;c.fill();c.globalAlpha=1;return;}
   /* œuf (gb.js ponte) : pâle, il bat de plus en plus vite et se fend avant d'éclore */
   if(e.egg>0){const f=1-e.egg/e.eggM,pu=1+Math.sin(RT*(.12+f*.45))*(.05+.1*f),rx=r*.9*pu,ry=r*1.15*pu;
     c.beginPath();c.ellipse(e.x,e.y,rx,ry,0,0,TAU);c.fillStyle=e.flash>0?'#ffffff':'#ffe3f2';c.fill();c.strokeStyle=col;c.lineWidth=2.5;c.stroke();
@@ -634,7 +634,7 @@ function drawEnemy(e){
 }
 function drawBoss(){
   const B=G.boss;if(!B||B.gone)return;const c=ctx,P=G.p,col=bossCol(B),t=B.D.t;
-  const sa=B.spawn>0?1-B.spawn/110:1,df=B.dead?B.dieT/90:0,al=B.dead?1-df*.5:sa;
+  const sa=B.spawn>0?1-B.spawn/BSPN:1,df=B.dead?B.dieT/90:0,al=B.dead?1-df*.5:sa;
   const r=B.r*(B.spawn>0?.3+.7*sa:1)*(1+Math.sin(RT*.08)*.025)*(1+.15*df),aP=Math.atan2(P.y-B.y,P.x-B.x);
   c.globalCompositeOperation='lighter';glow(B.x,B.y,r*2.6,col,.4*al);c.globalCompositeOperation='source-over';c.globalAlpha=al;
   /* nœuds de l'Hypernoyau : tant qu'il en reste, il ne prend que 40 % des dégâts (anneau pointillé) */
@@ -818,7 +818,7 @@ function drawHUD(){
       else{const done=G.wave>w||G.wave===w&&G.ph!=='wave',cur=G.wave===w&&G.ph==='wave';c.fillStyle=done?'#efeaff':cur?BIO[G.biome].a:'rgba(207,201,238,.25)';c.fillRect(x-ws/2,y1-2.5,ws,5);}}
     /* 2. le boss : son nom et sa vie ; sinon, l'annonce de la vague */
     const B=G.boss;
-    if(B&&!B.gone){const w=Math.min(440,W-pad*2-(narrow?0:200)),x=(W-w)/2,y=y1+14,f=B.spawn>0?1-B.spawn/110:Math.max(0,B.hp/B.mhp),col=bossCol(B);
+    if(B&&!B.gone){const w=Math.min(440,W-pad*2-(narrow?0:200)),x=(W-w)/2,y=y1+14,f=B.spawn>0?1-B.spawn/BSPN:Math.max(0,B.hp/B.mhp),col=bossCol(B);
       c.textAlign='center';c.textBaseline='top';fitFont(c,B.D.n,w,narrow?13:15,'700');c.fillStyle=col;c.fillText(B.D.n+(B.phase>1?' · phase '+B.phase:''),W/2,y);
       c.fillStyle='rgba(255,255,255,.1)';c.fillRect(x,y+20,w,8);c.fillStyle=B.trans>0&&(G.t>>2)%2?'#fff':col;c.fillRect(x,y+20,w*f,8);
       c.fillStyle='rgba(12,7,22,.9)';for(const m of B.k===8?[.34,.67]:[.5])c.fillRect(x+w*m-1,y+20,2,8);}

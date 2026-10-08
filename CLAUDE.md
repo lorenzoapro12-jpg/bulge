@@ -122,7 +122,10 @@ Outils complémentaires :
   `G.kx/G.ky`, halo de mort borné, étincelles en trait d'un seul `stroke` par couleur), le son suit (tir audible, « pop »
   qui monte avec la série, touche qui monte vers la mort), les cartes chiffrent leur effet (`cardDelta`, sur une copie du
   joueur) et l'écran de fin raconte la partie (`meta.bestCombo`), le critique se voit (tir doré, décidé au tir) et
-  l'esquive parfaite lance la Contre-attaque (`P.ctr`). Chaque changement du plan y ajoute ses critères, vus en ECHEC
+  l'esquive parfaite lance la Contre-attaque (`P.ctr`) ; moins de temps morts (≤ 4,3 s par îlot, éclosion `SPN`, entrée
+  du boss `BSPN`, bulle à ≥ 290 u/s) ; la visée préfère l'ennemi qu'elle peut toucher (`lineClear`) et change de cible
+  dès que la sienne meurt, un tireur hors de l'écran ne tire pas et revient vite, un tir de base pousse à peine
+  (≤ 0,45 u/pas). Chaque changement du plan y ajoute ses critères, vus en ECHEC
   avec `--ref=379e0fb` ; `--long` est réservé à la passe d'équilibrage. Appelé par headless.js.
 - `node test/unused.js` — recensement du code mort (identifiants, `SFX`, `id` HTML,
   classes CSS, médias). À lancer avant d'affirmer qu'un symbole est utilisé.
