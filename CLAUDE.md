@@ -125,7 +125,10 @@ Outils complémentaires :
   l'esquive parfaite lance la Contre-attaque (`P.ctr`) ; moins de temps morts (≤ 4,3 s par îlot, éclosion `SPN`, entrée
   du boss `BSPN`, bulle à ≥ 290 u/s) ; la visée préfère l'ennemi qu'elle peut toucher (`lineClear`) et change de cible
   dès que la sienne meurt, un tireur hors de l'écran ne tire pas et revient vite, un tir de base pousse à peine
-  (≤ 0,45 u/pas). Chaque changement du plan y ajoute ses critères, vus en ECHEC
+  (≤ 0,45 u/pas) ; pas d'écran vide (la vague s'ouvre sur deux groupes en tenaille, le suivant vient avant que l'arène se
+  vide, on paraît à l'écran ; mesuré au pilote invulnérable sur six graines) ; une mêlée qui touche (la Mite s'annonce puis
+  bondit au point de rencontre, l'Épine verrouille sa visée, charge 340 u et reste sonnée contre un rocher, `e.stun`).
+  Chaque changement du plan y ajoute ses critères, vus en ECHEC
   avec `--ref=379e0fb` ; `--long` est réservé à la passe d'équilibrage. Appelé par headless.js.
 - `node test/unused.js` — recensement du code mort (identifiants, `SFX`, `id` HTML,
   classes CSS, médias). À lancer avant d'affirmer qu'un symbole est utilisé.

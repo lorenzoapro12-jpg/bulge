@@ -591,7 +591,7 @@ const PALE={};
 function pale(col){return PALE[col]||(PALE[col]='#'+rgb(col).map(v=>(v+255>>1).toString(16).padStart(2,'0')).join(''));}
 /* orientation de la silhouette : vers où il va (Mite), vers sa cible (Tireur, Mitrailleuse), ou une rotation lente */
 function eAng(e){const P=G.p,aP=Math.atan2(P.y-e.y,P.x-e.x);
-  switch(e.t){case 'mite':return e.vx||e.vy?Math.atan2(e.vy,e.vx):aP;case 'sniper':return e.tele>0?e.ta:aP;case 'spike':return e.st===2?e.ca:e.wob*2;
+  switch(e.t){case 'mite':return e.st===3?e.ca:e.vx||e.vy?Math.atan2(e.vy,e.vx):aP;case 'sniper':return e.tele>0?e.ta:aP;case 'spike':return e.st===2?e.ca:e.wob*2;
     case 'gatling':return e.st>0?e.ca:aP;case 'spawner':return Math.sin(e.wob)*.4;default:return e.wob*.6;}}
 const EDK='rgba(12,4,18,.9)';
 function drawEnemies(){for(const e of G.en)if(vis(e.x,e.y,e.r*3))drawEnemy(e);}
@@ -610,12 +610,15 @@ function drawEnemy(e){
   if(QL>=2||e.elite){c.globalCompositeOperation='lighter';glow(e.x,e.y,r*2.2,col,e.elite?.45:.25);c.globalCompositeOperation='source-over';c.globalAlpha=1;}
   /* touché : le corps gonfle de 7 % puis revient en 4 images (tracés seuls : le halo garde sa taille, pas de nouveau sprite) */
   if(e.flash>0)r*=1+.018*e.flash;
-  /* annonces propres au type : visée de l'Épine, trait du Tireur */
-  if(e.t==='spike'&&e.st===1){c.globalAlpha=.25+.5*(1-e.st2/SPK_AIM);c.strokeStyle=col;c.lineWidth=2;c.setLineDash([10,8]);c.beginPath();c.moveTo(e.x,e.y);c.lineTo(e.x+Math.cos(e.ca)*260,e.y+Math.sin(e.ca)*260);c.stroke();c.setLineDash([]);c.globalAlpha=1;}
+  /* annonces propres au type : Mite qui s'apprête à bondir (gonflée de 18 %, cernée de blanc, trait blanc qui s'allonge vers
+     où elle bondira), visée de l'Épine (pointillée, puis blanche et pleine les 10 pas où elle est verrouillée), trait du Tireur */
+  const wu=e.t==='mite'&&e.st===3;
+  if(wu){r*=1.18;const l=r+14+26*(1-e.st2/14);c.strokeStyle='#ffffff';c.lineWidth=2;c.beginPath();c.moveTo(e.x,e.y);c.lineTo(e.x+Math.cos(e.ca)*l,e.y+Math.sin(e.ca)*l);c.stroke();}
+  if(e.t==='spike'&&e.st===1){const lk=e.st2<=10;c.globalAlpha=lk?.9:.25+.5*(1-e.st2/SPK_AIM);c.strokeStyle=lk?'#ffffff':col;c.lineWidth=lk?3:2;if(!lk)c.setLineDash([10,8]);c.beginPath();c.moveTo(e.x,e.y);c.lineTo(e.x+Math.cos(e.ca)*340,e.y+Math.sin(e.ca)*340);c.stroke();if(!lk)c.setLineDash([]);c.globalAlpha=1;}
   if(e.t==='sniper'&&e.tele>0){const f=1-e.tele/SNP_AIM;c.globalAlpha=.15+.7*f;c.strokeStyle=col;c.lineWidth=1+f*2.5;c.beginPath();c.moveTo(e.x,e.y);c.lineTo(e.x+Math.cos(e.ta)*1500,e.y+Math.sin(e.ta)*1500);c.stroke();c.globalAlpha=1;}
   if(e.t==='orbit'){c.fillStyle=col;for(let k=0;k<2;k++){const b=e.wob*5+k*Math.PI;c.beginPath();c.arc(e.x+Math.cos(b)*r*1.7,e.y+Math.sin(b)*r*1.7,r*.26,0,TAU);c.fill();}}
   const fl=e.flash>0;
-  shapePath(c,e.t,e.x,e.y,r,a);c.strokeStyle=e.elite?'#ffffff':EDK;c.lineWidth=e.elite?Math.max(3,r*.24):Math.max(2,r*.18);c.stroke();c.fillStyle=fl?(G.t-(e.crit||-99)<6?COL.gd:'#ffffff'):col;c.fill();
+  shapePath(c,e.t,e.x,e.y,r,a);c.strokeStyle=e.elite||wu?'#ffffff':EDK;c.lineWidth=e.elite||wu?Math.max(3,r*.24):Math.max(2,r*.18);c.stroke();c.fillStyle=fl?(G.t-(e.crit||-99)<6?COL.gd:'#ffffff'):col;c.fill();
   if(!fl){c.globalAlpha=.3;shapePath(c,e.t,e.x-r*.18,e.y-r*.22,r*.5,a);c.fillStyle='#ffffff';c.fill();c.globalAlpha=1;}
   c.fillStyle=EDK;
   switch(e.t){
@@ -628,6 +631,7 @@ function drawEnemy(e){
     c.fillStyle='#ffffff';c.beginPath();c.arc(ex,ey,er,0,TAU);c.fill();c.fillStyle='#0c0412';c.beginPath();c.arc(ex+Math.cos(b)*er*.4,ey+Math.sin(b)*er*.4,er*.52,0,TAU);c.fill();}
   if(e.elite){c.fillStyle=COL.gd;c.beginPath();for(let k=-1;k<=1;k++){const b=-Math.PI/2+k*.55,x=e.x+Math.cos(b)*(r+4),y=e.y+Math.sin(b)*(r+4);
     c.moveTo(x+Math.cos(b+1.6)*5,y+Math.sin(b+1.6)*5);c.lineTo(x+Math.cos(b)*12,y+Math.sin(b)*12);c.lineTo(x+Math.cos(b-1.6)*5,y+Math.sin(b-1.6)*5);}c.fill();}
+  if(e.stun>0){c.fillStyle=COL.gd;for(let k=0;k<3;k++){const b=RT*.2+k*TAU/3;c.fillRect(e.x+Math.cos(b)*(r+6)-1.5,e.y+Math.sin(b)*(r+6)-1.5,3,3);}}
   if(e.frostT>G.t){c.strokeStyle='#b5f3ff';c.lineWidth=2;c.beginPath();c.arc(e.x,e.y,r+5,0,TAU);c.stroke();}
   if(e.alarmT>G.t&&(FRAME>>3)%2){c.fillStyle=COL.mg;c.fillRect(e.x-1.5,e.y-r-18,3,9);c.fillRect(e.x-1.5,e.y-r-7,3,3);}
   if(e.hp<e.mhp){c.globalAlpha=.75;c.strokeStyle='#fff';c.lineWidth=2;c.beginPath();c.arc(e.x,e.y,r+7,-Math.PI/2,-Math.PI/2+TAU*Math.max(0,e.hp/e.mhp));c.stroke();c.globalAlpha=1;}

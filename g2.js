@@ -82,23 +82,31 @@ function updIslet(){
   }
   if(G.wbn&&++G.wbn.t>150)G.wbn=null;
 }
+/* FLUX (08/10/2026, « c'est lent », l'arène vide 20 à 34 % du temps de vague) : la vague s'ouvre sur DEUX groupes en tenaille
+   (de part et d'autre de la bulle) ; le suivant vient tous les 30-55 pas, ou 12 pas après le précédent dès qu'il reste ≤ 3 ennemis
+   (vivants + annoncés) ; 4 marques au sol au plus ; plafond de vivants 6+⌈1,6k⌉ (8 à l'îlot 1, 19 au 8 ; avant 7 à 17). */
 function waveStart(w){
   const k=G.isl,n=4+4*w+k;G.wave=w;G.ph='wave';G.phT=0;
-  G.wq={left:n,n,el:Math.ceil(n*.55),eld:false,prey:k>=PREYA+1?Math.round(n*.5):0,nextT:0};
-  G.wbn={w,t:0};SFX.wave();
+  G.wq={left:n,n,el:Math.ceil(n*.55),eld:false,prey:k>=PREYA+1?Math.round(n*.5):0,nextT:Math.round(rr(30,55)),th:R()*TAU,gi:0,lastS:0,hit:0};
+  G.wbn={w,t:0};SFX.wave();spawnGroup();spawnGroup();
   if(w===2&&k===1&&G.tutOn)toast(inp.touch?'Bouton ⚡ : dash, invulnérable. Frôle un tir en dash : esquive parfaite.':'Espace ou Maj : dash, invulnérable. Frôle un tir en dash : esquive parfaite.');
 }
 function waveTick(){
   const Q=G.wq,k=G.isl;let alive=0;for(const e of G.en)if(!e.dead&&!e.prey)alive++;
-  const cap=5+Math.ceil(k*1.4);
-  if((Q.left>0||Q.prey>0&&Q.left<Q.n)&&G.marks.length<3&&G.phT>=Q.nextT&&(alive<cap||G.phT>=Q.nextT+200)){spawnGroup();Q.nextT=G.phT+Math.round(rr(38,72));}
+  const cap=6+Math.ceil(k*1.6),pend=G.marks.reduce((s,m)=>s+(m.prey?0:m.n),0);
+  if((Q.left>0||Q.prey>0&&Q.left<Q.n)&&G.marks.length<4&&(G.phT>=Q.nextT||alive+pend<=3&&G.phT>=Q.lastS+12)&&(alive<cap||G.phT>=Q.nextT+200)){spawnGroup();Q.nextT=G.phT+Math.round(rr(30,55));}
   if(Q.left<=0&&!G.marks.some(m=>!m.prey)&&alive===0){G.score+=100*k*G.wave;
     if(G.wave<NWAVE){G.ph='pause';G.phT=0;}else{G.ph='preboss';G.phT=0;G.marks=[];}}
 }
-/* où paraître : à vue, ni collé à la bulle ni au bout de l'îlot, sur un sol libre (sinon, le bord) */
-function spawnSpot(){const P=G.p;let x=0,y=0;
-  for(let tr=0;tr<40;tr++){if(tr<24){const a=R()*TAU,r=rr(330,540);x=P.x+Math.cos(a)*r;y=P.y+Math.sin(a)*r;if(Math.hypot(x,y)>PR-90)continue;}
-    else{const a=R()*TAU,r=tr<32?PR-110:PR-260;x=Math.cos(a)*r;y=Math.sin(a)*r;if(dist2(x,y,P.x,P.y)<(tr<32?460:300)**2)continue;}
+/* où paraître : À L'ÉCRAN (la vue rétrécie de 40), ni collé à la bulle (≥ 300) ni au bout de l'îlot, sur un sol libre.
+   a0 (tenaille, spawnGroup) : d'abord dans cette direction, à 300-400 de la bulle ; puis n'importe où dans la vue ; puis
+   l'ancien anneau (330-540) ; sinon, le bord. Avant (08/10/2026) l'anneau seul : plus d'un groupe sur deux naissait hors de l'écran. */
+function spawnSpot(a0){const P=G.p,hw=W/2/G.zoom-40,hh=H/2/G.zoom-40;let x=0,y=0;
+  for(let tr=0;tr<40;tr++){
+    if(tr<10&&a0!=null){const a=a0+rr(-.45,.45),r=rr(300,400);x=P.x+Math.cos(a)*r;y=P.y+Math.sin(a)*r;if(Math.hypot(x,y)>PR-90||Math.abs(x-G.cx)>hw||Math.abs(y-G.cy)>hh)continue;}
+    else if(tr<22){x=G.cx+rr(-hw,hw);y=G.cy+rr(-hh,hh);if(dist2(x,y,P.x,P.y)<300*300||Math.hypot(x,y)>PR-90)continue;}
+    else if(tr<28){const a=R()*TAU,r=rr(330,540);x=P.x+Math.cos(a)*r;y=P.y+Math.sin(a)*r;if(Math.hypot(x,y)>PR-90)continue;}
+    else{const a=R()*TAU,r=tr<34?PR-110:PR-260;x=Math.cos(a)*r;y=Math.sin(a)*r;if(dist2(x,y,P.x,P.y)<(tr<34?460:300)**2)continue;}
     if(!wallNear(x,y,56)&&!pointHit(x,y,44))break;}
   return[x,y];}
 /* un groupe annoncé : une marque au sol (près d'une seconde), puis les ennemis */
@@ -106,15 +114,17 @@ function spawnGroup(){
   const Q=G.wq,k=G.isl,P=G.p;let t,n,prey=false;
   const pt=[];for(let a=PREYA;a<GONEA;a++)if(k-a>=1)pt.push(ETL[k-a-1]);
   if(Q.prey>0&&pt.length&&(Q.left<=0||R()<.34)){t=pick(pt);prey=true;n=Math.min(Q.prey,t==='mite'?5:3);Q.prey-=n;}
-  else{if(Q.left<=0)return;t=k>=2&&R()<.36?ETL[k-2]:ETL[k-1];const big=ET[t].r>=19;n=Math.min(Q.left,t==='mite'?5:big?1+(R()<.35?1:0):2+(R()<.6?1:0));Q.left-=n;}
-  const [x,y]=spawnSpot();
+  else{if(Q.left<=0)return;t=k>=2&&R()<.36?ETL[k-2]:ETL[k-1];const big=ET[t].r>=19;n=Math.min(Q.left,t==='mite'?6+(R()<.5?1:0):big?1+(R()<.35?1:0):3+(R()<.3?1:0));Q.left-=n;}
+  /* tenaille : les groupes 0 et 1 de part et d'autre de la bulle, puis chaque paire tourne de 1,1 rad */
+  const a0=Q.th==null?null:Q.th+(Q.gi&1?Math.PI:0)+(Q.gi>>1)*1.1;Q.gi=(Q.gi|0)+1;Q.lastS=G.phT;
+  const [x,y]=spawnSpot(a0);
   let el=0;if(!prey&&!Q.eld&&Q.n-Q.left>=Q.el){Q.eld=true;el=1;}
   G.marks.push({x,y,t:0,max:prey?24:30,t2:t,n,prey,el,col:ET[t].col});
 }
 function updMarks(){
   for(let i=G.marks.length-1;i>=0;i--){const m=G.marks[i];if(++m.t<m.max)continue;G.marks.splice(i,1);
     for(let j=0;j<m.n;j++){const a=R()*TAU,d=j?rr(16,46):0;let x=m.x+Math.cos(a)*d,y=m.y+Math.sin(a)*d;if(pointHit(x,y,ET[m.t2].r)){x=m.x;y=m.y;}
-      mkEnemy(m.t2,x,y,{elite:m.el&&j===0?1:0});}
+      mkEnemy(m.t2,x,y,{elite:m.el&&j===0?1:0,fo:m.t2==='mite'&&m.n>1?(j/(m.n-1)-.5)*2:0});}
     if(m.prey&&!G.tut.prey){G.tut.prey=1;toast('Plus petits que toi : des proies. Avale-les !');}}
 }
 /* îlot nettoyé : le boss est tombé */
@@ -153,7 +163,7 @@ function zoomFull(){return Math.min(W,H)/(2*(WR+40));}
 /* ---------- ennemis ---------- */
 /* age = îlots écoulés depuis l'arrivée du type : taille ÷1,4 par îlot ; à PREYA, proie */
 function mkEnemy(t,x,y,o){const d=ET[t],age=o&&o.age!=null?o.age:G.isl-d.isl,prey=age>=PREYA;
-  const e={t,d,age,prey,col:d.col,x,y,vx:0,vy:0,r:d.r*Math.pow(GROW,-age),hp:d.hp*HPM()*(prey?.6:1),mhp:0,spawn:SPN,cd:rr(60,130),st:0,st2:0,ca:0,ta:0,tele:0,flash:0,
+  const e={t,d,age,prey,col:d.col,x,y,vx:0,vy:0,r:d.r*Math.pow(GROW,-age),hp:d.hp*HPM()*(prey?.6:1),mhp:0,spawn:SPN,cd:t==='mite'?rr(20,50):rr(30,80),st:0,st2:0,ca:0,ta:0,tele:0,flash:0,
     wob:R()*TAU,wa:R()*TAU,nk:(R()*15)|0,nav:null,offT:0,hitT:G.t,dead:false,kids:0,made:0,parent:null,elite:0,sl:0,sn:null,frostT:0,alarmT:0,ivT:0,orbCd:0,dir:0};
   if(o)Object.assign(e,o);
   if(e.elite){e.hp*=3.2;e.r*=1.3;}
@@ -167,6 +177,7 @@ function ebulE(e,a,s){return ebul(e.x+Math.cos(a)*e.r*.8,e.y+Math.sin(a)*e.r*.8,
 function hurtEnemy(e,dmg,kx,ky,quiet,cr){
   if(e.dead||e.spawn>0||e.prey)return;if(relais(e)){dmg*=RELAY_M;e.relT=G.t;}e.hitT=G.t;
   const c=cr===undefined?R()<G.p.crit:cr;if(c){dmg*=G.p.critM;e.crit=G.t;ringFX(e.x,e.y,e.r*.6,e.r*2,COL.gd,10,2);lineSparks(e.x,e.y,Math.atan2(e.y-G.p.y,e.x-G.p.x),4,COL.gd);kick(e.x,e.y,1.5);SFX.crit();}
+  if(e.stun>0)dmg*=2;
   e.hp-=dmg;e.flash=c?6:4;
   if(kx&&!(e.t==='spike'&&e.st===2)){const m=e.r>20?.35:1;e.vx+=kx*m;e.vy+=ky*m;}
   if(!quiet)SFX.hit(Math.max(0,e.hp/e.mhp));
@@ -211,6 +222,9 @@ function preyMove(e,tf){
   const oh=collideCircle(e,e.r);if(oh)e.wa=Math.atan2(oh[1],oh[0]);
   if(confine(e,e.r))e.wa+=Math.PI;
 }
+/* une Épine qui charge dans un rocher (ou le bord) : sonnée 1 s, dégâts ×2 (hurtEnemy), sans danger au contact (updEnemies) */
+function spikeStun(e){e.st=0;e.cd=60;e.stun=60;sparks(e.x,e.y,COL.gd,6,3);shake(.06);SFX.brk();ftext(e.x,e.y-e.r-14,'Sonnée !',COL.gd,13);
+  if(!G.tut.estun){G.tut.estun=1;toast('Une Épine qui charge dans un rocher reste sonnée : dégâts ×2.');}}
 function updEnemy(e){
   if(e.spawn>0){e.spawn--;return;}
   if(e.flash>0)e.flash--;
@@ -218,6 +232,8 @@ function updEnemy(e){
   if(e.prey){preyMove(e,tf);return;}
   /* œuf de l'Essaim-Mère (gb.js ponte) : il vole jusqu'à sa place, couve, puis éclot en Mite qui bondit presque aussitôt */
   if(e.egg>0){e.x=lerp(e.x,e.ex,.1);e.y=lerp(e.y,e.ey,.1);e.wob+=.05;if((e.egg-=tf)<=0){e.egg=0;e.r=e.d.r;e.cd=rr(25,45);sparks(e.x,e.y,e.col,8,3);ringFX(e.x,e.y,e.r,e.r*2.5,e.col,14,2);SFX.pop(false);}return;}
+  /* sonnée (une Épine dont la charge a fini dans un obstacle, spikeStun) : elle glisse sur son élan, ne fait rien, prend ×2 */
+  if(e.stun>0){e.stun-=tf;e.vx*=.85;e.vy*=.85;e.x+=e.vx*tf;e.y+=e.vy*tf;return;}
   const P=G.p,d=e.d,dx=P.x-e.x,dy=P.y-e.y,dd=Math.hypot(dx,dy)||1,aP=Math.atan2(dy,dx);let ax=dx/dd,ay=dy/dd;
   /* un massif entre lui et toi : il suit la carte des distances (flowDir) au lieu de foncer dans la falaise */
   if(G.t%15===e.nk)e.nav=losWall(e.x,e.y,P.x,P.y)?flowDir(e.x,e.y):null;if(e.nav){ax=e.nav[0];ay=e.nav[1];}
@@ -229,16 +245,24 @@ function updEnemy(e){
   const os=e.t!=='mite'&&e.t!=='spike'&&(Math.abs(e.x-G.cx)>W/2/G.zoom-e.r||Math.abs(e.y-G.cy)>H/2/G.zoom-e.r);if(os)sp*=2.2;
   const fire=()=>!os&&(e.cd-=tf)<=0;
   switch(e.t){
-    /* Mite : essaim qui zigzague, puis BONDIT droit sur toi (×2,4 pendant ¼ s) quand tu es à portée — on l'esquive au dash */
-    case 'mite':if(e.st===1){sp*=2.4;tx=Math.cos(e.ca);ty=Math.sin(e.ca);if(G.t%3===0)FX({ty:3,x:e.x,y:e.y,vx:0,vy:0,r:e.r,life:9,max:9,col:e.col});if((e.st2-=tf)<=0){e.st=0;e.cd=rr(70,120);}}
-      else{tx=ax+Math.cos(e.wob*3)*.45;ty=ay+Math.sin(e.wob*3)*.45;if(fire()&&dd<250){e.st=1;e.st2=15;e.ca=aP;}}break;
+    /* Mite (08/10/2026, « les ennemis ne sont pas intéressants ») : l'essaim arrive en éventail (e.fo, updMarks), tourne autour de
+       toi tant qu'il n'est pas prêt ; à portée (220), elle S'ARRÊTE et s'annonce (st 3, 14 pas : gonflée, cernée de blanc, trait
+       de visée) en visant là où tu SERAS (point de rencontre exact, ≤ 30 pas), puis BONDIT (×4 pendant 30 pas, 300 u : elle
+       arrive, même sur une bulle qui file à angle droit). Avant : 90 u, elle finissait à 124 u de toi. On l'esquive en changeant
+       de cap pendant le bond, en s'éloignant, ou au dash. */
+    case 'mite':if(e.st===1){sp*=4;tx=Math.cos(e.ca);ty=Math.sin(e.ca);if(G.t%3===0)FX({ty:3,x:e.x,y:e.y,vx:0,vy:0,r:e.r,life:9,max:9,col:e.col});if((e.st2-=tf)<=0){e.st=0;e.cd=rr(60,100);}}
+      else if(e.st===3){sp=0;e.vx*=.7;e.vy*=.7;const lv=d.spd*(1+.04*(G.isl-1))*4,qa=P.vx*P.vx+P.vy*P.vy-lv*lv,qb=dx*P.vx+dy*P.vy,l=qa<0?Math.min(30,(-qb-Math.sqrt(qb*qb-qa*dd*dd))/qa):30;e.ca=Math.atan2(P.y+P.vy*l-e.y,P.x+P.vx*l-e.x);if((e.st2-=tf)<=0){e.st=1;e.st2=30;}}
+      else{const f=clamp((dd-110)/200,0,1),o=(e.fo||0)*f,c=Math.cos(o),s=Math.sin(o),bx=ax+Math.cos(e.wob*3)*.45,by=ay+Math.sin(e.wob*3)*.45;tx=bx*c-by*s;ty=bx*s+by*c;sp*=1.15;
+        if(dd<150&&e.cd>0){const dr=e.nk&1?1:-1;tx=-ay*dr+ax*.2;ty=ax*dr+ay*.2;}
+        if(fire()&&dd<220){e.st=3;e.st2=14;}}break;
     case 'spread':{const s=dd>Math.min(300,vr-40)?1:dd<Math.min(220,vr-100)?-1:0;tx=ax*s-ay*.5;ty=ay*s+ax*.5;
       if(fire()){e.cd=rr(75,105);for(let k=-1;k<=1;k++)ebulE(e,aP+k*.22,3.6);SFX.eshot();}break;}
     case 'spike':
-      /* Épine : vise ½ s (trait pointillé), puis charge — plus courte et plus vive qu'avant */
-      if(e.st===0){tx=ax*.4+Math.cos(e.wob)*.3;ty=ay*.4+Math.sin(e.wob)*.3;if(fire()&&dd<460){e.st=1;e.st2=SPK_AIM;}}
-      else if(e.st===1){sp=0;e.ca=aP;if((e.st2-=tf)<=0){e.st=2;e.st2=28;}}
-      else{sp=7.8;tx=Math.cos(e.ca);ty=Math.sin(e.ca);if((e.st2-=tf)<=0){e.st=0;e.cd=rr(40,75);}}break;
+      /* Épine : vise ½ s (trait pointillé) en ANTICIPANT (là où tu seras dans 14 pas), VERROUILLÉE les 10 derniers pas (trait
+         blanc plein), puis charge 340 u (40 pas à 8,5). Une charge qui finit dans un obstacle ou le bord la laisse sonnée (spikeStun). */
+      if(e.st===0){tx=ax*.6+Math.cos(e.wob)*.3;ty=ay*.6+Math.sin(e.wob)*.3;if(fire()&&dd<380){e.st=1;e.st2=SPK_AIM;e.ca=aP;}}
+      else if(e.st===1){sp=0;if(e.st2>10)e.ca=Math.atan2(P.y+P.vy*14-e.y,P.x+P.vx*14-e.x);if((e.st2-=tf)<=0){e.st=2;e.st2=40;}}
+      else{sp=8.5;tx=Math.cos(e.ca);ty=Math.sin(e.ca);if((e.st2-=tf)<=0){e.st=0;e.cd=rr(40,75);}}break;
     case 'orbit':{if(!e.dir)e.dir=R()<.5?1:-1;if((e.st2-=tf)<=0){e.st2=rr(90,170);e.dir*=-1;}const s=clamp((dd-Math.min(210,vr-70))/60,-1,1);tx=ax*s-ay*e.dir;ty=ay*s+ax*e.dir;if(e.st2<30)sp*=.25;
       if(fire()){e.cd=rr(55,75);ebulE(e,aP,3.8);SFX.eshot();}break;}
     case 'ring':tx=ax*.3+Math.cos(e.wob)*.5;ty=ay*.3+Math.sin(e.wob)*.5;
@@ -259,8 +283,8 @@ function updEnemy(e){
   e.x+=e.vx*tf;e.y+=e.vy*tf;
   const oh=collideCircle(e,e.r);
   if(oh&&skyFalls(e,sp,oh))return;
-  if(oh){const vn=e.vx*oh[0]+e.vy*oh[1];if(vn<0){e.vx-=vn*oh[0];e.vy-=vn*oh[1];}e.sl=20;e.sn=oh;if(e.t==='spike'&&e.st===2){e.st=0;e.cd=60;}}
-  if(confine(e,e.r)&&e.t==='spike'&&e.st===2){e.st=0;e.cd=60;}
+  if(oh){const vn=e.vx*oh[0]+e.vy*oh[1];if(vn<0){e.vx-=vn*oh[0];e.vy-=vn*oh[1];}e.sl=20;e.sn=oh;if(e.t==='spike'&&e.st===2)spikeStun(e);}
+  if(confine(e,e.r)&&e.t==='spike'&&e.st===2)spikeStun(e);
   /* hors de vue 5 s, ou intouché 15 s (coincé derrière un rocher, ou trop prudent) : il reparaît à vue — une vague finit toujours */
   const off=Math.abs(e.x-G.cx)>W/2/G.zoom+40||Math.abs(e.y-G.cy)>H/2/G.zoom+40;e.offT=off?e.offT+1:0;
   if(e.offT>300||G.t-e.hitT>900){const s=spawnSpot();e.x=s[0];e.y=s[1];e.vx=e.vy=0;e.spawn=SPN;e.offT=0;e.hitT=G.t;e.nav=null;}
@@ -296,6 +320,7 @@ function updEnemies(){
     if(P.gon>0&&e.r<P.r){absorb(e);continue;}
     if(P.appetit&&e.hp<e.mhp*.3&&e.r<P.r*1.1){absorb(e);continue;}
     const dx=P.x-e.x,dy=P.y-e.y,d=Math.sqrt(d2)||1,o=rs-d;
+    if(e.stun>0){e.x-=dx/d*o;e.y-=dy/d*o;continue;}
     if(P.gon>0||P.pu.inv>0){if(e.ivT<=G.t){e.ivT=G.t+8;hurtEnemy(e,P.dmg*4,-dx/d*3,-dy/d*3,true);}e.x-=dx/d*o;e.y-=dy/d*o;continue;}
     if(P.dashing>0||P.inv>0){if(P.dashing>0)perfect(e.x,e.y);e.x-=dx/d*o*.5;e.y-=dy/d*o*.5;continue;}
     hurtPlayer(e.x,e.y);

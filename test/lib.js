@@ -161,7 +161,8 @@ function mkGame(opts = {}) {
 /* ---------- IA de test, écrite DANS le realm du jeu ----------
    Un joueur prudent : esquive les tirs (en anticipant leur trajectoire) et les zones annoncées (traits, bandes,
    arcs), garde ses distances avec ce qui n'est pas une proie, avale les proies, ramasse les power-ups, va
-   chercher ce qu'il ne voit pas (le tir automatique ne vise que l'écran), dash quand deux tirs le serrent,
+   chercher ce qu'il ne voit pas (le tir automatique ne vise que l'écran), dash quand deux tirs le serrent (ou de côté
+   quand une Mite bondit, qu'une Épine charge sur lui ; il sort du trait d'une Épine qui vise),
    gonfle quand la jauge est pleine et la foule dense. __SIM_GOD : membrane et invulnérabilité entretenues
    (couverture du déroulé complet, pas de l'équilibrage). __SIM_BOOST : dégâts ×n. */
 const AI = `
@@ -177,7 +178,12 @@ window.__SIM_INPUT = function(){
   let tgt = null, td = 1e18;
   for (const e of G.en) { if (e.dead || e.spawn > 0) continue; const dx = P.x - e.x, dy = P.y - e.y, d = Math.hypot(dx, dy) || 1;
     if (e.prey || e.egg > 0 || (P.gon > 0 && e.r < P.r)) { if (d < td) { td = d; tgt = e; } continue; }
-    const R = e.r + P.r + 150; if (d < R) { vx += dx / d * (R - d) / R * 2.5; vy += dy / d * (R - d) / R * 2.5; } }
+    const R = e.r + P.r + 150; if (d < R) { vx += dx / d * (R - d) / R * 2.5; vy += dy / d * (R - d) / R * 2.5; }
+    /* mêlée (MELEE, 08/10/2026) : hors du trait d'une Épine qui vise (st 1). Pas d'écart devant une Mite qui s'apprête à bondir :
+       elle vise le point de rencontre, un pas de côté régulier est justement ce qu'elle anticipe (le dash, plus bas, l'esquive).
+       Sur un code plus ancien, ces champs n'existent pas ou ne prennent pas ces valeurs : rien ne change. */
+    const ux = Math.cos(e.ca || 0), uy = Math.sin(e.ca || 0), sl = -dx * uy + dy * ux, sg = sl >= 0 ? 1 : -1;
+    if (e.t === 'spike' && e.st === 1) { const s = dx * ux + dy * uy; if (s > -P.r && s < 340 + P.r && Math.abs(sl) < P.r + 40) { vx += -uy * sg * 3; vy += ux * sg * 3; } } }
   const B = G.boss; if (B && !B.dead && B.spawn <= 0) { const dx = P.x - B.x, dy = P.y - B.y, d = Math.hypot(dx, dy) || 1, R = B.r + 220; if (d < R) { vx += dx / d * (R - d) / R * 3; vy += dy / d * (R - d) / R * 3; } else if (d > viewR() + B.r * .4 - 30) { const w = d > viewR() * 1.5 ? 2.5 : .9; vx -= dx / d * w; vy -= dy / d * w; } }
   else { let ne = null, nd = 1e18; for (const e of G.en) { if (e.dead || e.prey || e.spawn > 0) continue; const d = (e.x - P.x) ** 2 + (e.y - P.y) ** 2; if (d < nd) { nd = d; ne = e; } } if (ne && nd > (viewR() - 40) ** 2) { const d = Math.sqrt(nd); vx += (ne.x - P.x) / d * .7; vy += (ne.y - P.y) / d * .7; } }
   for (const q of G.pus) { const d = Math.hypot(q.x - P.x, q.y - P.y) * .6; if (d < td) { td = d; tgt = q; } }
@@ -191,6 +197,12 @@ window.__SIM_INPUT = function(){
   const l = Math.hypot(vx, vy); G.inX = l > .05 ? vx / l : 0; G.inY = l > .05 ? vy / l : 0; G.aimMan = false;
   let near = 0; for (const b of G.eb) if ((b.x - P.x) ** 2 + (b.y - P.y) ** 2 < 60 * 60) near++;
   if (near >= 2 && P.dashT <= 0) tryDash();
+  /* dash de côté : une Mite qui bondit (ou va bondir dans ≤ 5 pas) à moins de 160, une Épine qui charge à moins de 170 et dont la
+     ligne passe sur la bulle */
+  if (P.dashT <= 0 && !(P.dashing > 0)) for (const e of G.en) { if (e.dead || e.spawn > 0 || e.prey) continue;
+    const dx = P.x - e.x, dy = P.y - e.y, d = Math.hypot(dx, dy), ux = Math.cos(e.ca || 0), uy = Math.sin(e.ca || 0), sl = -dx * uy + dy * ux;
+    if (e.t === 'mite' && (e.st === 1 || e.st === 3 && e.st2 <= 5) && d < 160 || e.t === 'spike' && e.st === 2 && d < 170 && dx * ux + dy * uy > -P.r && Math.abs(sl) < P.r + 40) {
+      const sg = sl >= 0 ? 1 : -1; G.inX = -uy * sg; G.inY = ux * sg; tryDash(); break; } }
   if (P.gauge >= 1 && (G.en.filter(e => !e.dead && !e.prey).length >= 4 || G.boss && !G.boss.dead)) tryGonfle();
 };`;
 

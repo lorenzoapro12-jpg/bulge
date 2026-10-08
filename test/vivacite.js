@@ -22,6 +22,13 @@
      V6. VISÉE : le tir automatique préfère l'ennemi qu'il peut toucher (ligne de tir libre de tout obstacle solide), sinon
          le plus proche ; il change de cible dès que la sienne meurt ; un tireur hors de l'écran ne tire pas et revient
          ≥ 2 × plus vite ; un tir de base ne pousse plus l'ennemi que de ≤ 0,45 u/pas (1,2 avant).
+     V7. FLUX : la vague s'ouvre sur deux groupes en tenaille ; le groupe suivant vient 12 pas après le précédent quand il reste
+         ≤ 3 ennemis (vivants + annoncés) ; plafond 8 vivants à l'îlot 1 ; 6-7 Mites, 3-4 Épines par groupe ; un groupe paraît
+         à l'écran ; pilote invulnérable, graines 1 à 6 : visée sans cible ≤ 22 % du temps de vague à l'îlot 1 (~31 % avant),
+         ≥ 4 ennemis hostiles à l'écran à l'îlot 3 (~3 avant) ;
+     V8. MÊLÉE : une Mite à 200 u touche la bulle qui file droit à angle droit (elle s'annonce ≥ 10 pas à l'arrêt, puis bondit
+         ≥ 190 u) ; l'Épine verrouille sa visée les 10 derniers pas et charge ≥ 320 u ; contre un rocher, elle reste sonnée
+         (≥ 50 pas), sans danger au contact, et prend ×2 ; le dessin annonce tout cela (trait blanc, trait plein, points dorés).
 
    node test/vivacite.js                arbre de travail
    node test/vivacite.js --ref=<commit> code d'un commit (379e0fb : tous les critères ECHOUENT)
@@ -281,6 +288,155 @@ check('V6 un tir de base (r 4,5) ne pousse l’ennemi que de ≤ 0,45 u/pas', ()
   const hp = H.call('window.__E.hp'), r = H.call('window.__R');
   return { ok: hp < 100 && r === 4.5 && v <= .45, detail: 'tir r ' + r + ', vie ' + hp.toFixed(1) + '/100 ; vitesse donnée ' + v.toFixed(3) + ' u/pas' };
 });
+
+/* ================= V7 : FLUX =================
+   pas d'écran vide : la vague s'ouvre sur deux groupes en tenaille, le groupe suivant vient avant que l'arène se vide, on
+   paraît à l'écran, les groupes sont plus gros, le plafond de vivants plus haut. */
+/* ailleurs : la bulle à moins de 500 u du centre (plus près du bord, le côté extérieur tombe hors de l'îlot : le groupe paraît alors
+   ailleurs dans la vue, c'est voulu) */
+check('V7 la vague s’ouvre sur deux groupes en tenaille (graine 4242, îlot 1 : deux marques à ≥ 2 rad l’une de l’autre vues de la bulle) ; idem ailleurs (îlots 1 à 8, bulle à < 500 u du centre) dans ≥ 85 % des cas', () => {
+  const H = L.mkGame({ ref: REF, seed: 4242 }); H.win.__SIM_PICK = c => c[0]; H.win.__SIM_END = () => {};
+  H.start(); H.steps(600, () => H.call("G.ph==='wave'&&G.phT===1"));
+  const r = J(H, `(()=>{const P=G.p,M=G.marks.map(m=>Math.atan2(m.y-P.y,m.x-P.x));const d=M.length===2?Math.abs(angDiff(M[0],M[1])):0;
+    let n=0,ok=0;for(let k=1;k<=8;k++){genIslet(G.seed,k);G.isl=k;islStart();G.pickIsl=k;
+      for(let i=0;i<40;i++){P.x=(R()-.5)*1000;P.y=(R()-.5)*1000;if(Math.hypot(P.x,P.y)>500||pointHit(P.x,P.y,30)||wallNear(P.x,P.y,30))continue;G.cx=P.x;G.cy=P.y;G.en=[];G.marks=[];waveStart(1);
+        if(G.marks.length<2)continue;n++;const a=Math.atan2(G.marks[0].y-P.y,G.marks[0].x-P.x),b=Math.atan2(G.marks[1].y-P.y,G.marks[1].x-P.x);if(Math.abs(angDiff(a,b))>=2)ok++;}}
+    return JSON.stringify({ph:G.ph,m:M.length,d,n,ok});})()`);
+  return { ok: r.m === 2 && r.d >= 2 && r.n >= 100 && r.ok >= .85 * r.n, detail: 'graine 4242, pas 1 de la vague : ' + r.m + ' marque(s), écart ' + r.d.toFixed(2) + ' rad ; îlots 1 à 8 : ' + r.ok + ' / ' + r.n + ' ouvertures en tenaille' };
+});
+check('V7 le groupe suivant vient avant que l’arène se vide (≤ 3 vivants + annoncés : 12 pas après le précédent), plafond 8 vivants à l’îlot 1 ; groupes de 6 ou 7 Mites, 3 ou 4 Épines', () => {
+  const H = arene(4274);
+  const r = J(H, `(()=>{const k0=G.isl,o={};G.isl=1;G.ph='wave';G.wave=1;const Q=()=>({left:9,n:9,el:99,eld:true,prey:0,nextT:1e9,th:0,gi:2,lastS:88,hit:0});
+    G.wq=Q();G.marks=[];G.en=[];G.phT=95;waveTick();o.tot=G.marks.length;G.phT=100;waveTick();o.vide=G.marks.length;
+    const viv=n=>{G.en=[];for(let i=0;i<n;i++)mkEnemy('mite',G.p.x+400,G.p.y,{spawn:0,cd:1e9});};
+    G.wq=Q();G.wq.nextT=0;G.marks=[];viv(7);G.phT=100;waveTick();o.c7=G.marks.length;G.wq=Q();G.wq.nextT=0;G.marks=[];viv(8);waveTick();o.c8=G.marks.length;G.en=[];
+    const tail=(k,t)=>{G.isl=k;let mn=99,mx=0;for(let i=0;i<300;i++){G.wq={left:99,n:99,el:999,eld:true,prey:0,nextT:0};G.marks=[];spawnGroup();const m=G.marks[0];if(m&&m.t2===t){mn=Math.min(mn,m.n);mx=Math.max(mx,m.n);}}return mn+'-'+mx;};
+    o.mite=tail(1,'mite');o.spike=tail(2,'spike');G.isl=k0;G.marks=[];G.ph='pause';G.phT=-1e9;G.wq=null;return JSON.stringify(o);})()`);
+  return { ok: r.tot === 0 && r.vide === 1 && r.c7 === 1 && r.c8 === 0 && r.mite === '6-7' && r.spike === '3-4',
+    detail: 'arène vide, 7 pas après le dernier groupe : ' + r.tot + ' groupe, 12 pas après : ' + r.vide + ' ; 7 vivants : ' + r.c7 + ', 8 vivants : ' + r.c8 + ' ; Mites par groupe ' + r.mite + ', Épines ' + r.spike };
+});
+check('V7 un groupe paraît à l’écran (vue rétrécie de 40) dans ≥ 90 % des cas, jamais à moins de 300 u de la bulle (îlots 1 à 8)', () => {
+  const H = arene(4275);
+  const r = J(H, `(()=>{const P=G.p,o={n:0,vue:0,proche:0};for(let k=1;k<=8;k++){genIslet(G.seed,k);G.isl=k;islStart();G.pickIsl=k;G.en=[];G.eb=[];G.ph='pause';G.phT=-1e9;
+    for(let i=0;i<60;i++){P.x=(R()-.5)*1100;P.y=(R()-.5)*1100;if(Math.hypot(P.x,P.y)>PR-150||pointHit(P.x,P.y,30)||wallNear(P.x,P.y,30))continue;G.cx=P.x;G.cy=P.y;
+      const hw=W/2/G.zoom-40,hh=H/2/G.zoom-40;G.marks=[];G.wq={left:9,n:9,el:99,eld:true,prey:0,nextT:0};if(i&1){G.wq.th=R()*TAU;G.wq.gi=0;}spawnGroup();
+      for(const m of G.marks){o.n++;if(Math.abs(m.x-G.cx)<=hw&&Math.abs(m.y-G.cy)<=hh)o.vue++;if(Math.hypot(m.x-P.x,m.y-P.y)<300)o.proche++;}}}
+    G.marks=[];G.wq=null;return JSON.stringify(o);})()`);
+  return { ok: r.n >= 200 && r.vue >= .9 * r.n && !r.proche, detail: r.vue + ' / ' + r.n + ' groupes à l’écran, ' + r.proche + ' à moins de 300 u' };
+});
+/* parties au pilote invulnérable (sans aide aux dégâts), graines 1 à 6, jusqu'à l'îlot 3 : visée sans cible (îlot 1) et
+   ennemis hostiles éclos à l'écran (îlot 3), sur les pas de vague. Six graines et non trois : d'une graine à l'autre, l'îlot 3
+   va de 3,3 à 6 ennemis à l'écran (le pilote court après les proies) ; sur trois, la moyenne bouge de ± 0,5. */
+let FLUX = null;
+const flux = () => FLUX || (FLUX = [1, 2, 3, 4, 5, 6].map(seed => {
+  const H = L.mkGame({ ref: REF, seed }); H.win.__SIM_PICK = c => c[0]; H.win.__SIM_END = () => {};
+  H.ai(true); H.start(); const S = {};
+  H.steps(60 * 60 * 20, () => {
+    const s = H.call(`(()=>{if(G.state!=='play'||G.ph!=='wave')return '';const hw=W/2/G.zoom,hh=H/2/G.zoom;let n=0;for(const e of G.en)if(!e.dead&&!e.prey&&e.spawn<=0&&!(e.egg>0)&&Math.abs(e.x-G.cx)<=hw&&Math.abs(e.y-G.cy)<=hh)n++;return G.isl+':'+(G.tgt?1:0)+':'+n;})()`);
+    if (s) { const [k, t, n] = s.split(':').map(Number); const q = S[k] || (S[k] = { w: 0, nul: 0, on: 0 }); q.w++; if (!t) q.nul++; q.on += n; }
+    return H.call("G.isl>3||G.state==='end'");
+  });
+  return S;
+}));
+check('V7 îlot 1, pilote invulnérable, graines 1 à 6 : la visée reste sans cible ≤ 22 % du temps de vague', () => {
+  const S = flux(), w = S.reduce((s, q) => s + (q[1] ? q[1].w : 0), 0), n = S.reduce((s, q) => s + (q[1] ? q[1].nul : 0), 0);
+  return { ok: w > 0 && n / w <= .22, detail: 'sans cible ' + (100 * n / w).toFixed(1) + ' % de ' + (w / 60).toFixed(0) + ' s de vague (' + S.map(q => q[1] ? (100 * q[1].nul / q[1].w).toFixed(0) + ' %' : '-').join(', ') + ')' };
+});
+check('V7 îlot 3, graines 1 à 6 : en moyenne ≥ 4 ennemis hostiles à l’écran pendant les vagues', () => {
+  const S = flux(), w = S.reduce((s, q) => s + (q[3] ? q[3].w : 0), 0), n = S.reduce((s, q) => s + (q[3] ? q[3].on : 0), 0);
+  return { ok: w > 0 && n / w >= 4, detail: (n / w).toFixed(2) + ' en moyenne sur ' + (w / 60).toFixed(0) + ' s de vague (' + S.map(q => q[3] ? (q[3].on / q[3].w).toFixed(2) : '-').join(', ') + ')' };
+});
+
+/* ================= V8 : MÊLÉE =================
+   un corps à corps qui touche : la Mite s'arrête et s'annonce, puis bondit là où tu VAS ; l'Épine vise en anticipant,
+   verrouille, charge plus loin, et reste sonnée contre un rocher. */
+/* un rectangle libre de w × h (aucun obstacle ni falaise à 26 u près, dans l'îlot) : son coin haut-gauche */
+const zone = (H, w, h) => J(H, `(()=>{const ok=(x,y)=>Math.hypot(x,y)<PR-80&&!pointHit(x,y,26)&&!wallNear(x,y,26);
+  for(let gy=-PR;gy<=PR-${h};gy+=60)for(let gx=-PR;gx<=PR-${w};gx+=60){if(!ok(gx,gy)||!ok(gx+${w},gy)||!ok(gx,gy+${h})||!ok(gx+${w},gy+${h}))continue;let f=true;
+    for(let y=gy;y<=gy+${h}&&f;y+=16)for(let x=gx;x<=gx+${w};x+=16)if(!ok(x,y)){f=false;break;}if(f)return JSON.stringify([gx,gy]);}return 'null';})()`);
+check('V8 une Mite à 200 u bondit sur la bulle qui file droit à pleine vitesse, à angle droit : touchée en ≤ 60 pas', () => {
+  const H = arene(4270), z = zone(H, 560, 420);
+  if (!z) return { ok: false, detail: 'aucune zone libre' };
+  const [gx, gy] = z;
+  H.call(`(()=>{const P=G.p;P.x=${gx + 60};P.y=${gy + 60};P.vx=P.spd;P.vy=0;P.inv=0;P.dashing=0;G.cx=P.x;G.cy=P.y;window.__s0=P.seg;
+    window.__M=mkEnemy('mite',${gx + 60},${gy + 260},{spawn:0,age:0,cd:0});window.__SIM_INPUT=function(){G.inX=1;G.inY=0;G.aimMan=false;};})()`);
+  let n = 0, st = '';
+  for (; n < 60 && H.call('G.p.seg===window.__s0'); n++) { H.steps(1); st += H.call('window.__M.dead?"x":String(window.__M.st)'); }
+  const hit = H.call('G.p.seg<window.__s0');
+  return { ok: hit && n <= 60, detail: (hit ? 'touchée après ' + n + ' pas' : 'jamais touchée en 60 pas') + ' ; états de la Mite : ' + st.replace(/(.)\1*/g, m => m[0] + '×' + m.length + ' ') };
+});
+check('V8 une Mite à 180 u s’arrête et s’annonce (st 3, |v| < ,5) ≥ 10 pas, puis bondit de ≥ 190 u', () => {
+  const H = arene(4271), z = zone(H, 560, 420);
+  if (!z) return { ok: false, detail: 'aucune zone libre' };
+  const [gx, gy] = z;
+  H.call(`(()=>{const P=G.p;P.x=${gx + 80};P.y=${gy + 210};P.vx=P.vy=0;G.cx=P.x;G.cy=P.y;window.__M=mkEnemy('mite',${gx + 260},${gy + 210},{spawn:0,age:0,cd:0});})()`);
+  let arret = 0, l0 = null, l1 = null, vu1 = false;
+  for (let i = 0; i < 90; i++) {
+    H.steps(1);
+    const m = J(H, 'JSON.stringify({st:window.__M.st,v:Math.hypot(window.__M.vx,window.__M.vy),x:window.__M.x,y:window.__M.y,d:window.__M.dead})');
+    if (m.d) break;
+    if (!vu1 && m.st === 3 && m.v < .5) arret++;
+    if (!vu1 && m.st === 1) { vu1 = true; l0 = m; H.call(`G.p.x=${gx + 500};G.p.y=${gy + 400};G.p.vx=G.p.vy=0;`); }
+    else if (vu1 && m.st !== 1) { l1 = m; break; }
+  }
+  const saut = l0 && l1 ? Math.hypot(l1.x - l0.x, l1.y - l0.y) : 0;
+  return { ok: arret >= 10 && saut >= 190, detail: 'à l’arrêt et annoncée ' + arret + ' pas ; bond de ' + saut.toFixed(0) + ' u' };
+});
+check('V8 une Épine vise en anticipant, verrouille sa visée les 10 derniers pas (la bulle bouge), puis charge ≥ 320 u', () => {
+  const H = arene(4272), z = zone(H, 560, 420);
+  if (!z) return { ok: false, detail: 'aucune zone libre' };
+  const [gx, gy] = z;
+  H.call(`(()=>{const P=G.p;P.x=${gx + 460};P.y=${gy + 60};P.vx=0;P.vy=P.spd;G.cx=P.x;G.cy=P.y;window.__S=mkEnemy('spike',${gx + 160},${gy + 60},{spawn:0,age:0,cd:0});
+    window.__SIM_INPUT=function(){G.inX=0;G.inY=1;G.aimMan=false;};})()`);
+  const vise = [], verrou = []; let c0 = null, c1 = null;
+  for (let i = 0; i < 160; i++) {
+    H.steps(1);
+    const s = J(H, 'JSON.stringify({st:window.__S.st,st2:window.__S.st2,ca:window.__S.ca,x:window.__S.x,y:window.__S.y})');
+    if (s.st === 1) { vise.push(s.ca); if (s.st2 <= 10) verrou.push(s.ca); }
+    if (s.st === 2 && !c0) c0 = s;
+    if (c0 && s.st !== 2) { c1 = s; break; }
+  }
+  const fixe = verrou.length >= 10 && verrou.every(a => a === verrou[0]), suit = vise.length > 12 && vise[0] !== vise[vise.length - 11];
+  const ch = c0 && c1 ? Math.hypot(c1.x - c0.x, c1.y - c0.y) : 0;
+  return { ok: fixe && suit && ch >= 320, detail: 'visée ' + vise.length + ' pas, ' + (suit ? 'suit la bulle' : 'ne bouge pas') + ', puis ' + (fixe ? 'verrouillée ' + verrou.length + ' pas' : 'pas verrouillée (' + verrou.length + ' pas, ' + new Set(verrou).size + ' angles)') + ' ; charge de ' + ch.toFixed(0) + ' u' };
+});
+check('V8 une Épine qui charge dans un rocher massif reste sonnée (≥ 50 pas) : la toucher ne coûte rien, le même coup fait ×2', () => {
+  const H = arene(4273);
+  const r = J(H, `(()=>{const P=G.p;for(let k=1;k<=8;k++){if(k>1){genIslet(G.seed,k);G.isl=k;G.pickIsl=k;islStart();G.en=[];G.eb=[];G.marks=[];G.wq=null;G.ph='pause';G.phT=-1e9;}
+      for(let cx=-3;cx<=3;cx++)for(let cy=-3;cy<=3;cy++){const c=getChunk(cx,cy);if(!c)continue;
+        for(const o of c.obs){if(o.brk||o.gone||o.wall)continue;
+          for(let i=0;i<16;i++){const u=i*TAU/16,ux=Math.cos(u),uy=Math.sin(u),ax=o.cx+ux*(o.R+170),ay=o.cy+uy*(o.R+170),bx=ax+ux*300,by=ay+uy*300;
+            if(Math.hypot(ax,ay)>PR-80||Math.hypot(bx,by)>PR-60||pointHit(ax,ay,24)||wallNear(ax,ay,24)||pointHit(bx,by,30))continue;
+            let q=null;for(let s=0;s<=200&&!q;s+=6)q=pointHit(ax-ux*s,ay-uy*s,16);if(q!==o)continue;
+            P.x=bx;P.y=by;P.vx=P.vy=0;G.cx=ax;G.cy=ay;G.p.crit=0;
+            window.__S=mkEnemy('spike',ax,ay,{spawn:0,age:0,cd:1e9});Object.assign(window.__S,{st:2,st2:40,ca:Math.atan2(-uy,-ux)});window.__U=[ux,uy];
+            return JSON.stringify({k,R:Math.round(o.R)});}}}}
+    return 'null';})()`);
+  if (!r) return { ok: false, detail: 'aucun rocher massif dégagé trouvé' };
+  let n = 0; for (; n < 60 && !H.call('window.__S.stun>0') && H.call('window.__S.st===2'); n++) H.steps(1);
+  H.steps(1);
+  const stun = H.call('window.__S.stun|0');
+  H.call('(()=>{const e=window.__S,P=G.p,u=window.__U;P.inv=0;P.dashing=0;P.x=e.x+u[0]*(e.r+P.r*.5);P.y=e.y+u[1]*(e.r+P.r*.5);P.vx=P.vy=0;window.__s0=P.seg;})()');
+  H.steps(3);
+  const perte = H.call('window.__s0-G.p.seg');
+  const d = J(H, 'JSON.stringify((()=>{const e=window.__S;e.hp=e.mhp=100;let h=e.hp;hurtEnemy(e,1,0,0,true,false);const dS=h-e.hp;e.stun=0;h=e.hp;hurtEnemy(e,1,0,0,true,false);return{dS,dN:h-e.hp};})())');
+  return { ok: stun >= 50 && perte === 0 && d.dN > 0 && d.dS === 2 * d.dN, detail: 'îlot ' + r.k + ', rocher R ' + r.R + ' atteint en ' + n + ' pas : sonnée ' + stun + ' pas ; contact sonnée : ' + perte + ' segment(s) perdu(s) ; coup ' + d.dS + ' sonnée contre ' + d.dN + ' sinon' };
+});
+
+{
+  /* contexte 2D qui journalise stroke (couleur/épaisseur), fillRect (couleur) et setLineDash pendant drawEnemy */
+  let LOG = null;
+  const jrn = () => { const base = L.mkCtx(); return new Proxy({}, { get: (t, p) => (LOG && (p === 'stroke' || p === 'fillRect' || p === 'setLineDash') ? (...a) => { LOG.push(p === 'stroke' ? 's ' + base.strokeStyle + '/' + base.lineWidth : p === 'fillRect' ? 'f ' + base.fillStyle : 'd ' + JSON.stringify(a[0])); } : base[p]), set: (t, p, v) => { base[p] = v; return true; } }); };
+  check('V8 dessin : la Mite qui s’annonce tire un trait blanc ; l’Épine pointillée puis verrouillée en trait blanc plein ; l’Épine sonnée a trois points dorés', () => {
+    const H = arene(4276, { mkCtx: jrn });
+    H.call('render(1,16.7)');
+    const d = (o) => { H.call(`window.__D=mkEnemy(${JSON.stringify(o.t)},G.p.x+150,G.p.y,{spawn:0,age:0,cd:1e9});Object.assign(window.__D,${JSON.stringify(o.s)});`); LOG = []; H.call('drawEnemy(window.__D)'); const l = LOG; LOG = null; return l; };
+    const m = d({ t: 'mite', s: { st: 3, st2: 6, ca: 1 } }), v = d({ t: 'spike', s: { st: 1, st2: 22, ca: 1 } }), k = d({ t: 'spike', s: { st: 1, st2: 6, ca: 1 } }), z = d({ t: 'spike', s: { stun: 30 } });
+    const gd = H.call('COL.gd'), dash = l => l.some(x => /^d \[\d/.test(x));
+    const ok = m.includes('s #ffffff/2') && dash(v) && !v.includes('s #ffffff/3') && !dash(k) && k.includes('s #ffffff/3') && z.filter(x => x === 'f ' + gd).length === 3;
+    return { ok, detail: 'Mite st 3 : ' + m.filter(x => x[0] === 's').join(' ') + ' | Épine qui vise : ' + (dash(v) ? 'pointillée' : 'pleine') + ' | verrouillée : ' + (dash(k) ? 'pointillée' : 'pleine') + ', ' + k.filter(x => x[0] === 's').join(' ') + ' | sonnée : ' + z.filter(x => x === 'f ' + gd).length + ' point(s) doré(s)' };
+  });
+}
 
 if (LONG) { /* réservé : passe d'équilibrage de COURBE */ }
 
