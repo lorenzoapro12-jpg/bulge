@@ -41,6 +41,12 @@
          clignote ; gonflée, la bulle aspire une Mite à 200 u (pas un plus gros) et file ×1,15 ; frôler un tir remplit la jauge
          de ,006 × gGain, une fois ; une proie ne fuit qu'à < 220 u, à ≤ ,55 × la vitesse de la bulle, s'avale à +10 ; ,35 × n
          proies par vague ; Digestion : un segment toutes les 20 absorptions.
+     V13. SÉRIE : dix kills à 120 pas d'écart font une série de 10 (fenêtre 2,5 s) ; une esquive parfaite ou un obstacle cassé la
+         prolongent sans compter ; à 15 en vague, un power-up d'arme (rien en combat de boss), à 40, jauge +20 % ; Emballement :
+         une série de 12 donne ≥ 1,2 × la cadence, des traînées plus longues, des canons blancs ; la série s'affiche sous la bulle ;
+     V14. CŒUR : le boss d'un îlot 1 à 7 laisse un cœur qui vole vers la bulle (avalé en ≤ 100 pas) : la dernière carte bonus
+         monte d'un niveau (G.picks inchangé), ou la jauge se remplit ; vague sans une égratignure : jauge + ,15 ; le bonus
+         d'îlot nettoyé s'affiche ; dessin du cœur : 2 sprites.
 
    node test/vivacite.js                arbre de travail
    node test/vivacite.js --ref=<commit> code d'un commit (379e0fb : tous les critères ECHOUENT)
@@ -723,6 +729,121 @@ check('V12 Digestion : un segment revient à la 20e absorption, pas avant (texte
     const a = d(.15, 8), b = d(.15, 16), c = d(1, 8);
     const ok = a.includes(pl) && !a.includes(col) && b.includes(col) && !b.includes(pl) && c.includes(col) && !c.includes(pl);
     return { ok, detail: 'à 15 %, FRAME 8 : ' + (a.includes(pl) ? 'pâle' : 'plein') + ' ; FRAME 16 : ' + (b.includes(pl) ? 'pâle' : 'plein') + ' ; pleine vie, FRAME 8 : ' + (c.includes(pl) ? 'pâle' : 'plein') };
+  });
+}
+
+/* ================= V13 : SÉRIE =================
+   une série qui paie : fenêtre de 2,5 s (1,5 s avant : plus courte que le temps d'abattre un ennemi) ; une esquive parfaite ou
+   un obstacle cassé la prolongent sans compter ; à 15 en vague, un cadeau (power-up d'arme ou onde), à 40, jauge +20 % (pas en
+   combat de boss) ; EMBALLEMENT : le tir accélère avec la série (+2 % par kill, ≤ 25 %), traînées plus longues, canons blancs ;
+   le multiplicateur s'affiche sous la bulle (plus dans le coin) ; un power-up vit 12 s (9 avant). */
+check('V13 série : dix kills à 120 pas d’écart font une série de 10 (fenêtre 2,5 s ; 1,5 s avant) ; 151 pas sans rien la rompent', () => {
+  const H = arene(4302), k = () => H.call("killEnemy(mkEnemy('mite',G.p.x+250,G.p.y,{spawn:0}));G.combo");
+  const c = []; for (let i = 0; i < 10; i++) { c.push(k()); if (i < 9) H.steps(120); }
+  H.steps(151); const apres = k();
+  return { ok: c[9] === 10 && apres === 1, detail: 'série : ' + c.join(' ') + ' ; après 151 pas : ' + apres };
+});
+check('V13 cadeau : 15 en vague → un power-up (Tir rapide, Tir triple, Perforant ou Onde) qui vit 720 pas ; en combat de boss, rien ; 40 en vague → jauge +20 %', () => {
+  const H = arene(4303);
+  const r = J(H, `(()=>{const P=G.p,k=(ph,c)=>{G.ph=ph;G.pus=[];G.tx=[];G.combo=c;G.comboT=G.t;P.gauge=0;P.gGain=1;killEnemy(mkEnemy('mite',P.x+250,P.y,{spawn:0}));
+      const o={q:G.pus.map(q=>[q.k,q.life]),g:+P.gauge.toFixed(6),c:G.combo,t:G.tx.map(t=>t.s)};G.ph='pause';G.phT=-1e9;return o;};
+    return JSON.stringify({w:k('wave',14),b:k('boss',14),w40:k('wave',39),b40:k('boss',39)});})()`);
+  const arme = ['rapid', 'triple', 'pierce', 'wave'];
+  const ok = r.w.c === 15 && r.w.q.length === 1 && arme.includes(r.w.q[0][0]) && r.w.q[0][1] === 720 && r.w.t.some(s => /cadeau/.test(s)) && r.b.q.length === 0
+    && Math.abs(r.w40.g - .25) < 1e-9 && Math.abs(r.b40.g - .05) < 1e-9 && r.w40.t.some(s => /jauge/.test(s));
+  return { ok, detail: 'vague, 15 : ' + JSON.stringify(r.w.q) + ' « ' + r.w.t.join(' | ') + ' » ; boss, 15 : ' + r.b.q.length + ' power-up ; jauge après le 40ᵉ kill : vague ' + r.w40.g + ', boss ' + r.b40.g + ' (un kill seul : ,05)' };
+});
+check('V13 Emballement : une série de 12 entretenue → cadence ≥ 1,2 × sur une cible tenue, traînées ≥ 1,4 × plus longues, un conseil la première fois', () => {
+  const H = cible(4304), per = () => { const t = J(H, 'JSON.stringify(window.__B.map(b=>b.__t))'); return t.length > 1 ? (t[t.length - 1] - t[0]) / (t.length - 1) : 1e9; };
+  H.call('const __pb3=pbul;pbul=function(){const b=__pb3.apply(this,arguments);b.__t=G.t;return b;};G.toasts=[];');
+  H.call('G.p.ctr=0;G.combo=0;G.comboT=-999;'); H.tenir(30); H.call('window.__B=[];'); H.tenir(180); const p0 = per(), n0 = H.call('window.__B.length'), t0 = H.call('window.__B[0].tl||2.2');
+  H.call('window.__B=[];'); for (let i = 0; i < 180; i++) { H.call('G.combo=12;G.comboT=G.t;'); H.tenir(1); }
+  const p1 = per(), n1 = H.call('window.__B.length'), t1 = H.call('Math.min(...window.__B.map(b=>b.tl||2.2))'), toast = H.call('G.toasts.map(t=>t.s).join(" | ")');
+  return { ok: n0 > 1 && n1 > 1 && p0 >= 1.2 * p1 && t1 >= 1.4 * t0 && /Emballement/.test(toast),
+    detail: 'sans série : ' + n0 + ' tirs, un toutes les ' + p0.toFixed(2) + ' pas ; série de 12 : ' + n1 + ' tirs, un toutes les ' + p1.toFixed(2) + ' pas (×' + (p0 / p1).toFixed(2) + ') ; traînée ' + t0 + ' → ' + (+t1).toFixed(3) + ' ; conseil : ' + (toast || 'aucun') };
+});
+check('V13 une esquive parfaite (140 pas après le dernier kill), puis un obstacle cassé (140 pas plus tard) prolongent la série sans la compter', () => {
+  const H = arene(4305), k = () => H.call("killEnemy(mkEnemy('mite',G.p.x+250,G.p.y,{spawn:0}));G.combo");
+  for (let i = 0; i < 5; i++) k();
+  H.steps(140); const c1 = H.call('G.p.perf=0;perfect(G.p.x,G.p.y);G.combo');
+  H.steps(140); const o = J(H, `(()=>{let o=null;for(let cx=-COFF;cx<COFF&&!o;cx++)for(let cy=-COFF;cy<COFF&&!o;cy++){const c=getChunk(cx,cy);if(c)for(const q of c.obs)if(q.brk&&!q.gone){o=q;break;}}
+    if(!o)return 'null';breakObs(o);return JSON.stringify({c:G.combo});})()`);
+  H.steps(140); const c3 = k();
+  return { ok: c1 === 5 && o && o.c === 5 && c3 === 6, detail: 'série 5 ; esquive parfaite à +140 : ' + c1 + ' ; obstacle cassé à +280 : ' + (o ? o.c : 'aucun cassable') + ' ; kill à +420 : ' + c3 };
+});
+{
+  /* contexte 2D qui journalise fillText (texte, x, y), fillRect et stroke (couleur) */
+  let LOG = null;
+  const jrn = () => { const base = L.mkCtx(); return new Proxy({}, { get: (t, p) => (LOG && (p === 'fillText' || p === 'fillRect' || p === 'stroke') ? (...a) => { LOG.push(p === 'fillText' ? ['t', a[0], a[1], a[2]] : p === 'fillRect' ? ['r', base.fillStyle].concat(a) : ['s', base.strokeStyle]); } : base[p]), set: (t, p, v) => { base[p] = v; return true; } }); };
+  check('V13 dessin : la série s’affiche sous la bulle (« ×2 · 12 », une barre qui se vide), plus dans le coin ; à 4, rien ; canons blancs pendant l’Emballement', () => {
+    const H = arene(4306, { mkCtx: jrn });
+    H.call('render(1,16.7)');
+    const vue = c => { H.call(`G.combo=${c};G.comboT=G.t;G.tx=[];`); LOG = []; H.call('render(1,16.7)'); const l = LOG; LOG = null; return l; };
+    const a = vue(12), s = J(H, 'JSON.stringify(w2s(G.p.x,G.p.y))'), b = vue(4), z = vue(0);
+    const tx = a.filter(x => x[0] === 't'), m = tx.find(x => x[1] === '×2 · 12'), coin = tx.concat(b.filter(x => x[0] === 't')).filter(x => /série|×1 · 4|· 4$/.test(x[1]));
+    const barre = m && a.some(x => x[0] === 'r' && Math.abs(x[2] - (m[2] - 14)) < .01 && Math.abs(x[3] - (m[3] + 9)) < .01);
+    const can = l => { for (let i = 0; i + 1 < l.length; i++) if (l[i][0] === 's' && l[i][1] === '#0b1c26' && l[i + 1][0] === 's') return l[i + 1][1]; return null; };
+    const ok = !!m && Math.abs(m[2] - s[0]) < 1 && m[3] > s[1] + 30 && barre && coin.length === 0 && can(a) === '#ffffff' && can(z) !== '#ffffff';
+    return { ok, detail: (m ? '« ' + m[1] + ' » à (' + m[2].toFixed(0) + ', ' + m[3].toFixed(0) + '), bulle à (' + s[0].toFixed(0) + ', ' + s[1].toFixed(0) + '), barre ' + (barre ? 'oui' : 'non') : 'pas de « ×2 · 12 » (textes : ' + tx.map(x => x[1]).join(' | ') + ')') + ' ; dans le coin : ' + (coin.map(x => x[1]).join(' | ') || 'rien') + ' ; canons : série 12 ' + can(a) + ', sans série ' + can(z) };
+  });
+}
+
+/* ================= V14 : CŒUR =================
+   le gardien abattu laisse son cœur (îlots 1 à 7) : il vole vers la bulle, s'avale au contact (ou de force à 70 pas) et fait monter
+   d'un niveau ta DERNIÈRE carte bonus qui n'est pas au maximum (sans tirage : G.picks reste à 16 par partie) ; sinon, jauge pleine.
+   Une vague sans une égratignure : jauge +15 %. Le bonus d'îlot nettoyé s'affiche. */
+/* une partie à l'îlot 1, le boss en place (le motif du V4 boss) */
+function gardien(seed) {
+  const H = L.mkGame({ ref: REF, seed }); H.win.__SIM_PICK = c => c[0]; H.win.__SIM_END = () => {};
+  H.start(); H.steps(30); H.call("G.en=[];G.marks=[];G.wave=3;G.ph='preboss';G.phT=99;G.pickMid=G.isl;G.p.inv=1e9;");
+  H.steps(200, () => H.call('!!G.boss&&G.boss.spawn<=0'));
+  /* la bulle à 250 u du boss (il naît au centre, sur elle) : le cœur doit voler jusqu'à elle */
+  H.call('(()=>{const P=G.p,B=G.boss;for(let a=0;a<TAU;a+=.3){const x=B.x+Math.cos(a)*250,y=B.y+Math.sin(a)*250;if(!pointHit(x,y,30)&&!wallNear(x,y,30)){P.x=x;P.y=y;P.vx=P.vy=0;break;}}})()');
+  return H;
+}
+const somme = 'Object.values(G.p.cards).reduce((a,b)=>a+b,0)';
+check('V14 le boss de l’îlot 1 abattu laisse un cœur : avalé en ≤ 100 pas, ta dernière carte bonus monte d’un niveau (Σ cartes + 1, effet appliqué), G.picks inchangé', () => {
+  const H = gardien(4310);
+  const r = J(H, `(()=>{const P=G.p;applyCard({k:'b',u:CARDS.rapid.u});window.__s0=${somme};window.__n0=G.picks.length;window.__r0=P.cards.rapid;window.__f0=P.fireI;
+    const bc=bossCol(G.boss);bossDie();G.tx=[];return JSON.stringify({h:!!G.heart,col:G.heart?G.heart.col===bc:false,ph:G.ph,d:G.heart?Math.hypot(G.heart.x-P.x,G.heart.y-P.y):0});})()`);
+  const n = H.steps(100, () => H.call('!G.heart'));
+  const s = J(H, `JSON.stringify({h:!!G.heart,ds:${somme}-window.__s0,dn:G.picks.length-window.__n0,r0:window.__r0,r1:G.p.cards.rapid,f:G.p.fireI<window.__f0,t:G.tx.map(t=>t.s).filter(s=>/Cœur/.test(s)),ph:G.ph,phT:G.phT})`);
+  const ok = r.h && r.col && r.d >= 200 && !s.h && s.ds === 1 && s.dn === 0 && s.r1 === s.r0 + 1 && s.f && s.t.length === 1;
+  return { ok, detail: 'cœur ' + (r.h ? 'posé à ' + Math.round(r.d) + ' u de la bulle' : 'absent') + (r.col ? ' (couleur du boss)' : '') + ' ; ' + (s.h ? 'toujours là' : 'avalé') + ' après ' + n + ' pas (' + s.ph + ' ' + s.phT + ') ; Σ cartes +' + s.ds + ', G.picks +' + s.dn + ', Surcadence ' + s.r0 + ' → ' + s.r1 + ', cadence ' + (s.f ? 'accrue' : 'inchangée') + ' ; « ' + s.t.join(' | ') + ' »' };
+});
+check('V14 toutes tes cartes bonus au maximum : le cœur remplit la jauge (P.gauge = 1), aucune carte ne bouge ; le dernier gardien (îlot 8) n’en laisse pas', () => {
+  const H = gardien(4311);
+  H.call(`(()=>{const P=G.p;G.picks=[];P.cards={};applyCard({k:'b',u:CARDS.mirror.u});P.gauge=0;window.__s0=${somme};bossDie();G.tx=[];})()`);
+  const n = H.steps(100, () => H.call('!G.heart'));
+  const s = J(H, `JSON.stringify({h:!!G.heart,g:G.p.gauge,ds:${somme}-window.__s0,t:G.tx.map(t=>t.s).filter(s=>/Cœur/.test(s))})`);
+  const H2 = gardien(4312), h8 = H2.call('G.boss.k=NISL;bossDie();G.heart==null');
+  return { ok: !s.h && s.g === 1 && s.ds === 0 && s.t.length === 1 && /jauge/.test(s.t[0]) && h8, detail: (s.h ? 'cœur toujours là' : 'cœur avalé') + ' après ' + n + ' pas ; jauge ' + s.g + ', Σ cartes +' + s.ds + ' ; « ' + s.t.join(' | ') + ' » ; boss de l’îlot 8 : ' + (h8 ? 'pas de cœur' : 'un cœur') };
+});
+check('V14 vague sans une égratignure : jauge + ,15 et un texte ; un coup encaissé pendant la vague (hurtPlayer) l’annule', () => {
+  const H = arene(4313);
+  const v = coup => J(H, `(()=>{const P=G.p;G.en=[];G.marks=[];P.gauge=0;P.gGain=1;G.wave=1;G.ph='wave';G.phT=0;G.tx=[];
+    G.wq={left:0,n:8,el:5,eld:true,prey:0,nextT:1e9,th:0,gi:2,lastS:0,hit:0};
+    if(${coup}){P.inv=0;P.dashing=0;hurtPlayer(P.x+30,P.y);P.inv=1e9;}const hit=G.wq.hit;waveTick();
+    const o={g:+P.gauge.toFixed(6),hit,ph:G.ph,t:G.tx.map(t=>t.s).filter(s=>/égratignure/.test(s))};G.wq=null;G.ph='pause';G.phT=-1e9;return JSON.stringify(o);})()`);
+  const a = v(0), b = v(1);
+  return { ok: Math.abs(a.g - .15) < 1e-9 && a.t.length === 1 && a.ph === 'pause' && b.hit === 1 && b.g === 0 && b.t.length === 0,
+    detail: 'sans coup : jauge ' + a.g + ' « ' + a.t.join('') + ' » (' + a.ph + ') ; avec un coup : marque ' + b.hit + ', jauge ' + b.g };
+});
+check('V14 îlot nettoyé : le bonus s’affiche au 40ᵉ pas (« +1 500 » à l’îlot 1 sans une égratignure, « +500 » sinon)', () => {
+  const H = arene(4314);
+  const v = hit => { H.call(`G.islHit=${hit};G.boss=null;G.tx=[];islClear();`); H.steps(40); const r = J(H, 'JSON.stringify(G.tx.map(t=>t.s))'); H.call('G.ph="pause";G.phT=-1e9;'); return r; };
+  const a = v(false), b = v(true), f = J(H, 'JSON.stringify(["+"+fmt(1500),"+"+fmt(500)])');
+  return { ok: a.includes(f[0]) && b.includes(f[1]) && !b.includes(f[0]), detail: 'sans égratignure : ' + a.join(' | ') + ' ; touchée : ' + b.join(' | ') };
+});
+{
+  let CNT = null;
+  const cpt = () => { const base = L.mkCtx(); return new Proxy({}, { get: (t, p) => (CNT && p === 'drawImage' ? () => { CNT.n++; } : base[p]), set: (t, p, v) => { base[p] = v; return true; } }); };
+  check('V14 dessin : le cœur, un halo et une sphère (2 drawImage) ; interpolé entre deux pas ; render() sans exception', () => {
+    const H = arene(4315, { mkCtx: cpt });
+    H.call('render(1,16.7);G.heart={x:G.p.x+60,y:G.p.y,col:ET.mite.col};');
+    CNT = { n: 0 }; H.call('drawHeart()'); const n = CNT.n; CNT = null;
+    H.steps(1); const px = H.call('G.heart.px'); H.call('G.heart.x+=10;render(.5,16.7)'); const x = H.call('G.heart.x-G.heart.px');
+    return { ok: n === 2 && px != null && Math.abs(x - 10) < 1e-9, detail: n + ' drawImage ; px ' + px + ' ; position rendue à l’état après render : +' + x };
   });
 }
 

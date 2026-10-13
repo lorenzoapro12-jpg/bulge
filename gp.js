@@ -4,8 +4,9 @@
    (1 carte parmi 3 à l'arrivée sur chaque îlot) et dure toute la partie. Rien ne se garde
    d'une partie à l'autre.
    ========================================================= */
-/* d : durée en pas (60 par seconde) ; 0 = effet instantané. Invincibilité courte (6 s), voulu par le propriétaire. */
-const PUC='#e4ff3a',PU_LIFE=540;
+/* d : durée en pas (60 par seconde) ; 0 = effet instantané. Invincibilité courte (6 s), voulu par le propriétaire.
+   PU_LIFE : un power-up au sol attend 12 s (9 avant le 08/10/2026) */
+const PUC='#e4ff3a',PU_LIFE=720;
 const PU={
   inv:{n:'Invincibilité',d:360,w:9},
   rapid:{n:'Tir rapide',d:480,w:16},

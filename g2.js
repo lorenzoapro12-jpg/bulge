@@ -9,7 +9,7 @@ let G=null;
    les dégâts de la bulle suivent la vie des ennemis, HPM, pour que les bonus restent un vrai gain) ;
    PREYA : écart d'îlots à partir duquel un type devient proie ; GONEA : écart où il quitte le jeu ;
    SPN : pas d'éclosion d'un ennemi, une fois sa marque au sol passée (24 avant le 08/10/2026) */
-const PRAD=18,SEG0=5,NWAVE=3,GROW=1.4,GROWD=1.2,PREYA=2,GONEA=4,EBC='#ff5a2d',EBK=1.15,SPK_AIM=30,SNP_AIM=45,SPN=14;
+const PRAD=18,SEG0=5,NWAVE=3,GROW=1.4,GROWD=1.2,PREYA=2,GONEA=4,EBC='#ff5a2d',EBK=1.3,SPK_AIM=30,SNP_AIM=45,SPN=14;
 /* vie des ennemis selon l'îlot : au pas des dégâts de la bulle (GROWD), +12 % par îlot (deux bonus par îlot depuis le
    02/10/2026 : la construction grandit deux fois plus vite), et ×1,2 contre la cadence de tir plus rapide */
 const HPM=()=>1.2*Math.pow(GROWD,G.isl-1)*(1+.12*(G.isl-1));
@@ -18,7 +18,7 @@ function mkGame(seed){return{state:'play',t:0,time:0,seed,isl:1,ph:'arrive',phT:
   p:null,en:[],eb:[],pb:[],pus:[],fx:[],tx:[],tele:[],marks:[],mines:[],trails:[],boss:null,
   score:0,kills:0,eats:0,hits:0,maxIsl:1,islHit:false,
   trauma:0,freeze:0,glitch:0,kx:0,ky:0,lastFz:-99,l4:-99,hurtT:0,flash:0,timeScale:1,cx:0,cy:0,zoom:1,pcx:null,pcy:null,pzoom:null,
-  banner:null,toasts:[],choices:[],pickIsl:0,pickMid:0,pkMid:false,rerolls:1,picks:[],combo:0,comboT:-999,comboMx:0,
+  banner:null,toasts:[],choices:[],pickIsl:0,pickMid:0,pkMid:false,rerolls:1,picks:[],combo:0,comboT:-999,comboMx:0,heart:null,
   win:false,tgt:null,tgtT:0,dieT:0,manual:false,slowF:1,
   inX:0,inY:0,aimMan:false,aimA:0,tut:{},tutOn:false,biome:'plains',wbn:null,
   dec:decor0(),courant:null,tr:null};}
@@ -58,7 +58,7 @@ function newRun(){
 /* WD vient d'être généré pour l'îlot G.isl : on vide l'arène et on y pose la bulle, au centre (sur la relique) */
 function islStart(){
   const k=G.isl,P=G.p;G.biome=ISL[k-1];setBiome(G.biome);if(typeof drawWeather==='function'){WEA.length=0;WCX=null;}
-  G.ph='arrive';G.phT=0;G.islT=0;G.wave=0;G.wq=null;G.en=[];G.eb=[];G.pb=[];G.pus=[];G.tele=[];G.marks=[];G.mines=[];G.trails=[];G.boss=null;G.wbn=null;
+  G.ph='arrive';G.phT=0;G.islT=0;G.wave=0;G.wq=null;G.en=[];G.eb=[];G.pb=[];G.pus=[];G.tele=[];G.marks=[];G.mines=[];G.trails=[];G.boss=null;G.wbn=null;G.heart=null;
   G.dec=decor0();G.courant=null;if(G.biome==='sea'){const d=siteDir(0,0x5EA);G.courant={x:d[0],y:d[1]};}
   P.x=P.y=0;P.vx=P.vy=0;P.secUsed=false;P.dashing=0;G.cx=G.cy=0;G.zoom=zoomTarget();G.pcx=G.pcy=G.pzoom=null;G.lvx=G.lvy=0;
   prewarm(0,0,WR+60);for(const c of WD.bakes)c.used=0;
@@ -96,6 +96,7 @@ function waveTick(){
   const cap=6+Math.ceil(k*1.6),pend=G.marks.reduce((s,m)=>s+(m.prey?0:m.n),0);
   if((Q.left>0||Q.prey>0&&Q.left<Q.n)&&G.marks.length<4&&(G.phT>=Q.nextT||alive+pend<=3&&G.phT>=Q.lastS+12)&&(alive<cap||G.phT>=Q.nextT+200)){spawnGroup();Q.nextT=G.phT+Math.round(rr(30,55));}
   if(Q.left<=0&&!G.marks.some(m=>!m.prey)&&alive===0){G.score+=100*k*G.wave;
+    if(!Q.hit){const P=G.p;gain(.15);ftext(P.x,P.y-P.r-26,'Vague sans une égratignure : jauge +15 %',COL.gd,15);}
     if(G.wave<NWAVE){G.ph='pause';G.phT=0;}else{G.ph='preboss';G.phT=0;G.marks=[];}}
 }
 /* où paraître : À L'ÉCRAN (la vue rétrécie de 40), ni collé à la bulle (≥ 300) ni au bout de l'îlot, sur un sol libre.
@@ -135,10 +136,20 @@ function islClear(){
 function clearTick(){
   const P=G.p;if(G.phT===35)G.timeScale=1;
   for(const q of G.pus)q.life=Math.min(q.life,90);
+  /* le cœur du gardien vole vers la bulle à partir du 20ᵉ pas ; avalé au contact, ou de force au 70ᵉ (le pilote et __SIM ne bloquent jamais) */
+  const h=G.heart;if(h){if(G.phT>=20){const dx=P.x-h.x,dy=P.y-h.y,d=Math.hypot(dx,dy)||1,s=Math.min(d,Math.min(10,(G.phT-20)*.4));h.x+=dx/d*s;h.y+=dy/d*s;}
+    if(dist2(h.x,h.y,P.x,P.y)<(P.r+10)**2||G.phT>=70)absorbHeart();}
   if(G.phT===40){if(!P.noRegen&&P.seg<P.segMax){P.seg++;SFX.seg();ringFX(P.x,P.y,P.r,P.r*3,COL.cy,24,4);ftext(P.x,P.y-P.r-14,'+1 segment',COL.cy,16);}
-    G.score+=500*G.isl;if(!G.islHit){G.score+=1000*G.isl;toast('Îlot sans une égratignure');}}
+    const bonus=500*G.isl+(G.islHit?0:1000*G.isl);G.score+=bonus;if(!G.islHit)toast('Îlot sans une égratignure');ftext(P.x,P.y-P.r-30,'+'+fmt(bonus),COL.gd,18);}
   if(G.phT>=100){if(G.isl>=NISL){G.win=true;endRun(true);}else transStart();}
 }
+/* CŒUR (08/10/2026, « on ne se sent pas récompensé ») : le gardien abattu (îlots 1 à 7, gb.js bossDie) laisse son cœur. L'avaler
+   fait monter d'un niveau ta DERNIÈRE carte bonus qui n'est pas au maximum (sans tirage : G.picks reste à 16 par partie, la barre
+   de construction suit P.cards) ; si toutes le sont, la jauge se remplit. */
+function absorbHeart(){const P=G.p;let id=null;for(let i=G.picks.length-1;i>=0;i--){const C=CARDS[G.picks[i]];if(C&&C.k==='b'&&(P.cards[C.u.id]||0)<C.u.max){id=C.u.id;break;}}
+  if(id){const u=CARDS[id].u;u.f(P);P.cards[id]++;ftext(P.x,P.y-P.r-24,'Cœur du gardien : '+u.n+' '+ROMAN[P.cards[id]],COL.gd,17);}
+  else{P.gauge=1;ftext(P.x,P.y-P.r-24,'Cœur du gardien : jauge pleine',COL.gd,17);}
+  ringFX(P.x,P.y,P.r,P.r*4,COL.gd,26,5);sparks(P.x,P.y,COL.gd,20,5);P.r=P.baseR*1.5;SFX.power();G.heart=null;}
 /* ---------- croissance : la bulle gonfle, l'îlot rapetisse jusqu'à devenir la relique du suivant ----------
    0-45 : caméra au centre, recul jusqu'à voir l'îlot entier, la bulle gonfle (×GROW) ;
    45 : copie d'écran (g3.js trSnap), îlot suivant généré, la bulle reprend PRAD dans le nouveau repère ;
@@ -171,7 +182,9 @@ function mkEnemy(t,x,y,o){const d=ET[t],age=o&&o.age!=null?o.age:G.isl-d.isl,pre
 function confine(o,r){const dx=o.x,dy=o.y,d=Math.hypot(dx,dy),lim=PR-r;if(d>lim&&d>0){o.x=dx/d*lim;o.y=dy/d*lim;return[dx/d,dy/d];}return null;}
 function ebul(x,y,a,s,r,col){s*=1+.025*(G.isl-1);const b={x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,r,col:col||EBC,life:420,rot:0,gz:false};if(G.eb.length<600)G.eb.push(b);return b;}
 /* tir d'un ennemi : la couleur de son type (on sait qui tire ; un sprite ebSpr par couleur, 8 au plus), ×EBK (le réglage de
-   difficulté des tirs ennemis ; l'aiguille du Tireur d'élite a sa vitesse propre). Les boss appellent ebul directement (EBC). o : champs en plus */
+   difficulté des tirs ennemis ; l'aiguille du Tireur d'élite a sa vitesse propre). 1,15 → 1,3 avec la
+   série et le cœur du gardien : sans aide, le pilote de test gagnait 22 parties sur 26 (16 avant eux) ; à 1,3, 20 sur 26, et la
+   partie « naturelle 12345 » de headless.js redevient une défaite. Les boss appellent ebul directement (EBC). o : champs en plus */
 function ebulE(e,a,s,o){const b=ebul(e.x+Math.cos(a)*e.r*.8,e.y+Math.sin(a)*e.r*.8,a,s*(e.t==='sniper'?1:EBK),Math.max(4.5,e.r*.32),e.col);if(o)Object.assign(b,o);return b;}
 /* les tireurs (ligne de tir requise, updEnemy) ; une annonce en cours (windup) : un critique ou un gros coup l'interrompt (hurtEnemy) */
 const SHOOT={spread:1,sniper:1,orbit:1,gatling:1};
@@ -220,10 +233,18 @@ function deathFx(e){const P=G.p;
     case 'ring':shockwave(e.x,e.y,120,P.dmg*3,true);break;
     case 'spawner':if(G.en.length<40)for(let k=0;k<3;k++){const a=k*TAU/3+e.wob;mkEnemy('mite',e.x+Math.cos(a)*e.r,e.y+Math.sin(a)*e.r,{age:0,spawn:10,parent:e,cd:rr(30,50)});}break;
   }}
-/* COMBO : chaque ennemi abattu ou avalé moins de 1,5 s après le précédent fait monter la série ; le score est
-   multiplié (×1 puis +0,5 toutes les 5, jusqu'à ×3). Affiché sous le score (g3.js drawHUD), annoncé à 10, 25, 50, 100. */
-function comboUp(e){const P=G.p;G.combo=G.t-G.comboT<=90?G.combo+1:1;G.comboT=G.t;if(G.combo>G.comboMx)G.comboMx=G.combo;
+/* COMBO : chaque ennemi abattu ou avalé moins de 2,5 s (SERW ; 1,5 s avant le 08/10/2026 : plus court que le temps d'abattre un
+   ennemi) après le précédent fait monter la série ; une esquive parfaite ou un obstacle cassé la prolongent sans compter (serKeep).
+   Le score est multiplié (×1 puis +0,5 toutes les 5, jusqu'à ×3). Affichée sous la bulle (g3.js drawTexts), annoncée à 10, 25,
+   50, 100 ; en vague (pas en combat de boss), un cadeau à 15 (power-up d'arme ou onde) et la jauge +20 % à 40.
+   EMBALLEMENT (emb) : le tir accélère avec la série, +2 % par kill jusqu'à +25 % (playerFire), traînées plus longues, canons blancs. */
+const SERW=150;
+function emb(){return G.t-G.comboT<=SERW?Math.min(.25,.02*G.combo):0;}
+function serKeep(){if(G.t-G.comboT<=SERW)G.comboT=G.t;}
+function comboUp(e){const P=G.p;G.combo=G.t-G.comboT<=SERW?G.combo+1:1;G.comboT=G.t;if(G.combo>G.comboMx)G.comboMx=G.combo;
   if(G.combo===10||G.combo===25||G.combo===50||G.combo===100){ftext(P.x,P.y-P.r-26,'Série ×'+G.combo+' !',COL.gd,18);SFX.evo();}
+  if(G.ph==='wave'&&G.combo===15){dropPU(P.x+Math.cos(P.ang)*70,P.y+Math.sin(P.ang)*70,pick(['rapid','triple','pierce','wave']));ftext(P.x,P.y-P.r-26,'Série ×15 : cadeau !',COL.gd,18);SFX.evo();}
+  if(G.ph==='wave'&&G.combo===40){gain(.2);ftext(P.x,P.y-P.r-26,'Série ×40 : jauge +20 %',COL.gd,18);SFX.evo();}
   return 1+Math.min(4,Math.floor(G.combo/5))*.5;}
 /* ABSORB (08/10/2026, « on ne se sent pas récompensé ») : avaler en plein combat. À bout (moins de 20 % de vie, 40 % avec Appétit)
    et plus petit que toi (×1,1), un ennemi s'avale au contact au lieu de te blesser ; il clignote (g3.js drawEnemy). À son îlot :
@@ -383,7 +404,7 @@ function updEnemies(){
 function hurtPlayer(sx,sy){
   const P=G.p;if(P.dashing>0&&G.state==='play'&&!P.dead)perfect(sx,sy);if(G.state!=='play'||P.inv>0||P.dashing>0||P.dead||P.gon>0||P.pu.inv>0)return;
   if(P.pu.shield>0){delete P.pu.shield;P.inv=45;SFX.shield();ringFX(P.x,P.y,P.r*1.2,P.r*3.4,COL.wh,20,4);clearNear(120);return;}
-  P.seg--;G.islHit=true;G.hits++;
+  if(G.wq)G.wq.hit=1;P.seg--;G.islHit=true;G.hits++;
   P.inv=60;P.flash=10;shake(.5);G.freeze=Math.max(G.freeze,3);G.glitch=Math.max(G.glitch,8);G.hurtT=22;SFX.hurt();
   const d=Math.hypot(P.x-sx,P.y-sy)||1;P.vx+=(P.x-sx)/d*4;P.vy+=(P.y-sy)/d*4;
   clearNear(90);
@@ -398,10 +419,10 @@ function tryDash(){
   ringFX(P.x,P.y,P.r,P.r*2.2,P.col,14,3);if(P.echo)clearNear(160);if(P.mines)layMine(P.x,P.y);
 }
 /* ESQUIVE PARFAITE (08/10/2026) : un coup (tir, contact, charge, rayon) qui t'aurait touché PENDANT le dash. Une fois par
-   dash : le dash se recharge aussitôt, la jauge prend PERF_G, le temps ralentit un instant. Le dash devient une arme.
+   dash : le dash se recharge aussitôt, la jauge prend PERF_G, la série tient (serKeep), le temps ralentit un instant. Le dash devient une arme.
    CONTRE-ATTAQUE : pendant CTR pas (1,25 s), tous les tirs sont critiques, percent un ennemi de plus, cadence ×1/0,7 ; canons dorés. */
 const PERF_G=.14,CTR=75;
-function perfect(x,y){const P=G.p;if(P.perf)return;P.perf=1;P.dashT=0;P.ctr=CTR;gain(PERF_G);G.perfs=(G.perfs||0)+1;G.score+=50*G.isl;
+function perfect(x,y){const P=G.p;if(P.perf)return;P.perf=1;P.dashT=0;P.ctr=CTR;gain(PERF_G);serKeep();G.perfs=(G.perfs||0)+1;G.score+=50*G.isl;
   G.timeScale=Math.min(G.timeScale,.55);ringFX(P.x,P.y,P.r,P.r*3.2,COL.gd,20,4);sparks(x,y,COL.gd,10,4);ftext(P.x,P.y-P.r-18,'Parfait !',COL.gd,17);SFX.evo();
   if(!G.tut.perf){G.tut.perf=1;toast('Esquive parfaite : ton dash se recharge aussitôt.');}
   if(!G.tut.ctr){G.tut.ctr=1;toast('Contre-attaque : après une esquive parfaite, tous tes tirs sont critiques.');}}
@@ -460,15 +481,16 @@ function pbul(x,y,a,o){const P=G.p;const b={x,y,vx:Math.cos(a)*P.bspd,vy:Math.si
 function playerFire(){
   const P=G.p;if(P.fireT>0){P.fireT--;return;}
   if(!G.manual&&!G.tgt)return;
-  const ct=P.ctr>0;P.fireT+=P.fireI/(P.pu.rapid>0?2:1)*(ct?.7:1);
+  const ct=P.ctr>0,em=emb(),tl=2.2*(1+2*em);P.fireT+=P.fireI/(P.pu.rapid>0?2:1)/(1+em)*(ct?.7:1);
+  if(em>=.15&&!G.tut.emb){G.tut.emb=1;toast('Emballement : enchaîne les éliminations, ton tir accélère.');}
   const n=P.turrets+(P.pu.triple>0?2:0),w=P.spreadW*(n>3?.85:1),thru=P.pu.pierce>0,dm=P.dmg*(P.overload&&puAny()?1.4:1);
   P.shots++;const big=P.burst>0&&P.shots%(6-P.burst)===0;
   /* critique tiré au départ (doré, ×1,3) : l'impact le reprend tel quel (updBullets → hurtEnemy/hurtBoss) */
   for(let k=0;k<n;k++){const a=P.ang+(k-(n-1)/2)*w,ox=Math.cos(a)*P.r*1.1,oy=Math.sin(a)*P.r*1.1,bg=big&&k===(n>>1),cr=ct||R()<P.crit;
-    pbul(P.x+ox,P.y+oy,a,{dmg:dm*(bg?4:1),r:P.bsize*(bg?2.2:1)*(cr?1.3:1),pierce:thru||bg?99:P.pierce+(ct?1:0),thru:thru||bg,crit:cr,col:cr?COL.gd:COL.cy});
+    pbul(P.x+ox,P.y+oy,a,{dmg:dm*(bg?4:1),r:P.bsize*(bg?2.2:1)*(cr?1.3:1),pierce:thru||bg?99:P.pierce+(ct?1:0),thru:thru||bg,crit:cr,col:cr?COL.gd:COL.cy,tl});
     if(k===0||n<4)FX({ty:0,x:P.x+ox,y:P.y+oy,vx:Math.cos(a)*2+P.vx,vy:Math.sin(a)*2+P.vy,life:8,max:8,col:COL.wh,s:P.bsize*.9});}
-  if(P.mirror){const a=P.ang+Math.PI,cr=ct||R()<P.crit;pbul(P.x+Math.cos(a)*P.r,P.y+Math.sin(a)*P.r,a,{dmg:dm*.8,thru,r:P.bsize*(cr?1.3:1),pierce:P.pierce+(ct?1:0),crit:cr,col:cr?COL.gd:COL.cy});}
-  P.recoil=4;SFX.shoot(P.bsize,0);
+  if(P.mirror){const a=P.ang+Math.PI,cr=ct||R()<P.crit;pbul(P.x+Math.cos(a)*P.r,P.y+Math.sin(a)*P.r,a,{dmg:dm*.8,thru,r:P.bsize*(cr?1.3:1),pierce:P.pierce+(ct?1:0),crit:cr,col:cr?COL.gd:COL.cy,tl});}
+  P.recoil=4;SFX.shoot(P.bsize,em);
 }
 /* le boss est la seule « grande » cible ; ces trois noms servent aux armes de zone */
 function BIGS(){const B=G.boss;return B&&bossHittable()?[B]:[];}
@@ -513,7 +535,7 @@ function explode(b){
 function hitObs(o,d){if(o.gone)return;o.hp-=d*(G.p.demol?3:1);o.hf=G.t;if(o.hp<=0)breakObs(o);else if(G.t-(o.ht||-9)>8){o.ht=G.t;sparks(o.cx,o.cy,'#ffffff',3,2,12);}}
 function breakObs(o){
   dropObs(o);const i=OSPR.indexOf(o);if(i>=0)OSPR.splice(i,1);o.spr=o.s1=null;
-  const col=BIO[o.b]?BIO[o.b].a:'#ffffff';shards(o.cx,o.cy,col,10+(o.R/4|0),4,o.R*.5);ringFX(o.cx,o.cy,o.R*.6,o.R*1.6,col,18,3);SFX.brk();shake(.12);G.score+=20;
+  const col=BIO[o.b]?BIO[o.b].a:'#ffffff';shards(o.cx,o.cy,col,10+(o.R/4|0),4,o.R*.5);ringFX(o.cx,o.cy,o.R*.6,o.R*1.6,col,18,3);SFX.brk();shake(.12);G.score+=20;serKeep();
   const P=G.p;if(o.pu||P.luck&&R()<.1*P.luck)dropPU(o.cx,o.cy);
   if(P.demol)for(const e of G.en)if(!e.dead&&e.spawn<=0&&dist2(e.x,e.y,o.cx,o.cy)<(o.R+70+e.r)**2)hurtEnemy(e,P.dmg*4,0,0,true);
 }
@@ -697,7 +719,7 @@ function updCam(){
 }
 function savePrev(){const P=G.p;P.px=P.x;P.py=P.y;P.pang=P.ang;G.pcx=G.cx;G.pcy=G.cy;G.pzoom=G.zoom;
   const sv=a=>{for(let i=0;i<a.length;i++){const o=a[i];o.px=o.x;o.py=o.y;}};sv(G.en);sv(G.pb);sv(G.eb);sv(G.pus);sv(G.fx);
-  const B=G.boss;if(B){B.px=B.x;B.py=B.y;sv(B.nodes);}}
+  const B=G.boss;if(B){B.px=B.x;B.py=B.y;sv(B.nodes);}if(G.heart){G.heart.px=G.heart.x;G.heart.py=G.heart.y;}}
 function step(){
   G.t++;savePrev();
   if(G.freeze>0){G.freeze--;G.trauma=Math.max(0,G.trauma-.01);return;}

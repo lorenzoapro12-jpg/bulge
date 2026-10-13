@@ -8,7 +8,7 @@
          durent moins de TMORT secondes par îlot (avant : 10,5 s ; 5,3 s le 02/10/2026 ; 4,1 s depuis le 08/10, test/vivacite.js
          V5 exige ≤ 4,3 s) — partie assistée, îlots 1 à 3 ;
      R2. la bulle est vive : vitesse ≥ VMIN unités/s (avant : 195) et cadence de tir ≥ TIRMIN tirs/s (avant : 4,3) ;
-     R3. tuer vite paie : une SÉRIE (kills ou proies à moins de 1,5 s d'écart) multiplie le score — le 10ᵉ kill d'une
+     R3. tuer vite paie : une SÉRIE (kills ou proies à moins de 2,5 s d'écart ; 1,5 s avant le 08/10/2026) multiplie le score — le 10ᵉ kill d'une
          série rapporte au moins 1,5 × le premier (avant : pas de série, tous égaux) ;
      R4. la mite n'est plus un pion qui avance : à portée, elle BONDIT (pointe de vitesse ≥ 1,8 × son allure médiane ;
          avant : ×1,04, elle glissait droit sur toi).

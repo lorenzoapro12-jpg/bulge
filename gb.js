@@ -24,7 +24,7 @@ const BOSSCOL='#ff3355';
 function bossCol(B){return B.k===8?BOSSCOL:ET[B.D.t].col;}
 function spawnBoss(){
   const k=G.isl,D=BOSS[k-1],hp=Math.round(1.3*D.hp*Math.pow(GROWD,k-1)*(1+.14*(k-1)));
-  const B={k,D,x:0,y:0,vx:0,vy:0,r:D.r,hp,mhp:hp,phase:1,t:0,st:0,st2:0,ca:0,cn:0,trans:0,spawn:BSPN,flash:0,ang:0,dead:false,gone:false,dieT:0,nodes:[],dir:1,wob:0,stun:0,chain:0,cyc:0,cd:60,lay:0};
+  const B={k,D,x:0,y:0,vx:0,vy:0,r:D.r,hp,mhp:hp,phase:1,t:0,st:0,st2:0,ca:0,cn:0,trans:0,spawn:BSPN,flash:0,ang:0,dead:false,gone:false,dieT:0,nodes:[],dir:1,wob:0,stun:0,chain:0,cyc:0,cd:60,lay:0,kids:0};
   if(k===8)for(let i=0;i<6;i++){const nh=Math.round(18*Math.pow(GROWD,k-1));B.nodes.push({x:0,y:0,r:15,hp:nh,mhp:nh,dead:false,cd:rr(60,160),flash:0});}
   G.boss=B;G.ph='boss';
   banner(D.n,D.sub,bossCol(B),170);setMusic(2);SFX.bossIn();shake(.5);G.glitch=25;
@@ -112,7 +112,8 @@ const BOSSAI=[
   /* 7 Pulsar Majeur : anneaux à brèche ; phase 2, anneaux tournants alternés */
   (B,P,aP)=>{const p2=B.phase>1;drift(B,Math.cos(B.t*.005)*150,Math.sin(B.t*.007)*150,.7);
     if(B.t%(p2?72:100)===0){B.dir*=-1;bossRing(B,34,2,aP+rr(-.6,.6),R()*TAU,p2?B.dir*.006:0);}},
-  /* 8 L'Hypernoyau : 3 phases, nœuds orbitaux qui le protègent */
+  /* 8 L'Hypernoyau : 3 phases, nœuds orbitaux qui le protègent ; en phase 2, il appelle des Mites d'âge 0 (parent : lui, comme
+     les petits d'un Porteur ; sans parent, l'observateur de headless.js les prenait pour un type resté 7 îlots trop longtemps) */
   (B,P,aP)=>{const f=B.hp/B.mhp;
     if(B.phase===1)drift(B,Math.cos(B.t*.009)*200,Math.sin(B.t*.013)*160,1);
     else if(B.phase===2){const dd=Math.hypot(P.x-B.x,P.y-B.y),s=dd>300?1:-1;drift(B,B.x+(P.x-B.x)*s-(P.y-B.y)*.6,B.y+(P.y-B.y)*s+(P.x-B.x)*.6,1.35);}
@@ -120,7 +121,7 @@ const BOSSAI=[
     if(B.phase===1){if(B.t%8===0)for(let k=0;k<3;k++)bossShot(B,B.t*.045+k*TAU/3,2.2,COL.mg);if(B.t%150===75){for(let k=-2;k<=2;k++)bossShot(B,aP+k*.16,3.3,COL.gd);SFX.bshot();}}
     else if(B.phase===2){if(B.t%240===0)B.dir*=-1;if(B.t%8===0)for(let k=0;k<3;k++)bossShot(B,B.dir*B.t*.04+k*TAU/3,2.4,COL.mg);
       if(B.t%130===65){tele({ty:'beam',x:B.x,y:B.y,a:aP,len:2000,w:26,warn:55,on:22,col:BOSSCOL,fo:1});}
-      if(B.t%330===160){let n=0;for(const e of G.en)if(!e.dead)n++;if(n<8)for(let k=0;k<3;k++){const a=R()*TAU;mkEnemy('mite',B.x+Math.cos(a)*(B.r+20),B.y+Math.sin(a)*(B.r+20),{age:0,spawn:15,boss:1});}}}
+      if(B.t%330===160){let n=0;for(const e of G.en)if(!e.dead)n++;if(n<8)for(let k=0;k<3;k++){const a=R()*TAU;mkEnemy('mite',B.x+Math.cos(a)*(B.r+20),B.y+Math.sin(a)*(B.r+20),{age:0,spawn:15,boss:1,parent:B});}}}
     else{if(B.t%70===0)bossRing(B,26,2.4,R()*TAU);if(B.t%16===0)bossShot(B,aP+rr(-.08,.08),3.6,COL.gd,5);}
     if(B.phase<3)for(const n of B.nodes){if(n.dead)continue;if((n.cd-=G.slowF)<=0){n.cd=rr(140,200);ebul(n.x,n.y,Math.atan2(P.y-n.y,P.x-n.x),2.8,5,COL.or);}}},
 ];
@@ -159,5 +160,7 @@ function bossDie(){
   const B=G.boss;B.dead=true;B.dieT=0;B.vx=B.vy=0;G.tele=[];
   for(const b of G.eb)sparks(b.x,b.y,b.col,1,1.5,12);G.eb=[];
   SFX.phase();shake(1);G.glitch=30;G.timeScale=.45;G.score+=1000*B.k;
+  /* son cœur reste (îlots 1 à 7) : il vole vers la bulle pendant l'îlot nettoyé (g2.js clearTick, absorbHeart) */
+  if(B.k<NISL)G.heart={x:B.x,y:B.y,col:bossCol(B)};
   islClear();
 }
