@@ -22,8 +22,11 @@ const BOSS=[
 ];
 const BOSSCOL='#ff3355';
 function bossCol(B){return B.k===8?BOSSCOL:ET[B.D.t].col;}
+/* vie : 1,3 × hp × GROWD^(k-1) × (1 + ,18 (k-1)) ; le boss 1 ne bouge pas. COURBE (08/10/2026) proposait +10 % par îlot (+14 % avant) ;
+   la passe d'équilibrage l'a monté à +18 % : un combat de boss rend peu (peu de kills, pas d'îlot nettoyé), c'est là que la partie
+   se joue. À +10 %, le pilote naturel gagnait 20 parties sur 24 ; à +18 % (avec les tirs à +8 % par îlot), 11 sur 24 */
 function spawnBoss(){
-  const k=G.isl,D=BOSS[k-1],hp=Math.round(1.3*D.hp*Math.pow(GROWD,k-1)*(1+.14*(k-1)));
+  const k=G.isl,D=BOSS[k-1],hp=Math.round(1.3*D.hp*Math.pow(GROWD,k-1)*(1+.18*(k-1)));
   const B={k,D,x:0,y:0,vx:0,vy:0,r:D.r,hp,mhp:hp,phase:1,t:0,st:0,st2:0,ca:0,cn:0,trans:0,spawn:BSPN,flash:0,ang:0,dead:false,gone:false,dieT:0,nodes:[],dir:1,wob:0,stun:0,chain:0,cyc:0,cd:60,lay:0,kids:0};
   if(k===8)for(let i=0;i<6;i++){const nh=Math.round(18*Math.pow(GROWD,k-1));B.nodes.push({x:0,y:0,r:15,hp:nh,mhp:nh,dead:false,cd:rr(60,160),flash:0});}
   G.boss=B;G.ph='boss';

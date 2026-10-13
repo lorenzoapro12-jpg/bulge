@@ -138,9 +138,15 @@ Outils complémentaires :
   Digestion à 20 absorptions) ; une série qui paie (fenêtre `SERW` de 2,5 s, prolongée par l'esquive parfaite et l'obstacle
   cassé, `serKeep` ; cadeau à 15 et jauge à 40 en vague ; Emballement `emb()` : le tir accélère avec la série ; affichée
   sous la bulle) ; le cœur du gardien (`absorbHeart` : ta dernière carte bonus monte d'un niveau, sans tirage, `G.picks`
-  reste à 16 ; sinon jauge pleine), vague sans une égratignure (jauge +15 %, `G.wq.hit`). Chaque changement du plan y ajoute ses
-  critères, vus en ECHEC avec `--ref=379e0fb` ; `--long` est réservé à la passe d'équilibrage, `--seul=V9` (mise au
-  point) ne lance que les critères dont le nom commence ainsi. Appelé par headless.js.
+  reste à 16 ; sinon jauge pleine), vague sans une égratignure (jauge +15 %, `G.wq.hit`) ; des élites qui se lisent (`e.mod` : *vive* ×1,5 en vitesse, recharge
+  ×1,6, traînée ; *blindée* : bouclier de face `e.sa`, ×0,2 de face et ×1,5 de dos, la visée la prend de dos ; *volatile* :
+  explosion de 110 u 36 pas après sa mort, `G.vol`, annoncée par un cercle rouge) ; une courbe qui se joue (`FODA` : l'ancien
+  type garde 60 % de sa vie ; l'ennemi touché se dégonfle, sa touche reste `e.r` ; allure par îlot, part des kills en série,
+  power-up actif ≥ 25 % du temps). Chaque changement du plan y ajoute ses critères, vus en ECHEC avec `--ref=379e0fb` ;
+  `--long` est réservé à la passe d'équilibrage (pilote naturel, 12 graines, 40 min simulées : ≤ 6 victoires, 12345
+  perdue, aucune mort aux îlots 1-2 dans ≥ 10 parties, ≥ 2 touches par minute de vague aux îlots 3-4 ; réglages dans
+  `g2.js`, `EBK`/`ECD`/`WV3`/`HPM`), `--seul=V9` (mise au point) ne lance que les critères dont le nom commence ainsi.
+  Appelé par headless.js.
 - `node test/unused.js` — recensement du code mort (identifiants, `SFX`, `id` HTML,
   classes CSS, médias). À lancer avant d'affirmer qu'un symbole est utilisé.
 - `node test/compteur.js` — garde-fou du compteur de diagnostic (`meta.fps`) : chaque ligne doit
