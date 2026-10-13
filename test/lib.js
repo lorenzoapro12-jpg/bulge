@@ -162,7 +162,8 @@ function mkGame(opts = {}) {
    Un joueur prudent : esquive les tirs (en anticipant leur trajectoire) et les zones annoncées (traits, bandes,
    arcs), garde ses distances avec ce qui n'est pas une proie, avale les proies, ramasse les power-ups, va
    chercher ce qu'il ne voit pas (le tir automatique ne vise que l'écran), dash quand deux tirs le serrent (ou de côté
-   quand une Mite bondit, qu'une Épine charge sur lui ; il sort du trait d'une Épine qui vise),
+   quand une Mite bondit, qu'une Épine charge sur lui ; il sort du trait d'une Épine qui vise, de la ligne verrouillée d'un
+   Tireur d'élite),
    gonfle quand la jauge est pleine et la foule dense. __SIM_GOD : membrane et invulnérabilité entretenues
    (couverture du déroulé complet, pas de l'équilibrage). __SIM_BOOST : dégâts ×n. */
 const AI = `
@@ -183,7 +184,10 @@ window.__SIM_INPUT = function(){
        elle vise le point de rencontre, un pas de côté régulier est justement ce qu'elle anticipe (le dash, plus bas, l'esquive).
        Sur un code plus ancien, ces champs n'existent pas ou ne prennent pas ces valeurs : rien ne change. */
     const ux = Math.cos(e.ca || 0), uy = Math.sin(e.ca || 0), sl = -dx * uy + dy * ux, sg = sl >= 0 ? 1 : -1;
-    if (e.t === 'spike' && e.st === 1) { const s = dx * ux + dy * uy; if (s > -P.r && s < 340 + P.r && Math.abs(sl) < P.r + 40) { vx += -uy * sg * 3; vy += ux * sg * 3; } } }
+    if (e.t === 'spike' && e.st === 1) { const s = dx * ux + dy * uy; if (s > -P.r && s < 340 + P.r && Math.abs(sl) < P.r + 40) { vx += -uy * sg * 3; vy += ux * sg * 3; } }
+    /* TIREURS : hors de la ligne d'un Tireur d'élite dont la visée est verrouillée (0 < tele ≤ 12) */
+    if (e.t === 'sniper' && e.tele > 0 && e.tele <= 12) { const qx = Math.cos(e.ta), qy = Math.sin(e.ta), ql = -dx * qy + dy * qx, qs = ql >= 0 ? 1 : -1;
+      if (dx * qx + dy * qy > 0 && Math.abs(ql) < P.r + 40) { vx += -qy * qs * 3; vy += qx * qs * 3; } } }
   const B = G.boss; if (B && !B.dead && B.spawn <= 0) { const dx = P.x - B.x, dy = P.y - B.y, d = Math.hypot(dx, dy) || 1, R = B.r + 220; if (d < R) { vx += dx / d * (R - d) / R * 3; vy += dy / d * (R - d) / R * 3; } else if (d > viewR() + B.r * .4 - 30) { const w = d > viewR() * 1.5 ? 2.5 : .9; vx -= dx / d * w; vy -= dy / d * w; } }
   else { let ne = null, nd = 1e18; for (const e of G.en) { if (e.dead || e.prey || e.spawn > 0) continue; const d = (e.x - P.x) ** 2 + (e.y - P.y) ** 2; if (d < nd) { nd = d; ne = e; } } if (ne && nd > (viewR() - 40) ** 2) { const d = Math.sqrt(nd); vx += (ne.x - P.x) / d * .7; vy += (ne.y - P.y) / d * .7; } }
   for (const q of G.pus) { const d = Math.hypot(q.x - P.x, q.y - P.y) * .6; if (d < td) { td = d; tgt = q; } }

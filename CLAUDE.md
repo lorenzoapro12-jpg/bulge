@@ -127,9 +127,13 @@ Outils complémentaires :
   dès que la sienne meurt, un tireur hors de l'écran ne tire pas et revient vite, un tir de base pousse à peine
   (≤ 0,45 u/pas) ; pas d'écran vide (la vague s'ouvre sur deux groupes en tenaille, le suivant vient avant que l'arène se
   vide, on paraît à l'écran ; mesuré au pilote invulnérable sur six graines) ; une mêlée qui touche (la Mite s'annonce puis
-  bondit au point de rencontre, l'Épine verrouille sa visée, charge 340 u et reste sonnée contre un rocher, `e.stun`).
-  Chaque changement du plan y ajoute ses critères, vus en ECHEC
-  avec `--ref=379e0fb` ; `--long` est réservé à la passe d'équilibrage. Appelé par headless.js.
+  bondit au point de rencontre, l'Épine verrouille sa visée, charge 340 u et reste sonnée contre un rocher, `e.stun`) ;
+  des tireurs qui se plantent (le Tireur s'annonce 22 pas puis tire un éventail de 5 plus vite que la bulle, aucun tir
+  dans un rocher : ligne de tir `e.blk`, il se décale ; le Tireur d'élite verrouille sa visée et tire une aiguille ; un
+  critique pendant une annonce l'annule, `windup`) ; des lourds qui ont une voix (orbes du Pulsar destructibles, à ≤ 380 u
+  seulement ; montée en régime de la Gatling ; deux coups courbes de l'Orbiteur). Chaque changement du plan y ajoute ses
+  critères, vus en ECHEC avec `--ref=379e0fb` ; `--long` est réservé à la passe d'équilibrage, `--seul=V9` (mise au
+  point) ne lance que les critères dont le nom commence ainsi. Appelé par headless.js.
 - `node test/unused.js` — recensement du code mort (identifiants, `SFX`, `id` HTML,
   classes CSS, médias). À lancer avant d'affirmer qu'un symbole est utilisé.
 - `node test/compteur.js` — garde-fou du compteur de diagnostic (`meta.fps`) : chaque ligne doit

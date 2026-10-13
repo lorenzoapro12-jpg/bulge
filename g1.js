@@ -40,16 +40,17 @@ function saveMeta(){store.set('meta',meta);}
 /* Ennemis : un type par îlot (isl), une forme = un comportement (dessin : g3.js drawEnemy).
    r = rayon à l'îlot d'arrivée. Chaque îlot plus loin, le type paraît 1,4× plus petit (g2.js mkEnemy) :
    à 2 îlots d'écart il devient une PROIE (pâle, inoffensif, il fuit), à 4 il quitte le jeu.
-   Couleurs RÉSERVÉES aux ennemis : rouge, magenta, orange ; jamais cyan (toi) ni vert-jaune (power-ups). */
+   Couleurs RÉSERVÉES aux ennemis : rouge, magenta, orange ; jamais cyan (toi) ni vert-jaune (power-ups). Un tir ennemi a la
+   couleur de son type (g2.js ebulE) : on sait qui tire. */
 const ET={
   mite:{n:'Mite',isl:1,r:10,hp:1.6,spd:2.5,col:'#ff2d95',sc:20},
   spike:{n:'Épine',isl:2,r:15,hp:5,spd:1.4,col:'#ff3355',sc:40},
-  spread:{n:'Tireur',isl:3,r:16,hp:6,spd:1.15,col:'#ff8a2d',sc:50},
-  sniper:{n:'Tireur d\'élite',isl:4,r:13,hp:4.5,spd:1.25,col:'#ff5a36',sc:60},
+  spread:{n:'Tireur',isl:3,r:16,hp:5,spd:1.5,col:'#ff8a2d',sc:50},
+  sniper:{n:'Tireur d\'élite',isl:4,r:13,hp:4.5,spd:1.5,col:'#ff5a36',sc:60},
   orbit:{n:'Orbiteur',isl:5,r:14,hp:6,spd:2.1,col:'#ff4fd8',sc:60},
-  gatling:{n:'Gatling',isl:6,r:19,hp:9,spd:.5,col:'#ffa22d',sc:80},
-  ring:{n:'Pulsar',isl:7,r:21,hp:10,spd:.6,col:'#ff6a5a',sc:90},
-  spawner:{n:'Porteur',isl:8,r:27,hp:16,spd:.5,col:'#e040ff',sc:120},
+  gatling:{n:'Gatling',isl:6,r:19,hp:9,spd:.8,col:'#ffa22d',sc:80},
+  ring:{n:'Pulsar',isl:7,r:21,hp:10,spd:.9,col:'#ff6a5a',sc:90},
+  spawner:{n:'Porteur',isl:8,r:27,hp:16,spd:.8,col:'#e040ff',sc:120},
 };
 const ETL=['mite','spike','spread','sniper','orbit','gatling','ring','spawner'];
 

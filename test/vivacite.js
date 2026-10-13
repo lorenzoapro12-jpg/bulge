@@ -29,17 +29,23 @@
      V8. MÊLÉE : une Mite à 200 u touche la bulle qui file droit à angle droit (elle s'annonce ≥ 10 pas à l'arrêt, puis bondit
          ≥ 190 u) ; l'Épine verrouille sa visée les 10 derniers pas et charge ≥ 320 u ; contre un rocher, elle reste sonnée
          (≥ 50 pas), sans danger au contact, et prend ×2 ; le dessin annonce tout cela (trait blanc, trait plein, points dorés).
+     V9. TIREURS : à l'îlot 3, le Tireur se plante ≥ 20 pas puis tire un éventail de 5, dans sa couleur, plus vite que la bulle ;
+         il ne tire pas dans un rocher massif (il se décale ≥ 80 u) ; le Tireur d'élite verrouille sa visée les 12 derniers pas et
+         tire une aiguille ≥ 13 u/pas ; un critique pendant l'annonce l'annule ; dessin : bouches blanches, visée blanche, aiguilles ;
+     V10. LOURDS : un tir de la bulle détruit un orbe de Pulsar et s'arrête ; la Gatling se plante ≥ 25 pas avant sa rafale ; le
+         Pulsar ne pulse qu'à ≤ 380 u, ≤ 10 orbes après une inspiration ; l'Orbiteur tire deux coups courbes à 8 pas d'écart.
 
    node test/vivacite.js                arbre de travail
    node test/vivacite.js --ref=<commit> code d'un commit (379e0fb : tous les critères ECHOUENT)
    node test/vivacite.js --long         en plus, la passe d'équilibrage (réservée à COURBE ; hors GARDES de headless.js)
+   node test/vivacite.js --seul=V9      mise au point : seuls les critères dont le nom commence ainsi
    Code de sortie : 0 si tout passe, 1 sinon.
    ========================================================= */
 const L = require('./lib');
 const REF = L.ARG('ref'), LONG = !!L.ARG('long');
 
-const checks = [];
-const check = (name, fn) => { let r; try { r = fn(); } catch (e) { r = { ok: false, detail: 'exception : ' + String(e && e.message || e).slice(0, 160) }; } checks.push({ name, ok: !!r.ok, detail: r.detail }); };
+const checks = [], SEUL = L.ARG('seul');
+const check = (name, fn) => { if (SEUL && !name.startsWith(SEUL)) return; let r; try { r = fn(); } catch (e) { r = { ok: false, detail: 'exception : ' + String(e && e.message || e).slice(0, 160) }; } checks.push({ name, ok: !!r.ok, detail: r.detail }); };
 /* une arène vide et sans vague (le motif calme() de headless.js), bulle intouchable qui ne tire pas */
 const calme = H => H.call('G.en=[];G.eb=[];G.marks=[];G.wq=null;G.ph="pause";G.phT=-1e9;');
 function arene(seed, opts) {
@@ -273,11 +279,13 @@ check('V6 un Tireur hors de l’écran ne tire pas (cd forcé à 0, 240 pas) et 
   H.call(`G.en=[];G.eb=[];${pin}window.__T=mkEnemy('spread',Math.cos(${a})*700,Math.sin(${a})*700,{spawn:0,age:0});`);
   for (let i = 0; i < 240; i++) { H.call(`${pin}{const e=window.__T;e.x=Math.cos(${a})*700;e.y=Math.sin(${a})*700;e.vx=e.vy=0;e.cd=0;}`); H.steps(1); }
   const tirs = H.call('G.eb.length');
-  /* 2. distance gagnée en 40 pas, au repos au départ : à 440 u (à l'écran) puis à 700 u (hors de l'écran) */
-  const appr = d0 => { H.call(`G.en=[];G.eb=[];${pin}window.__T=mkEnemy('spread',Math.cos(${a})*${d0},Math.sin(${a})*${d0},{spawn:0,age:0});`);
-    for (let i = 0; i < 40; i++) { H.call(`${pin}window.__T.cd=0;`); H.steps(1); }
+  /* 2. distance gagnée en 40 pas, au repos au départ : à 440 u (à l'écran) puis à 700 u (hors de l'écran). Depuis TIREURS, un Tireur
+     prêt à tirer à l'écran SE PLANTE 22 pas : à l'écran on mesure donc son allure de marche (cd 1e9) ; hors de l'écran, cd forcé à
+     0 comme au 1. (il ne doit ni tirer ni se planter) */
+  const appr = (d0, cd) => { H.call(`G.en=[];G.eb=[];${pin}window.__T=mkEnemy('spread',Math.cos(${a})*${d0},Math.sin(${a})*${d0},{spawn:0,age:0});`);
+    for (let i = 0; i < 40; i++) { H.call(`${pin}window.__T.cd=${cd};`); H.steps(1); }
     return d0 - H.call('Math.hypot(window.__T.x,window.__T.y)'); };
-  const dIn = appr(440), dOut = appr(700);
+  const dIn = appr(440, 1e9), dOut = appr(700, 0);
   return { ok: tirs === 0 && dOut >= 2 * dIn && dIn > 5, detail: 'hors de l’écran : ' + tirs + ' tir(s) ennemi(s) en 240 pas ; en 40 pas, ' + dOut.toFixed(1) + ' u gagnés hors de l’écran contre ' + dIn.toFixed(1) + ' à l’écran (×' + (dOut / dIn).toFixed(2) + ')' };
 });
 check('V6 un tir de base (r 4,5) ne pousse l’ennemi que de ≤ 0,45 u/pas', () => {
@@ -438,9 +446,157 @@ check('V8 une Épine qui charge dans un rocher massif reste sonnée (≥ 50 pas)
   });
 }
 
+/* ================= V9 : TIREURS =================
+   des tireurs qui se plantent et tirent : le Tireur s'arrête, s'annonce, puis tire un éventail de 5 plus vite que la bulle ;
+   il ne tire pas dans un rocher (il se décale) ; le Tireur d'élite verrouille sa visée les 12 derniers pas et tire une aiguille
+   ≥ 13 u/pas ; un critique pendant l'annonce l'interrompt. Chaque type tire dans sa couleur. */
+/* nouveaux tirs ennemis depuis le dernier appel (marqués), et la ligne de l'ennemi E à la bulle coupée par un solide
+   (échantillon tous les 10 u : le juge est le test, pas lineClear du jeu) */
+const NEUFS = 'window.__neufs=()=>{const n=[];for(const b of G.eb)if(!b.__m){b.__m=1;n.push(b);}return n;};window.__coupe=(e)=>{const P=G.p,d=Math.hypot(P.x-e.x,P.y-e.y),n=Math.ceil(d/10);for(let k=1;k<n;k++){const t=k/n,o=pointHit(e.x+(P.x-e.x)*t,e.y+(P.y-e.y)*t,0);if(o&&!o.brk)return true;}return false;};';
+check('V9 îlot 3 : un Tireur à 250 u (cd 0) se plante ≥ 20 pas (|v| < ,2), puis tire un éventail de 5, dans sa couleur, plus vite que la bulle', () => {
+  const H = arene(4280), z = zone(H, 560, 420);
+  if (!z) return { ok: false, detail: 'aucune zone libre' };
+  const [gx, gy] = z;
+  H.call(NEUFS + `(()=>{G.isl=3;const P=G.p;P.x=${gx + 60};P.y=${gy + 210};P.vx=P.vy=0;G.cx=P.x;G.cy=P.y;window.__T=mkEnemy('spread',${gx + 310},${gy + 210},{spawn:0,age:0,cd:0});})()`);
+  let fixe = 0, n = 0, b = null;
+  for (; n < 90; n++) {
+    H.steps(1);
+    const s = J(H, 'JSON.stringify({v:Math.hypot(window.__T.vx,window.__T.vy),b:window.__neufs().map(b=>[b.col,Math.hypot(b.vx,b.vy)])})');
+    if (s.b.length) { b = s.b; break; }
+    if (s.v < .2) fixe++; else fixe = 0;
+  }
+  const col = H.call('ET.spread.col'), spd = H.call('G.p.spd');
+  const ok = !!b && fixe >= 20 && b.length === 5 && b.every(x => x[0] === col && x[1] > spd);
+  return { ok, detail: b ? 'planté ' + fixe + ' pas, puis ' + b.length + ' tir(s) au pas ' + (n + 1) + ', couleur(s) ' + [...new Set(b.map(x => x[0]))].join(' ') + ' (Tireur ' + col + '), vitesse ' + b[0][1].toFixed(2) + ' u/pas (bulle ' + spd + ')' : 'aucun tir en 90 pas' };
+});
+check('V9 un Tireur dont la ligne passe par un rocher massif ne tire pas dedans (200 pas, bulle immobile) : il se décale (≥ 80 u)', () => {
+  const H = arene(4281);
+  const r = J(H, NEUFS + `(()=>{const P=G.p;for(let k=1;k<=8;k++){if(k>1){genIslet(G.seed,k);G.isl=k;G.pickIsl=k;islStart();G.en=[];G.eb=[];G.marks=[];G.wq=null;G.ph='pause';G.phT=-1e9;}
+      for(let cx=-3;cx<=3;cx++)for(let cy=-3;cy<=3;cy++){const c=getChunk(cx,cy);if(!c)continue;
+        for(const o of c.obs){if(o.brk||o.gone||o.wall||o.R<35||o.R>110)continue;
+          for(let i=0;i<16;i++){const u=i*TAU/16,ux=Math.cos(u),uy=Math.sin(u),px=o.cx-ux*(o.R+60),py=o.cy-uy*(o.R+60),tx=o.cx+ux*(o.R+40),ty=o.cy+uy*(o.R+40);
+            if(Math.hypot(px,py)>PR-150||Math.hypot(tx,ty)>PR-150||pointHit(px,py,P.r+6)||wallNear(px,py,P.r+6)||pointHit(tx,ty,24)||wallNear(tx,ty,24))continue;
+            P.x=px;P.y=py;P.vx=P.vy=0;G.cx=px;G.cy=py;const e=mkEnemy('spread',tx,ty,{spawn:0,age:0});if(!window.__coupe(e)){G.en=[];continue;}
+            window.__T=e;return JSON.stringify({k,R:Math.round(o.R),x:tx,y:ty,d:Math.round(Math.hypot(tx-px,ty-py))});}}}}
+    return 'null';})()`);
+  if (!r) return { ok: false, detail: 'aucun rocher massif dégagé trouvé' };
+  let tirs = 0, dedans = 0, d = 0;
+  for (let i = 0; i < 200; i++) {
+    H.steps(1);
+    const s = J(H, `JSON.stringify({n:window.__neufs().length,c:window.__coupe(window.__T),x:window.__T.x,y:window.__T.y,m:window.__T.dead})`);
+    if (s.m) break;
+    tirs += s.n; if (s.c) dedans += s.n; d = Math.max(d, Math.hypot(s.x - r.x, s.y - r.y));
+  }
+  return { ok: dedans === 0 && d >= 80, detail: 'îlot ' + r.k + ', rocher R ' + r.R + ', Tireur à ' + r.d + ' u : ' + dedans + ' tir(s) dans le rocher (' + tirs + ' en tout) ; il s’est décalé de ' + d.toFixed(0) + ' u' };
+});
+check('V9 le Tireur d’élite vise en anticipant, VERROUILLE sa visée les 12 derniers pas (la bulle file), puis tire une aiguille ≥ 13 u/pas', () => {
+  const H = arene(4282), z = zone(H, 560, 420);
+  if (!z) return { ok: false, detail: 'aucune zone libre' };
+  const [gx, gy] = z;
+  H.call(NEUFS + `(()=>{const P=G.p;P.x=${gx + 60};P.y=${gy + 60};P.vx=P.spd;P.vy=0;G.cx=P.x;G.cy=P.y;window.__S=mkEnemy('sniper',${gx + 160},${gy + 340},{spawn:0,age:0,cd:0});
+    window.__SIM_INPUT=function(){G.inX=1;G.inY=0;G.aimMan=false;};})()`);
+  const vise = [], verrou = []; let v = 0, ndl = false;
+  for (let i = 0; i < 120; i++) {
+    H.steps(1);
+    const s = J(H, 'JSON.stringify({tl:window.__S.tele,ta:window.__S.ta,b:window.__neufs().map(b=>[Math.hypot(b.vx,b.vy),!!b.ndl])})');
+    if (s.tl > 0) { vise.push(s.ta); if (s.tl <= 12) verrou.push(s.ta); }
+    if (s.b.length) { v = s.b[0][0]; ndl = s.b[0][1]; break; }
+  }
+  const fixe = verrou.length >= 12 && verrou.every(a => a === verrou[0]), suit = vise.length > 14 && vise[0] !== vise[vise.length - 13];
+  return { ok: fixe && suit && v >= 13, detail: 'visée ' + vise.length + ' pas, ' + (suit ? 'suit la bulle' : 'ne bouge pas') + ', ' + (fixe ? 'verrouillée ' + verrou.length + ' pas' : 'pas verrouillée (' + verrou.length + ' pas, ' + new Set(verrou).size + ' angles)') + ' ; tir à ' + v.toFixed(2) + ' u/pas' + (ndl ? ' (aiguille)' : '') };
+});
+check('V9 un critique pendant l’annonce du Tireur annule sa salve (0 tir) ; un petit coup sans critique ne l’annule pas', () => {
+  const H = arene(4283), z = zone(H, 560, 420);
+  if (!z) return { ok: false, detail: 'aucune zone libre' };
+  const [gx, gy] = z;
+  H.call(NEUFS + `(()=>{G.isl=3;const P=G.p;P.crit=0;P.x=${gx + 60};P.y=${gy + 210};P.vx=P.vy=0;G.cx=P.x;G.cy=P.y;window.__T=mkEnemy('spread',${gx + 310},${gy + 210},{spawn:0,age:0,cd:0});window.__T.hp=window.__T.mhp=100;})()`);
+  const salve = cr => {
+    H.call('window.__T.cd=0;window.__T.st=0;window.__neufs();');
+    let k = 0; for (; k < 6 && !H.call('window.__T.st>0'); k++) H.steps(1);
+    if (!H.call('window.__T.st>0')) return null;
+    H.call(`hurtEnemy(window.__T,1,0,0,true,${cr})`);
+    const st = H.call('window.__T.st'); let n = 0;
+    for (let i = 0; i < 40; i++) { H.steps(1); n += H.call('window.__neufs().length'); }
+    return { st, n };
+  };
+  const a = salve(false), b = salve(true);
+  if (!a || !b) return { ok: false, detail: 'le Tireur ne s’annonce jamais (st reste 0) : il tire sans prévenir' };
+  return { ok: a.n === 5 && b.st === 0 && b.n === 0, detail: 'petit coup pendant l’annonce : ' + a.n + ' tir(s) ; critique pendant l’annonce : annonce ' + (b.st === 0 ? 'coupée' : 'continue') + ', ' + b.n + ' tir(s)' };
+});
+
+/* ================= V10 : LOURDS =================
+   les lourds ont une voix : l'Orbiteur tire deux coups courbes, la Gatling monte en régime (plantée, muette) avant sa rafale,
+   le Pulsar n'inspire qu'à portée (380 u) et souffle au plus 10 orbes qu'un tir de la bulle détruit, le Porteur vient à toi. */
+check('V10 un tir de la bulle qui touche un orbe de Pulsar le détruit (G.eb − 1) et s’arrête (perforation 0) ; perforant, il continue', () => {
+  const H = arene(4284), z = zone(H, 300, 120);
+  if (!z) return { ok: false, detail: 'aucune zone libre' };
+  const [gx, gy] = z;
+  const essai = pierce => J(H, `(()=>{G.eb=[];G.pb=[];const ox=${gx + 220},oy=${gy + 60},q=ebul(ox,oy,0,0,8,ET.ring.col);q.vx=q.vy=0;q.r=8;q.sh=1;
+    const b=pbul(ox-24,oy,0,{pierce:${pierce},rico:0,split:0,home:0});window.__B=b;return JSON.stringify(G.eb.length);})()`);
+  const n0 = essai(0); H.steps(3); const a = J(H, 'JSON.stringify({eb:G.eb.length,pb:G.pb.length})');
+  const n1 = essai(1); H.steps(3); const b = J(H, 'JSON.stringify({eb:G.eb.length,pb:G.pb.length,pr:window.__B.pierce})');
+  return { ok: n0 === 1 && a.eb === 0 && a.pb === 0 && n1 === 1 && b.eb === 0 && b.pb === 1 && b.pr === 0,
+    detail: 'perforation 0 : orbes ' + n0 + ' → ' + a.eb + ', tirs restants ' + a.pb + ' ; perforation 1 : orbes ' + n1 + ' → ' + b.eb + ', tirs restants ' + b.pb + ' (perforation ' + b.pr + ')' };
+});
+check('V10 une Gatling (cd 0) à 250 u se plante ≥ 25 pas (montée en régime) avant sa première balle', () => {
+  const H = arene(4286), z = zone(H, 560, 420);
+  if (!z) return { ok: false, detail: 'aucune zone libre' };
+  const [gx, gy] = z;
+  H.call(NEUFS + `(()=>{const P=G.p;P.x=${gx + 60};P.y=${gy + 210};P.vx=P.vy=0;G.cx=P.x;G.cy=P.y;window.__T=mkEnemy('gatling',${gx + 310},${gy + 210},{spawn:0,age:0,cd:0});})()`);
+  let fixe = 0, n = 0, b = 0;
+  for (; n < 90; n++) { H.steps(1); const s = J(H, 'JSON.stringify({v:Math.hypot(window.__T.vx,window.__T.vy),b:window.__neufs().length})'); if (s.b) { b = s.b; break; } if (s.v < .2) fixe++; else fixe = 0; }
+  return { ok: b > 0 && fixe >= 25, detail: b ? 'plantée ' + fixe + ' pas, première balle au pas ' + (n + 1) : 'aucune balle en 90 pas' };
+});
+check('V10 un Pulsar à 500 u (à l’écran) ne pulse pas en 300 pas ; à 300 u, il inspire ≥ 18 pas puis souffle au plus 10 orbes (r 8, destructibles)', () => {
+  /* en biais (,88 ; ,475) : à 500 u, il tient dans la vue du banc (480 × 360 u de demi-largeur × demi-hauteur) */
+  const H = arene(4285);
+  H.call(NEUFS + 'window.__T=mkEnemy("ring",0,0,{spawn:0,age:0,cd:0});window.__sx=G.p.x>0?-1:1;');
+  const pin = d => `{const P=G.p,e=window.__T;P.vx=P.vy=0;G.cx=P.x;G.cy=P.y;e.x=P.x+window.__sx*.88*${d};e.y=P.y+.475*${d};e.vx=e.vy=0;}`;
+  const vue = H.call(`${pin(500)}(()=>{const e=window.__T;return Math.abs(e.x-G.cx)<=W/2/G.zoom-e.r&&Math.abs(e.y-G.cy)<=H/2/G.zoom-e.r;})()`);
+  let loin = 0; for (let i = 0; i < 300; i++) { H.call(pin(500)); H.steps(1); if (H.call('window.__neufs().length')) loin++; }
+  const P = []; let insp = 0;
+  for (let i = 0; i < 300; i++) {
+    H.call(pin(300)); H.steps(1);
+    const s = J(H, 'JSON.stringify({st:window.__T.st,b:window.__neufs().map(b=>[b.r,!!b.sh])})');
+    if (s.b.length) { P.push({ n: s.b.length, insp, ok: s.b.every(x => x[0] === 8 && x[1]) }); insp = 0; } else if (s.st > 0) insp++; else insp = 0;
+  }
+  const ok = vue && loin === 0 && P.length >= 1 && P.every(p => p.n <= 10 && p.insp >= 18 && p.ok);
+  return { ok, detail: 'à 500 u (' + (vue ? 'à l’écran' : 'HORS de l’écran') + ') : ' + loin + ' pulsation(s) ; à 300 u : ' + P.length + ' pulsation(s), ' + P.map(p => p.n + ' orbes après ' + p.insp + ' pas d’inspiration' + (p.ok ? '' : ' (pas des orbes r 8)')).join(', ') };
+});
+check('V10 l’Orbiteur (cd 0) tire deux coups courbes (rot ± ,009, même sens) à 8 pas d’écart', () => {
+  const H = arene(4287), z = zone(H, 560, 420);
+  if (!z) return { ok: false, detail: 'aucune zone libre' };
+  const [gx, gy] = z;
+  H.call(NEUFS + `(()=>{const P=G.p;P.x=${gx + 60};P.y=${gy + 210};P.vx=P.vy=0;G.cx=P.x;G.cy=P.y;window.__T=mkEnemy('orbit',${gx + 310},${gy + 210},{spawn:0,age:0,cd:0});})()`);
+  const t = [];
+  for (let n = 0; n < 40; n++) { H.steps(1); for (const r of J(H, 'JSON.stringify(window.__neufs().map(b=>b.rot))')) t.push([n, r]); }
+  const ok = t.length === 2 && t[1][0] - t[0][0] === 8 && t.every(x => Math.abs(Math.abs(x[1]) - .009) < 1e-9) && t[0][1] === t[1][1];
+  return { ok, detail: t.length + ' tir(s) en 40 pas : ' + t.map(x => 'pas ' + (x[0] + 1) + ' rot ' + x[1]).join(', ') };
+});
+
+{
+  /* contexte 2D qui journalise le chemin (beginPath, arc), fill (couleur), stroke (couleur/épaisseur/opacité) et drawImage */
+  let LOG = null;
+  const jrn = () => { const base = L.mkCtx(); return new Proxy({}, { get: (t, p) => (LOG && (p === 'beginPath' || p === 'arc' || p === 'fill' || p === 'stroke' || p === 'drawImage') ? () => { LOG.push(p === 'beginPath' ? 'b' : p === 'arc' ? 'a' : p === 'fill' ? 'f ' + base.fillStyle : p === 'stroke' ? 's ' + base.strokeStyle + '/' + base.lineWidth + '/' + base.globalAlpha : 'i'); } : base[p]), set: (t, p, v) => { base[p] = v; return true; } }); };
+  /* nombre d'arcs du chemin rempli de la couleur col, pour chaque fill */
+  const arcs = (l, col) => { const r = []; let n = 0; for (const x of l) { if (x === 'b') n = 0; else if (x === 'a') n++; else if (x === 'f ' + col) r.push(n); } return r; };
+  check('V9-V10 dessin : Tireur qui s’annonce = 5 bouches blanches (7 élite) ; visée verrouillée du Tireur d’élite blanche ; aiguilles en deux traits groupés ; orbes cerclés en un trait ; Gatling en montée = canons blancs', () => {
+    const H = arene(4288, { mkCtx: jrn });
+    H.call('render(1,16.7)');
+    const d = (t, o) => { H.call(`window.__D=mkEnemy(${JSON.stringify(t)},G.p.x+150,G.p.y,{spawn:0,age:0,cd:1e9});Object.assign(window.__D,${JSON.stringify(o)});`); LOG = []; H.call('drawEnemy(window.__D)'); const l = LOG; LOG = null; return l; };
+    const w = '#ffffff', sp = arcs(d('spread', { st: 10, ca: 1 }), w), se = arcs(d('spread', { st: 10, ca: 1, elite: 1 }), w), sn = d('sniper', { tele: 8, ta: 1 }), sv = d('sniper', { tele: 30, ta: 1 }), ga = arcs(d('gatling', { st: -12, ca: 1 }), w);
+    const col = H.call('ET.sniper.col');
+    H.call(`G.eb=[];for(let i=0;i<3;i++){const b=ebul(G.p.x+60+i*30,G.p.y+20,0,13,4.5,ET.sniper.col);b.ndl=1;}for(let i=0;i<3;i++){const b=ebul(G.p.x+60+i*30,G.p.y-40,0,3,8,ET.ring.col);b.sh=1;}`);
+    LOG = []; H.call('drawBullets()'); const bl = LOG; LOG = null;
+    const ndl = bl.filter(x => x === 's ' + col + '/3/1' || x === 's #ffffff/1.2/1').length, img = bl.filter(x => x === 'i').length, orb = bl.filter(x => x === 's #ffffff/1.5/0.7').length;
+    const ok = sp.includes(5) && se.includes(7) && sn.includes('s #ffffff/3.5/0.9') && !sv.includes('s #ffffff/3.5/0.9') && ndl === 2 && img === 3 && orb === 1 && ga.includes(3);
+    return { ok, detail: 'bouches blanches : ' + (sp.filter(n => n > 1).join('/') || '0') + ' (élite ' + (se.filter(n => n > 1).join('/') || '0') + ') ; visée verrouillée : ' + (sn.filter(x => x[0] === 's').join(' ') || 'aucun trait') + ' ; 3 aiguilles + 3 orbes : ' + ndl + ' trait(s) d’aiguille, ' + img + ' sprite(s), ' + orb + ' trait(s) de cercle ; Gatling en montée : canons blancs ' + (ga.filter(n => n > 1).join('/') || '0') };
+  });
+}
+
 if (LONG) { /* réservé : passe d'équilibrage de COURBE */ }
 
-console.log('test/vivacite.js — ' + (REF ? 'code ' + REF : 'arbre de travail'));
+console.log('test/vivacite.js — ' + (REF ? 'code ' + REF : 'arbre de travail') + (SEUL ? ' — SEULS les critères « ' + SEUL + '… »' : ''));
 for (const c of checks) console.log((c.ok ? '  OK    ' : '  ECHEC ') + c.name + '\n         ' + c.detail);
 const all = checks.every(c => c.ok);
 console.log(all ? 'VIVACITÉ : TOUT PASSE' : 'VIVACITÉ : ECHEC');

@@ -9,7 +9,7 @@ let G=null;
    les dégâts de la bulle suivent la vie des ennemis, HPM, pour que les bonus restent un vrai gain) ;
    PREYA : écart d'îlots à partir duquel un type devient proie ; GONEA : écart où il quitte le jeu ;
    SPN : pas d'éclosion d'un ennemi, une fois sa marque au sol passée (24 avant le 08/10/2026) */
-const PRAD=18,SEG0=5,NWAVE=3,GROW=1.4,GROWD=1.2,PREYA=2,GONEA=4,EBC='#ff5a2d',SPK_AIM=30,SNP_AIM=45,SPN=14;
+const PRAD=18,SEG0=5,NWAVE=3,GROW=1.4,GROWD=1.2,PREYA=2,GONEA=4,EBC='#ff5a2d',EBK=1.15,SPK_AIM=30,SNP_AIM=45,SPN=14;
 /* vie des ennemis selon l'îlot : au pas des dégâts de la bulle (GROWD), +12 % par îlot (deux bonus par îlot depuis le
    02/10/2026 : la construction grandit deux fois plus vite), et ×1,2 contre la cadence de tir plus rapide */
 const HPM=()=>1.2*Math.pow(GROWD,G.isl-1)*(1+.12*(G.isl-1));
@@ -164,19 +164,26 @@ function zoomFull(){return Math.min(W,H)/(2*(WR+40));}
 /* age = îlots écoulés depuis l'arrivée du type : taille ÷1,4 par îlot ; à PREYA, proie */
 function mkEnemy(t,x,y,o){const d=ET[t],age=o&&o.age!=null?o.age:G.isl-d.isl,prey=age>=PREYA;
   const e={t,d,age,prey,col:d.col,x,y,vx:0,vy:0,r:d.r*Math.pow(GROW,-age),hp:d.hp*HPM()*(prey?.6:1),mhp:0,spawn:SPN,cd:t==='mite'?rr(20,50):rr(30,80),st:0,st2:0,ca:0,ta:0,tele:0,flash:0,
-    wob:R()*TAU,wa:R()*TAU,nk:(R()*15)|0,nav:null,offT:0,hitT:G.t,dead:false,kids:0,made:0,parent:null,elite:0,sl:0,sn:null,frostT:0,alarmT:0,ivT:0,orbCd:0,dir:0};
+    wob:R()*TAU,wa:R()*TAU,nk:(R()*15)|0,nav:null,offT:0,hitT:G.t,dead:false,kids:0,made:0,parent:null,elite:0,sl:0,sn:null,frostT:0,alarmT:0,ivT:0,orbCd:0,dir:R()<.5?1:-1,q2:0,hop:0,blk:false};
   if(o)Object.assign(e,o);
   if(e.elite){e.hp*=3.2;e.r*=1.3;}
   e.mhp=e.hp;G.en.push(e);return e;}
 function confine(o,r){const dx=o.x,dy=o.y,d=Math.hypot(dx,dy),lim=PR-r;if(d>lim&&d>0){o.x=dx/d*lim;o.y=dy/d*lim;return[dx/d,dy/d];}return null;}
 function ebul(x,y,a,s,r,col){s*=1+.025*(G.isl-1);const b={x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,r,col:col||EBC,life:420,rot:0,gz:false};if(G.eb.length<600)G.eb.push(b);return b;}
-function ebulE(e,a,s){return ebul(e.x+Math.cos(a)*e.r*.8,e.y+Math.sin(a)*e.r*.8,a,s,Math.max(4.5,e.r*.32),EBC);}
+/* tir d'un ennemi : la couleur de son type (on sait qui tire ; un sprite ebSpr par couleur, 8 au plus), ×EBK (le réglage de
+   difficulté des tirs ennemis ; l'aiguille du Tireur d'élite a sa vitesse propre). Les boss appellent ebul directement (EBC). o : champs en plus */
+function ebulE(e,a,s,o){const b=ebul(e.x+Math.cos(a)*e.r*.8,e.y+Math.sin(a)*e.r*.8,a,s*(e.t==='sniper'?1:EBK),Math.max(4.5,e.r*.32),e.col);if(o)Object.assign(b,o);return b;}
+/* les tireurs (ligne de tir requise, updEnemy) ; une annonce en cours (windup) : un critique ou un gros coup l'interrompt (hurtEnemy) */
+const SHOOT={spread:1,sniper:1,orbit:1,gatling:1};
+function windup(e){return e.t==='mite'&&e.st===3||e.t==='spike'&&e.st===1||e.t==='spread'&&e.st>0||e.t==='sniper'&&e.tele>12||e.t==='gatling'&&e.st<0||e.t==='ring'&&e.st>0;}
 /* une proie ne se blesse pas : elle s'avale (les tirs la traversent, le tir automatique l'ignore).
    cr : le critique décidé au TIR (tir doré, playerFire) ; sans lui (aura, satellites, traînée, contact, ondes, explosions, arc,
    débris, drones, missiles, éclats), il se tire à l'impact. Un critique se voit : anneau et éclats dorés, flash doré, coup de caméra. */
 function hurtEnemy(e,dmg,kx,ky,quiet,cr){
   if(e.dead||e.spawn>0||e.prey)return;if(relais(e)){dmg*=RELAY_M;e.relT=G.t;}e.hitT=G.t;
   const c=cr===undefined?R()<G.p.crit:cr;if(c){dmg*=G.p.critM;e.crit=G.t;ringFX(e.x,e.y,e.r*.6,e.r*2,COL.gd,10,2);lineSparks(e.x,e.y,Math.atan2(e.y-G.p.y,e.x-G.p.x),4,COL.gd);kick(e.x,e.y,1.5);SFX.crit();}
+  /* coup qui interrompt : un critique (ou un coup d'au moins ¼ de sa vie) pendant une annonce l'annule (anneau blanc) */
+  if((c||dmg>=.25*e.mhp)&&windup(e)){e.st=0;e.tele=0;e.cd=Math.max(e.cd,30);ringFX(e.x,e.y,e.r,e.r*1.8,'#ffffff',10,2);}
   if(e.stun>0)dmg*=2;
   e.hp-=dmg;e.flash=c?6:4;
   if(kx&&!(e.t==='spike'&&e.st===2)){const m=e.r>20?.35:1;e.vx+=kx*m;e.vy+=ky*m;}
@@ -236,14 +243,17 @@ function updEnemy(e){
   if(e.stun>0){e.stun-=tf;e.vx*=.85;e.vy*=.85;e.x+=e.vx*tf;e.y+=e.vy*tf;return;}
   const P=G.p,d=e.d,dx=P.x-e.x,dy=P.y-e.y,dd=Math.hypot(dx,dy)||1,aP=Math.atan2(dy,dx);let ax=dx/dd,ay=dy/dd;
   /* un massif entre lui et toi : il suit la carte des distances (flowDir) au lieu de foncer dans la falaise */
-  if(G.t%15===e.nk)e.nav=losWall(e.x,e.y,P.x,P.y)?flowDir(e.x,e.y):null;if(e.nav){ax=e.nav[0];ay=e.nav[1];}
+  /* un tireur (SHOOT) dont la ligne vers toi est coupée (massif, rocher solide) ne tire pas (e.blk) : il se décale (après le switch) */
+  if(G.t%15===e.nk){e.nav=losWall(e.x,e.y,P.x,P.y)?flowDir(e.x,e.y):null;e.blk=!!SHOOT[e.t]&&(!!e.nav||!lineClear(e.x,e.y,P.x,P.y,P.r));}if(e.nav){ax=e.nav[0];ay=e.nav[1];}
   /* plus vifs d'îlot en îlot (+4 % par îlot) : la bulle grandit, eux aussi */
   let tx=0,ty=0,sp=d.spd*(e.alarmT>G.t?SW_SP:1)*(1+.04*(G.isl-1));const vr=viewR();
   e.wob+=.03*tf;
   /* un tireur hors de l'écran ne tire pas (son cd est gelé) et revient vite (×2,2) : on ne prend plus de tirs d'un ennemi
-     qu'on ne voit pas. La Mite et l'Épine (corps à corps) gardent leur allure. */
+     qu'on ne voit pas. La Mite et l'Épine (corps à corps) gardent leur allure. Ligne coupée : pas de tir non plus, mais son cd
+     court (il tire dès qu'il sort de derrière le rocher, après son annonce) ; e.blk date d'au plus 15 pas, la ligne est donc revue
+     au moment de tirer (un lineClear par tir). */
   const os=e.t!=='mite'&&e.t!=='spike'&&(Math.abs(e.x-G.cx)>W/2/G.zoom-e.r||Math.abs(e.y-G.cy)>H/2/G.zoom-e.r);if(os)sp*=2.2;
-  const fire=()=>!os&&(e.cd-=tf)<=0;
+  const fire=()=>!os&&(e.cd-=tf)<=0&&!e.blk&&(!SHOOT[e.t]||lineClear(e.x,e.y,P.x,P.y,P.r)||(e.blk=true,false));
   switch(e.t){
     /* Mite (08/10/2026, « les ennemis ne sont pas intéressants ») : l'essaim arrive en éventail (e.fo, updMarks), tourne autour de
        toi tant qu'il n'est pas prêt ; à portée (220), elle S'ARRÊTE et s'annonce (st 3, 14 pas : gonflée, cernée de blanc, trait
@@ -255,27 +265,44 @@ function updEnemy(e){
       else{const f=clamp((dd-110)/200,0,1),o=(e.fo||0)*f,c=Math.cos(o),s=Math.sin(o),bx=ax+Math.cos(e.wob*3)*.45,by=ay+Math.sin(e.wob*3)*.45;tx=bx*c-by*s;ty=bx*s+by*c;sp*=1.15;
         if(dd<150&&e.cd>0){const dr=e.nk&1?1:-1;tx=-ay*dr+ax*.2;ty=ax*dr+ay*.2;}
         if(fire()&&dd<220){e.st=3;e.st2=14;}}break;
-    case 'spread':{const s=dd>Math.min(300,vr-40)?1:dd<Math.min(220,vr-100)?-1:0;tx=ax*s-ay*.5;ty=ay*s+ax*.5;
-      if(fire()){e.cd=rr(75,105);for(let k=-1;k<=1;k++)ebulE(e,aP+k*.22,3.6);SFX.eshot();}break;}
+    /* Tireur (08/10/2026, « les tirs sont ennuyeux ») : il te tourne autour (sens e.dir, inversé toutes les 2 à 3 s : plus de file
+       indienne), SE PLANTE et s'annonce 22 pas (bouches blanches, visée figée les 6 derniers), puis tire un éventail de 5 (7 en élite)
+       PLUS VITE que la bulle (6 u/pas à l'îlot 3, contre 4,9) : 47 u entre deux tirs à 250 u, la bulle (36 u) passe entre. */
+    case 'spread':{if((e.st2-=tf)<=0){e.st2=rr(120,200);e.dir*=-1;}const s=dd>Math.min(280,vr-60)?1:dd<150?-.5:0;tx=ax*s-ay*.5*e.dir;ty=ay*s+ax*.5*e.dir;
+      if(e.st>0){sp=0;if(e.st>6)e.ca=aP;if((e.st-=tf)<=0){e.st=0;const m=e.elite?3:2;for(let k=-m;k<=m;k++)ebulE(e,e.ca+k*.19,5);SFX.eshot();}}
+      else if(fire()){e.cd=rr(85,105);e.st=22;e.ca=aP;}break;}
     case 'spike':
       /* Épine : vise ½ s (trait pointillé) en ANTICIPANT (là où tu seras dans 14 pas), VERROUILLÉE les 10 derniers pas (trait
          blanc plein), puis charge 340 u (40 pas à 8,5). Une charge qui finit dans un obstacle ou le bord la laisse sonnée (spikeStun). */
       if(e.st===0){tx=ax*.6+Math.cos(e.wob)*.3;ty=ay*.6+Math.sin(e.wob)*.3;if(fire()&&dd<380){e.st=1;e.st2=SPK_AIM;e.ca=aP;}}
       else if(e.st===1){sp=0;if(e.st2>10)e.ca=Math.atan2(P.y+P.vy*14-e.y,P.x+P.vx*14-e.x);if((e.st2-=tf)<=0){e.st=2;e.st2=40;}}
       else{sp=8.5;tx=Math.cos(e.ca);ty=Math.sin(e.ca);if((e.st2-=tf)<=0){e.st=0;e.cd=rr(40,75);}}break;
-    case 'orbit':{if(!e.dir)e.dir=R()<.5?1:-1;if((e.st2-=tf)<=0){e.st2=rr(90,170);e.dir*=-1;}const s=clamp((dd-Math.min(210,vr-70))/60,-1,1);tx=ax*s-ay*e.dir;ty=ay*s+ax*e.dir;if(e.st2<30)sp*=.25;
-      if(fire()){e.cd=rr(55,75);ebulE(e,aP,3.8);SFX.eshot();}break;}
-    case 'ring':tx=ax*.3+Math.cos(e.wob)*.5;ty=ay*.3+Math.sin(e.wob)*.5;
-      if(fire()){e.cd=rr(100,125);const n=12,o=R()*TAU,g=R()*TAU;for(let k=0;k<n;k++){const a=o+k*TAU/n;if(Math.abs(angDiff(a,g))<.5)continue;ebulE(e,a,2.6);}SFX.bshot();}break;
-    case 'sniper':{const s=dd>vr-20?1:dd<vr-90?-1:0;tx=ax*s+Math.cos(e.wob)*.3;ty=ay*s+Math.sin(e.wob)*.3;
-      if(e.tele>0){sp*=.2;e.tele-=tf;e.ta+=angDiff(e.ta,aP)*.045;if(e.tele<=0){e.tele=0;ebulE(e,e.ta,11);SFX.snipe();}}
-      else if(fire()){e.cd=rr(110,150);e.tele=SNP_AIM;e.ta=aP;SFX.tele();}break;}
+    /* Orbiteur : deux coups qui COURBENT (rot, dans son sens de rotation), à 8 pas d'écart */
+    case 'orbit':{if((e.st2-=tf)<=0){e.st2=rr(90,170);e.dir*=-1;}const s=clamp((dd-Math.min(210,vr-70))/60,-1,1);tx=ax*s-ay*e.dir;ty=ay*s+ax*e.dir;if(e.st2<30)sp*=.25;
+      if(e.q2>0&&(e.q2-=tf)<=0&&!os)ebulE(e,aP,4.8,{rot:e.dir*.009});
+      if(fire()){e.cd=rr(60,80);e.q2=8;ebulE(e,aP,4.8,{rot:e.dir*.009});SFX.eshot();}break;}
+    /* Pulsar : il vient à toi ; à moins de 380 u (et à l'écran), il INSPIRE 20 pas (il rétrécit, g3.js), puis souffle 10 orbes
+       lents moins une brèche. Un tir de la bulle crève un orbe (sh, updBullets). Avant : 12 tirs partout, jusqu'à 86 en vol. */
+    case 'ring':tx=ax*.8+Math.cos(e.wob)*.5;ty=ay*.8+Math.sin(e.wob)*.5;
+      if(e.st>0){sp*=.3;if((e.st-=tf)<=0){e.st=0;const n=10,o=R()*TAU,g=R()*TAU;for(let k=0;k<n;k++){const a=o+k*TAU/n;if(Math.abs(angDiff(a,g))<.5)continue;ebulE(e,a,3.2,{r:8,sh:1});}SFX.bshot();}}
+      else if(fire()&&dd<380){e.cd=rr(100,125);e.st=20;}break;
+    /* Tireur d'élite : il se tient à vr-130..vr-60 (à l'écran, même en portrait), vise 45 pas en ANTICIPANT (là où tu seras dans
+       8 pas), VERROUILLÉ les 12 derniers (trait blanc), tire une aiguille (13 u/pas, ndl), puis file de côté 30 pas (e.hop) */
+    case 'sniper':{const s=dd>vr-60?1:dd<vr-130?-1:0;tx=ax*s+Math.cos(e.wob)*.3;ty=ay*s+Math.sin(e.wob)*.3;
+      if(e.hop>0){e.hop-=tf;tx=-ay*e.dir;ty=ax*e.dir;sp*=2.5;}
+      if(e.tele>0){sp*=.2;e.tele-=tf;if(e.tele>12)e.ta+=angDiff(e.ta,Math.atan2(P.y+P.vy*8-e.y,P.x+P.vx*8-e.x))*.09;if(e.tele<=0){e.tele=0;ebulE(e,e.ta,13,{ndl:1});SFX.snipe();e.hop=30;}}
+      else if(fire()){e.cd=rr(85,115);e.tele=SNP_AIM;e.ta=aP;SFX.tele();}break;}
+    /* Gatling : 30 pas de montée en régime, plantée, MUETTE, visée qui te suit (canons blancs qui tournent, g3.js), puis une rafale
+       de 40 pas en balayage (10 balles à 5) */
     case 'gatling':tx=ax*.2;ty=ay*.2;
-      if(e.st>0){const f=1-e.st/40;if(Math.round(e.st)%5===0)ebulE(e,e.ca-.5+f,4.2);if(Math.round(e.st)%15===0)SFX.eshot();e.st-=tf;if(e.st<=0)e.st=0;}
-      else if(fire()){e.cd=rr(110,140);e.st=40;e.ca=aP;}break;
-    case 'spawner':tx=Math.cos(e.wob*.7);ty=Math.sin(e.wob*.9);
-      if(fire()){e.cd=rr(130,170);if(e.kids<4&&e.made<6&&G.en.length<40)for(let k=0;k<2;k++){e.made++;const a=R()*TAU;mkEnemy('mite',e.x+Math.cos(a)*e.r,e.y+Math.sin(a)*e.r,{age:0,spawn:10,parent:e});e.kids++;}}break;
+      if(e.st<0){sp=0;e.ca=aP;if((e.st+=tf)>=0)e.st=40;}
+      else if(e.st>0){const f=1-e.st/40;if(Math.round(e.st)%4===0)ebulE(e,e.ca-.5+f,5);if(Math.round(e.st)%15===0)SFX.eshot();e.st-=tf;if(e.st<=0)e.st=0;}
+      else if(fire()){e.cd=rr(110,140);e.st=-30;}break;
+    /* Porteur : il vient à toi en louvoyant ; 4 Mites en tout */
+    case 'spawner':tx=ax*.6+Math.cos(e.wob*.7);ty=ay*.6+Math.sin(e.wob*.9);
+      if(fire()){e.cd=rr(130,170);if(e.kids<4&&e.made<4&&G.en.length<40)for(let k=0;k<2;k++){e.made++;const a=R()*TAU;mkEnemy('mite',e.x+Math.cos(a)*e.r,e.y+Math.sin(a)*e.r,{age:0,spawn:10,parent:e});e.kids++;}}break;
   }
+  if(e.blk&&!e.nav){tx=-ay*e.dir+ax*.6;ty=ax*e.dir+ay*.6;sp*=1.6;}
   if(e.sl>0&&e.sn){e.sl--;const n=e.sn,sg=(tx*-n[1]+ty*n[0])>=0?1:-1;tx+=-n[1]*sg*.9;ty+=n[0]*sg*.9;}
   const tl=Math.hypot(tx,ty)||1;
   if(e.t==='spike'&&e.st===2||e.t==='mite'&&e.st===1){e.vx=tx*sp;e.vy=ty*sp;if(e.t==='spike'&&G.t%2===0)FX({ty:3,x:e.x,y:e.y,vx:0,vy:0,r:e.r,life:12,max:12,col:e.col});}
@@ -539,7 +566,7 @@ function relais(e){if(G.biome!=='core')return null;const cx=Math.floor(e.x/CH),c
 
 /* ---------- projectiles ---------- */
 function updBullets(){
-  const P=G.p,bg=BIGS(),B=G.boss;
+  const P=G.p,bg=BIGS(),B=G.boss;let nsh=0;for(const q of G.eb)if(q.sh)nsh++;
   for(let i=G.pb.length-1;i>=0;i--){const b=G.pb[i];if(!b)continue;
     if(b.home>0){if(!b.tg||b.tg.dead||G.t%10===0)b.tg=findTarget(b.x,b.y,b.kind===1?600:320);
       if(b.tg){const a=Math.atan2(b.vy,b.vx),ta=Math.atan2(b.tg.y-b.y,b.tg.x-b.x),na=a+clamp(angDiff(a,ta),-b.home,b.home);let sp=Math.hypot(b.vx,b.vy);if(b.kind===1)sp=Math.min(b.sp,sp+.25);b.vx=Math.cos(na)*sp;b.vy=Math.sin(na)*sp;}}
@@ -563,6 +590,9 @@ function updBullets(){
       for(const nd of B.nodes){if(nd.dead)continue;if(dist2(b.x,b.y,nd.x,nd.y)<(nd.r+b.r)**2){hitNode(nd,b.dmg);gone=true;break;}}
       if(!gone&&dist2(b.x,b.y,B.x,B.y)<(B.r+b.r)**2){if(bossHittable())hurtBoss(b.dmg,false,b.crit);else sparks(b.x,b.y,COL.wh,3,2,10);gone=true;}}
     if(gone){if(b.kind===1)explode(b);else sparks(b.x,b.y,b.col,3,2.5,12);G.pb.splice(i,1);continue;}
+    /* orbe de Pulsar (sh) : un tir le crève (et s'arrête, sauf perforation) */
+    if(nsh>0)for(let j=G.eb.length-1;j>=0;j--){const q=G.eb[j];if(!q.sh||dist2(b.x,b.y,q.x,q.y)>=(q.r+b.r)**2)continue;G.eb.splice(j,1);nsh--;sparks(q.x,q.y,q.col,3,2,12);gain(.004);G.score+=3*G.isl;if(b.pierce>0)b.pierce--;else gone=true;break;}
+    if(gone){if(b.kind===1)explode(b);G.pb.splice(i,1);continue;}
     for(const e of G.en){if(e.dead||e.spawn>0||e.prey)continue;const rs=e.r+b.r;if(dist2(b.x,b.y,e.x,e.y)>=rs*rs)continue;
       if(b.hit&&b.hit.includes(e))continue;
       if(b.kind===1){explode(b);gone=true;break;}
