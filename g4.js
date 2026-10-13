@@ -72,13 +72,26 @@ function renderMenu(){
   $('mHint').textContent=COARSE?'Pouce gauche : bouger. Le tir est automatique. ⚡ : dash. ◉ : gonfler quand la jauge est pleine.':'ZQSD ou flèches : bouger. Le tir vise seul (la souris reprend la main). Espace : dash. E ou clic droit : gonfler.';
 }
 const ROMAN=['','I','II','III','IV','V','VI','VII','VIII','IX','X'];
+/* ce qu'une carte change, en chiffres (avant → après) : son effet est joué sur une COPIE du joueur (les f() de gp.js n'écrivent
+   que des champs simples ; pu, puMax, cards et dashHit sont copiés quand même), au plus deux lignes. Rien pour une carte sans
+   chiffre de ce tableau (tête chercheuse, aura…). Les deux nombres d'une ligne ont la même précision : « 6,0 → 7,2 » ; espaces
+   insécables dans une ligne : on ne coupe qu'entre deux lignes, jamais « Canons / 1 → 3 ». */
+const CDT=[['Cadence',p=>60/(p.fireI+1),' tirs/s'],['Dégâts',p=>p.dmg,''],['Critique',p=>p.crit*100,' %'],['Canons',p=>p.turrets,''],['Perçage',p=>p.pierce,''],
+  ['Membrane',p=>p.segMax,' segments'],['Vitesse',p=>p.spd*60,' u/s'],['Dash',p=>p.dashMax/60,' s'],['Jauge',p=>p.gGain*100,' %'],['Gonflement',p=>p.gDur/60,' s'],['Power-ups',p=>p.puDur*100,' %']];
+function cardDelta(u){
+  const P=G.p,q=Object.assign({},P,{pu:Object.assign({},P.pu),puMax:Object.assign({},P.puMax),cards:Object.assign({},P.cards),dashHit:[]});try{u.f(q);}catch(e){return '';}
+  const L=[];for(const [l,g,un] of CDT){if(L.length>=2)break;const a=Math.round(g(P)*100)/100,b=Math.round(g(q)*100)/100;if(!(Math.abs(b-a)>1e-6))continue;
+    const d=Number.isInteger(a)&&Number.isInteger(b)?0:Math.max(Math.abs(a),Math.abs(b))<10?1:0,nf=v=>v.toFixed(d).replace('.',','),s0=nf(a),s1=nf(b);
+    if(s0!==s1)L.push((l+' '+s0+' → '+s1+(un===' segments'&&b<2?' segment':un)).replace(/ /g,'\u00a0'));}
+  return L.length?'<span class="dl">'+L.join(' · ')+'</span>':'';
+}
 /* le choix d'un bonus (gp.js openPick) : bleu = bonus, or = fusion de deux bonus possédés, rouge = pacte (un prix) */
 function renderPick(){
   const P=G.p;
   $('evoT').textContent=G.pkMid?'Mutation avant la vague finale':G.isl===1?'Première mutation':'Îlot '+G.isl+' : '+BIO[G.biome].n;
   $('evoS').textContent=G.isl===1&&!G.pkMid?'Choisis un bonus. Tu en gagnes deux par îlot : à l’arrivée et avant la dernière vague.':'Choisis un bonus. Il te suit jusqu’au bout de la partie ('+(G.picks.length+1)+'ᵉ sur '+2*NISL+').';
   $('evoCards').innerHTML=G.choices.map((ch,i)=>{const u=ch.u,n=P.cards[u.id]||0,cat=ch.k==='f'?'Fusion : '+CARDS[u.a].u.n+' + '+CARDS[u.b].u.n:ch.k==='p'?'Pacte':u.c;
-    return '<button class="card'+(ch.k==='f'?' mut':ch.k==='p'?' pact':'')+'" data-i="'+i+'"><span class="key">'+(i+1)+'</span><span class="ic">'+u.ic+'</span><span class="cat">'+cat+'</span><span class="nm">'+u.n+(n>0?' '+ROMAN[n+1]:'')+'</span><span class="ds">'+u.d+'</span>'+(ch.k==='p'?'<span class="cost">Prix : '+u.cost+'</span>':'')+'</button>';}).join('');
+    return '<button class="card'+(ch.k==='f'?' mut':ch.k==='p'?' pact':'')+'" data-i="'+i+'"><span class="key">'+(i+1)+'</span><span class="ic">'+u.ic+'</span><span class="cat">'+cat+'</span><span class="nm">'+u.n+(n>0?' '+ROMAN[n+1]:'')+'</span><span class="ds">'+u.d+'</span>'+cardDelta(u)+(ch.k==='p'?'<span class="cost">Prix : '+u.cost+'</span>':'')+'</button>';}).join('');
   const rb=$('bReroll');rb.hidden=!(G.rerolls>0);rb.textContent='Relancer ('+G.rerolls+')'+(COARSE?'':' · R');
 }
 function buildSummary(){
@@ -99,7 +112,11 @@ function showEnd(){
     '<div class="st big"><span class="l">Score</span><span class="v">'+fmt(G.score)+'</span>'+(G.newBest?'<span class="rec">Nouveau record</span>':'')+'</div>'+
     '<div class="st"><span class="l">Îlot</span><span class="v">'+G.isl+' / '+NISL+'</span>'+(G.newIsl?'<span class="rec">Plus loin que jamais</span>':'')+'</div>'+
     '<div class="st"><span class="l">Absorptions</span><span class="v">'+G.eats+'</span></div>'+
-    '<div class="st"><span class="l">Éclatés</span><span class="v">'+G.kills+'</span></div>';
+    '<div class="st"><span class="l">Éclatés</span><span class="v">'+G.kills+'</span></div>'+
+    '<div class="st"><span class="l">Esquives parfaites</span><span class="v">'+(G.perfs||0)+'</span></div>'+
+    '<div class="st"><span class="l">Gonflements</span><span class="v">'+(G.gonN||0)+'</span></div>'+
+    '<div class="st"><span class="l">Power-ups</span><span class="v">'+(G.puN||0)+'</span></div>'+
+    '<div class="st"><span class="l">Meilleure série</span><span class="v">'+(G.comboMx||0)+'</span>'+(G.newCombo?'<span class="rec">Record</span>':'')+'</div>';
   $('endBuild').innerHTML=buildSummary();
   show('ov-end');
 }

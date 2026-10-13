@@ -15,8 +15,9 @@ relique est l'îlot que tu viens de quitter, en miniature.
 - **Vie** : une membrane de 5 segments ; un coup = un segment ; un segment revient à chaque îlot nettoyé.
 - **Bonus** : à l'arrivée sur chaque îlot, puis avant la vague finale, une carte parmi trois (35 bonus, 8 fusions dorées quand on
   possède leurs deux ingrédients, 4 pactes rouges à partir de l'îlot 3 : un pouvoir contre un prix).
-- **Série** : des kills (ou des proies avalées) à moins de 1,5 s d'écart forment une série ; à partir de 5, le
-  score est multiplié (jusqu'à ×3).
+- **Série** : des kills (ou des proies avalées) à moins de 2,5 s d'écart forment une série, affichée sous la bulle ;
+  à partir de 5, le score est multiplié (jusqu'à ×3), et ton tir accélère avec elle. À 15 en vague, un power-up en cadeau.
+- **Gardien** : le boss abattu laisse son cœur ; avale-le, ta dernière carte bonus monte d'un niveau.
 - **Power-ups** (losanges vert-jaune, quelques secondes) : invincibilité 6 s, tir rapide, tir triple,
   perforant, ralenti, bouclier, onde, réparation.
 - **Commandes** : ZQSD ou flèches pour bouger (codes physiques, AZERTY comme QWERTY), le tir vise seul

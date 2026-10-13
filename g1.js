@@ -30,7 +30,7 @@ const store={
   get(k,d){try{const v=localStorage.getItem('bulge3_'+k);return v==null?d:JSON.parse(v);}catch(e){return d;}},
   set(k,v){try{localStorage.setItem('bulge3_'+k,JSON.stringify(v));}catch(e){}}
 };
-const META0=()=>({runs:0,wins:0,best:0,bestIsl:0,lb:[],mute:false,kills:0,eats:0,seenHelp:false});
+const META0=()=>({runs:0,wins:0,best:0,bestIsl:0,lb:[],mute:false,kills:0,eats:0,seenHelp:false,bestCombo:0});
 /* une sauvegarde abîmée (ou d'une autre version) ne doit jamais casser le menu : on ne garde que des champs du bon type */
 let meta=(()=>{const m=META0(),s=store.get('meta',{});if(s&&typeof s==='object')for(const k in m)if(s[k]!=null&&typeof s[k]===typeof m[k]&&Array.isArray(s[k])===Array.isArray(m[k]))m[k]=s[k];
   for(const k of ['fps','q','qAuto'])if(s&&s[k]!=null)m[k]=s[k];m.lb=m.lb.filter(e=>e&&typeof e.s==='number');return m;})();
@@ -40,16 +40,17 @@ function saveMeta(){store.set('meta',meta);}
 /* Ennemis : un type par îlot (isl), une forme = un comportement (dessin : g3.js drawEnemy).
    r = rayon à l'îlot d'arrivée. Chaque îlot plus loin, le type paraît 1,4× plus petit (g2.js mkEnemy) :
    à 2 îlots d'écart il devient une PROIE (pâle, inoffensif, il fuit), à 4 il quitte le jeu.
-   Couleurs RÉSERVÉES aux ennemis : rouge, magenta, orange ; jamais cyan (toi) ni vert-jaune (power-ups). */
+   Couleurs RÉSERVÉES aux ennemis : rouge, magenta, orange ; jamais cyan (toi) ni vert-jaune (power-ups). Un tir ennemi a la
+   couleur de son type (g2.js ebulE) : on sait qui tire. */
 const ET={
   mite:{n:'Mite',isl:1,r:10,hp:1.6,spd:2.5,col:'#ff2d95',sc:20},
-  spike:{n:'Épine',isl:2,r:15,hp:5,spd:1.1,col:'#ff3355',sc:40},
-  spread:{n:'Tireur',isl:3,r:16,hp:6,spd:1.15,col:'#ff8a2d',sc:50},
-  sniper:{n:'Tireur d\'élite',isl:4,r:13,hp:4.5,spd:1.25,col:'#ff5a36',sc:60},
+  spike:{n:'Épine',isl:2,r:15,hp:5,spd:1.4,col:'#ff3355',sc:40},
+  spread:{n:'Tireur',isl:3,r:16,hp:5,spd:1.5,col:'#ff8a2d',sc:50},
+  sniper:{n:'Tireur d\'élite',isl:4,r:13,hp:4.5,spd:1.5,col:'#ff5a36',sc:60},
   orbit:{n:'Orbiteur',isl:5,r:14,hp:6,spd:2.1,col:'#ff4fd8',sc:60},
-  gatling:{n:'Gatling',isl:6,r:19,hp:9,spd:.5,col:'#ffa22d',sc:80},
-  ring:{n:'Pulsar',isl:7,r:21,hp:10,spd:.6,col:'#ff6a5a',sc:90},
-  spawner:{n:'Porteur',isl:8,r:27,hp:16,spd:.5,col:'#e040ff',sc:120},
+  gatling:{n:'Gatling',isl:6,r:19,hp:9,spd:.8,col:'#ffa22d',sc:80},
+  ring:{n:'Pulsar',isl:7,r:21,hp:10,spd:.9,col:'#ff6a5a',sc:90},
+  spawner:{n:'Porteur',isl:8,r:27,hp:16,spd:.8,col:'#e040ff',sc:120},
 };
 const ETL=['mite','spike','spread','sniper','orbit','gatling','ring','spawner'];
 
@@ -75,9 +76,12 @@ function can(k,ms){if(!AU.ac||meta.mute)return false;const n=performance.now();i
 const PENTA=[0,3,5,7,10];
 function note(i,base){const o=Math.floor(i/5),s=PENTA[((i%5)+5)%5];return base*Math.pow(2,(o*12+s)/12);}
 const SFX={
-  shoot(){if(!can('sh',75))return;const t=AU.ac.currentTime;osc(AU.sfx,'square',900+Math.random()*250,420,t,.05,.010);},
-  hit(){if(!can('hit',40))return;const t=AU.ac.currentTime;osc(AU.sfx,'triangle',620,260,t,.05,.026);},
-  pop(big){if(!can(big?'popb':'pop',big?60:28))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',big?340:720,big?55:140,t,big?.3:.13,big?.16:.075);nz(AU.sfx,t,big?.35:.09,big?.14:.045,'bandpass',big?700:2600,1.4);},
+  /* tir : audible (crête .03 au lieu de .010), plus grave pour un gros obus (bs : taille du tir), plus aigu en Emballement (em) */
+  shoot(bs,em){if(!can('sh',70))return;const t=AU.ac.currentTime,f=(760+Math.random()*80)*Math.sqrt(4.5/(bs||4.5))*(1+(em||0));osc(AU.sfx,'triangle',f,f*.42,t,.05,.03);nz(AU.sfx,t,.03,.022,'bandpass',2600,1.2);},
+  /* touche : q = part de vie restante, la note monte à mesure que la cible approche de la mort */
+  hit(q){if(!can('hit',40))return;const t=AU.ac.currentTime,f=520+560*(1-clamp(q==null?1:q,0,1));osc(AU.sfx,'triangle',f,f*.5,t,.05,.042);},
+  /* éclatement : le petit monte la gamme pentatonique avec la série c (440 à 1760 Hz sur dix kills) */
+  pop(big,c){if(!can(big?'popb':'pop',big?60:28))return;const t=AU.ac.currentTime,f=big?340:note(Math.min(c||0,10),440);osc(AU.sfx,'sine',f,big?55:f*.2,t,big?.3:.13,big?.16:.075);nz(AU.sfx,t,big?.35:.09,big?.14:.045,'bandpass',big?700:2600,1.4);},
   lvl(){if(!can('lv',250))return;const t=AU.ac.currentTime;[0,4,7,12,16,19].forEach((s,k)=>osc(AU.sfx,'square',330*Math.pow(2,s/12),0,t+k*.045,.2,.03));nz(AU.sfx,t,.5,.06,'highpass',4000);osc(AU.sfx,'sine',110,440,t,.4,.08);},
   evo(){if(!can('ev',100))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',220,880,t,.35,.07);nz(AU.sfx,t,.3,.05,'bandpass',3000,2);},
   hurt(){if(!can('hu',90))return;const t=AU.ac.currentTime;nz(AU.sfx,t,.28,.25,'lowpass',1000);osc(AU.sfx,'sawtooth',200,55,t,.32,.09);},
@@ -94,6 +98,8 @@ const SFX={
   ach(){if(!can('ac',300))return;const t=AU.ac.currentTime;[0,4,7,11,14].forEach((s,k)=>osc(AU.sfx,'triangle',523*Math.pow(2,s/12),0,t+k*.06,.35,.04));},
   death(){if(!can('de',500))return;const t=AU.ac.currentTime;osc(AU.sfx,'sawtooth',300,30,t,1.4,.15);nz(AU.sfx,t,1.2,.25,'lowpass',1200);},
   ui(){if(!can('ui',60))return;const t=AU.ac.currentTime;osc(AU.sfx,'triangle',880,1320,t,.06,.03);},
+  crit(){if(!can('cr',50))return;const t=AU.ac.currentTime;osc(AU.sfx,'triangle',1500,900,t,.06,.04);osc(AU.sfx,'sine',3000,3000,t,.03,.02);},
+  graze(){if(!can('gz',60))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',2200,2700,t,.03,.02);},
   absorb(){if(!can('ab',45))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',260,780,t,.12,.07);osc(AU.sfx,'triangle',520,1560,t+.03,.08,.02);},
   gonfle(){if(!can('go',400))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',70,240,t,.7,.2,.08);osc(AU.sfx,'sawtooth',110,330,t,.6,.05,.1);nz(AU.sfx,t,.7,.08,'bandpass',600,.6);},
   burst(){if(!can('bu',200))return;const t=AU.ac.currentTime;osc(AU.sfx,'sine',180,30,t,.7,.25);nz(AU.sfx,t,.6,.2,'lowpass',1400);osc(AU.sfx,'triangle',1400,200,t,.25,.05);},

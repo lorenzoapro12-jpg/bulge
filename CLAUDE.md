@@ -117,6 +117,30 @@ Outils complémentaires :
   chiant ») : l'Essaim-Mère enchaîne charge, salve et ponte d'œufs ; une charge finie dans le bord ou un massif la laisse
   sonnée (`B.stun`, dégâts ×`STUNM`, plus de contact) ; œufs qui éclosent, s'avalent, se cassent ; esquive parfaite au dash
   (`perfect`) ; durée du combat bornée. Appelé par headless.js.
+- `node test/vivacite.js` — garde-fou de la **vivacité** (`g1.js`, `g2.js`, `g3.js`, `g4.js`, `gb.js`, 08/10/2026, « ennemis pas
+  intéressants, tirs ennuyeux, pas récompensé, lent ») : l'impact pèse (arrêt sur image hors Mite, coup de caméra
+  `G.kx/G.ky`, halo de mort borné, étincelles en trait d'un seul `stroke` par couleur), le son suit (tir audible, « pop »
+  qui monte avec la série, touche qui monte vers la mort), les cartes chiffrent leur effet (`cardDelta`, sur une copie du
+  joueur) et l'écran de fin raconte la partie (`meta.bestCombo`), le critique se voit (tir doré, décidé au tir) et
+  l'esquive parfaite lance la Contre-attaque (`P.ctr`) ; moins de temps morts (≤ 4,3 s par îlot, éclosion `SPN`, entrée
+  du boss `BSPN`, bulle à ≥ 290 u/s) ; la visée préfère l'ennemi qu'elle peut toucher (`lineClear`) et change de cible
+  dès que la sienne meurt, un tireur hors de l'écran ne tire pas et revient vite, un tir de base pousse à peine
+  (≤ 0,45 u/pas) ; pas d'écran vide (la vague s'ouvre sur deux groupes en tenaille, le suivant vient avant que l'arène se
+  vide, on paraît à l'écran ; mesuré au pilote invulnérable sur six graines) ; une mêlée qui touche (la Mite s'annonce puis
+  bondit au point de rencontre, l'Épine verrouille sa visée, charge 340 u et reste sonnée contre un rocher, `e.stun`) ;
+  des tireurs qui se plantent (le Tireur s'annonce 22 pas puis tire un éventail de 5 plus vite que la bulle, aucun tir
+  dans un rocher : ligne de tir `e.blk`, il se décale ; le Tireur d'élite verrouille sa visée et tire une aiguille ; un
+  critique pendant une annonce l'annule, `windup`) ; des lourds qui ont une voix (orbes du Pulsar destructibles, à ≤ 380 u
+  seulement ; montée en régime de la Gatling ; deux coups courbes de l'Orbiteur) ; des morts qui comptent (`deathFx` :
+  piquants de l'Épine et éclats de la Gatling, tirs cyan de la bulle ; onde du Pulsar ; le Porteur se fend en 3 Mites avec
+  `parent`) ; avaler en plein combat (un ennemi à bout, `ripe`, s'avale au contact et clignote ; gonflée, la bulle aspire
+  ce qui est plus petit et file ×1,15 ; frôler un tir remplit la jauge, `GRZ_G` ; proies qui ne fuient qu'à 220 u ;
+  Digestion à 20 absorptions) ; une série qui paie (fenêtre `SERW` de 2,5 s, prolongée par l'esquive parfaite et l'obstacle
+  cassé, `serKeep` ; cadeau à 15 et jauge à 40 en vague ; Emballement `emb()` : le tir accélère avec la série ; affichée
+  sous la bulle) ; le cœur du gardien (`absorbHeart` : ta dernière carte bonus monte d'un niveau, sans tirage, `G.picks`
+  reste à 16 ; sinon jauge pleine), vague sans une égratignure (jauge +15 %, `G.wq.hit`). Chaque changement du plan y ajoute ses
+  critères, vus en ECHEC avec `--ref=379e0fb` ; `--long` est réservé à la passe d'équilibrage, `--seul=V9` (mise au
+  point) ne lance que les critères dont le nom commence ainsi. Appelé par headless.js.
 - `node test/unused.js` — recensement du code mort (identifiants, `SFX`, `id` HTML,
   classes CSS, médias). À lancer avant d'affirmer qu'un symbole est utilisé.
 - `node test/compteur.js` — garde-fou du compteur de diagnostic (`meta.fps`) : chaque ligne doit

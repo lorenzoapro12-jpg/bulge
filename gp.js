@@ -4,8 +4,9 @@
    (1 carte parmi 3 à l'arrivée sur chaque îlot) et dure toute la partie. Rien ne se garde
    d'une partie à l'autre.
    ========================================================= */
-/* d : durée en pas (60 par seconde) ; 0 = effet instantané. Invincibilité courte (6 s), voulu par le propriétaire. */
-const PUC='#e4ff3a',PU_LIFE=540;
+/* d : durée en pas (60 par seconde) ; 0 = effet instantané. Invincibilité courte (6 s), voulu par le propriétaire.
+   PU_LIFE : un power-up au sol attend 12 s (9 avant le 08/10/2026) */
+const PUC='#e4ff3a',PU_LIFE=720;
 const PU={
   inv:{n:'Invincibilité',d:360,w:9},
   rapid:{n:'Tir rapide',d:480,w:16},
@@ -24,7 +25,7 @@ function dropPU(x,y,k){if(G.pus.length>=8)return;const a=R()*TAU;G.pus.push({x,y
 /* un power-up chronométré est-il actif ? (Surcharge) */
 function puAny(){const p=G.p.pu;for(const k in p)if(p[k]>0)return true;return false;}
 function takePU(q){
-  const P=G.p,D=PU[q.k];SFX.power();FX({ty:1,x:P.x,y:P.y,vx:0,vy:0,r:P.r,r1:P.r*3,life:16,max:16,col:PUC,w:3});
+  const P=G.p,D=PU[q.k];G.puN=(G.puN||0)+1;SFX.power();FX({ty:1,x:P.x,y:P.y,vx:0,vy:0,r:P.r,r1:P.r*3,life:16,max:16,col:PUC,w:3});
   ftext(P.x,P.y-P.r-16,D.n,PUC,15);G.score+=50;
   if(q.k==='wave'){shockwave(P.x,P.y,340,P.dmg*4,true);return;}
   if(q.k==='repair'){if(P.seg<P.segMax){P.seg++;SFX.seg();}return;}
@@ -71,10 +72,10 @@ const BON=[
   {id:'trophy',n:'Trophée',d:'Chaque élite abattue rend 1 segment.',c:'Corps',ic:'♛',max:1,f:p=>{p.trophy=1;}},
   {id:'echo',n:'Écho',d:'Ton dash efface les tirs ennemis autour de toi.',c:'Corps',ic:'◎',max:1,f:p=>{p.echo=1;}},
   {id:'glouton',n:'Glouton',d:'Tu avales les proies de plus loin, et elles remplissent davantage la jauge.',c:'Absorption',ic:'◉',max:2,f:p=>{p.glouton++;}},
-  {id:'digest',n:'Digestion',d:'Toutes les 12 absorptions, 1 segment revient.',c:'Absorption',ic:'❂',max:1,f:p=>{p.digest=1;}},
+  {id:'digest',n:'Digestion',d:'Toutes les 20 absorptions, 1 segment revient.',c:'Absorption',ic:'❂',max:1,f:p=>{p.digest=1;}},
   {id:'gfast',n:'Gonflement rapide',d:'La jauge de gonflement se remplit 40 % plus vite.',c:'Absorption',ic:'⇡',max:2,f:p=>{p.gGain*=1.4;}},
   {id:'ggiant',n:'Gonflement géant',d:'Gonflé, tu es plus gros et tu le restes plus longtemps.',c:'Absorption',ic:'⬤',max:2,f:p=>{p.gScale+=.45;p.gDur=Math.round(p.gDur*1.3);}},
-  {id:'appetit',n:'Appétit',d:'Un ennemi blessé sous 30 % de sa vie s’avale au contact.',c:'Absorption',ic:'◐',max:1,f:p=>{p.appetit=1;}},
+  {id:'appetit',n:'Appétit',d:'Les ennemis blessés s’avalent dès 40 % de vie (20 % sans ce bonus).',c:'Absorption',ic:'◐',max:1,f:p=>{p.appetit=1;}},
   {id:'prolong',n:'Prolongation',d:'Power-ups : +50 % de durée.',c:'Power-ups',ic:'⧗',max:2,f:p=>{p.puDur*=1.5;}},
   {id:'lucky',n:'Chanceux',d:'Power-ups plus fréquents.',c:'Power-ups',ic:'✦',max:2,f:p=>{p.luck++;}},
   {id:'magnet',n:'Aimant',d:'Les power-ups viennent à toi.',c:'Power-ups',ic:'⊙',max:1,f:p=>{p.magnet=1;}},
@@ -90,7 +91,7 @@ const FUS=[
   {id:'ghost',n:'Fantôme',d:'Dash deux fois plus fréquent, qui laisse une traînée mortelle.',ic:'◐',a:'spur',b:'dashc',f:p=>{p.dashMax*=.5;p.ghost=true;}},
   {id:'prism',n:'Prisme',d:'Chaque impact se fragmente, les tirs traversent +2.',ic:'◇',a:'split',b:'rail',f:p=>{p.split+=2;p.pierce+=2;}},
   {id:'vortex',n:'Vortex',d:'Les tirs ennemis ralentissent près de toi.',ic:'@',a:'speed',b:'magnet',f:p=>{p.vortex=true;}},
-  {id:'hole',n:'Trou noir',d:'Gonflé, tu aspires les ennemis proches.',ic:'●',a:'glouton',b:'ggiant',f:p=>{p.hole=true;}},
+  {id:'hole',n:'Trou noir',d:'Gonflé, tu aspires de plus loin, même les plus gros.',ic:'●',a:'glouton',b:'ggiant',f:p=>{p.hole=true;}},
 ];
 /* pactes : à partir de l'îlot 3, un pouvoir fort contre un prix */
 const PAC=[
