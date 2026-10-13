@@ -131,7 +131,11 @@ Outils complémentaires :
   des tireurs qui se plantent (le Tireur s'annonce 22 pas puis tire un éventail de 5 plus vite que la bulle, aucun tir
   dans un rocher : ligne de tir `e.blk`, il se décale ; le Tireur d'élite verrouille sa visée et tire une aiguille ; un
   critique pendant une annonce l'annule, `windup`) ; des lourds qui ont une voix (orbes du Pulsar destructibles, à ≤ 380 u
-  seulement ; montée en régime de la Gatling ; deux coups courbes de l'Orbiteur). Chaque changement du plan y ajoute ses
+  seulement ; montée en régime de la Gatling ; deux coups courbes de l'Orbiteur) ; des morts qui comptent (`deathFx` :
+  piquants de l'Épine et éclats de la Gatling, tirs cyan de la bulle ; onde du Pulsar ; le Porteur se fend en 3 Mites avec
+  `parent`) ; avaler en plein combat (un ennemi à bout, `ripe`, s'avale au contact et clignote ; gonflée, la bulle aspire
+  ce qui est plus petit et file ×1,15 ; frôler un tir remplit la jauge, `GRZ_G` ; proies qui ne fuient qu'à 220 u ;
+  Digestion à 20 absorptions). Chaque changement du plan y ajoute ses
   critères, vus en ECHEC avec `--ref=379e0fb` ; `--long` est réservé à la passe d'équilibrage, `--seul=V9` (mise au
   point) ne lance que les critères dont le nom commence ainsi. Appelé par headless.js.
 - `node test/unused.js` — recensement du code mort (identifiants, `SFX`, `id` HTML,

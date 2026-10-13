@@ -71,10 +71,10 @@ const BON=[
   {id:'trophy',n:'Trophée',d:'Chaque élite abattue rend 1 segment.',c:'Corps',ic:'♛',max:1,f:p=>{p.trophy=1;}},
   {id:'echo',n:'Écho',d:'Ton dash efface les tirs ennemis autour de toi.',c:'Corps',ic:'◎',max:1,f:p=>{p.echo=1;}},
   {id:'glouton',n:'Glouton',d:'Tu avales les proies de plus loin, et elles remplissent davantage la jauge.',c:'Absorption',ic:'◉',max:2,f:p=>{p.glouton++;}},
-  {id:'digest',n:'Digestion',d:'Toutes les 12 absorptions, 1 segment revient.',c:'Absorption',ic:'❂',max:1,f:p=>{p.digest=1;}},
+  {id:'digest',n:'Digestion',d:'Toutes les 20 absorptions, 1 segment revient.',c:'Absorption',ic:'❂',max:1,f:p=>{p.digest=1;}},
   {id:'gfast',n:'Gonflement rapide',d:'La jauge de gonflement se remplit 40 % plus vite.',c:'Absorption',ic:'⇡',max:2,f:p=>{p.gGain*=1.4;}},
   {id:'ggiant',n:'Gonflement géant',d:'Gonflé, tu es plus gros et tu le restes plus longtemps.',c:'Absorption',ic:'⬤',max:2,f:p=>{p.gScale+=.45;p.gDur=Math.round(p.gDur*1.3);}},
-  {id:'appetit',n:'Appétit',d:'Un ennemi blessé sous 30 % de sa vie s’avale au contact.',c:'Absorption',ic:'◐',max:1,f:p=>{p.appetit=1;}},
+  {id:'appetit',n:'Appétit',d:'Les ennemis blessés s’avalent dès 40 % de vie (20 % sans ce bonus).',c:'Absorption',ic:'◐',max:1,f:p=>{p.appetit=1;}},
   {id:'prolong',n:'Prolongation',d:'Power-ups : +50 % de durée.',c:'Power-ups',ic:'⧗',max:2,f:p=>{p.puDur*=1.5;}},
   {id:'lucky',n:'Chanceux',d:'Power-ups plus fréquents.',c:'Power-ups',ic:'✦',max:2,f:p=>{p.luck++;}},
   {id:'magnet',n:'Aimant',d:'Les power-ups viennent à toi.',c:'Power-ups',ic:'⊙',max:1,f:p=>{p.magnet=1;}},
@@ -90,7 +90,7 @@ const FUS=[
   {id:'ghost',n:'Fantôme',d:'Dash deux fois plus fréquent, qui laisse une traînée mortelle.',ic:'◐',a:'spur',b:'dashc',f:p=>{p.dashMax*=.5;p.ghost=true;}},
   {id:'prism',n:'Prisme',d:'Chaque impact se fragmente, les tirs traversent +2.',ic:'◇',a:'split',b:'rail',f:p=>{p.split+=2;p.pierce+=2;}},
   {id:'vortex',n:'Vortex',d:'Les tirs ennemis ralentissent près de toi.',ic:'@',a:'speed',b:'magnet',f:p=>{p.vortex=true;}},
-  {id:'hole',n:'Trou noir',d:'Gonflé, tu aspires les ennemis proches.',ic:'●',a:'glouton',b:'ggiant',f:p=>{p.hole=true;}},
+  {id:'hole',n:'Trou noir',d:'Gonflé, tu aspires de plus loin, même les plus gros.',ic:'●',a:'glouton',b:'ggiant',f:p=>{p.hole=true;}},
 ];
 /* pactes : à partir de l'îlot 3, un pouvoir fort contre un prix */
 const PAC=[

@@ -620,8 +620,9 @@ function drawEnemy(e){
   /* Tireur d'élite : visée de sa couleur qui s'épaissit, puis blanche et épaisse les 12 pas où elle est verrouillée */
   if(e.t==='sniper'&&e.tele>0){const f=1-e.tele/SNP_AIM,lk=e.tele<=12;c.globalAlpha=lk?.9:.15+.7*f;c.strokeStyle=lk?'#ffffff':col;c.lineWidth=lk?3.5:1+f*2.5;c.beginPath();c.moveTo(e.x,e.y);c.lineTo(e.x+Math.cos(e.ta)*1500,e.y+Math.sin(e.ta)*1500);c.stroke();c.globalAlpha=1;}
   if(e.t==='orbit'){c.fillStyle=col;for(let k=0;k<2;k++){const b=e.wob*5+k*Math.PI;c.beginPath();c.arc(e.x+Math.cos(b)*r*1.7,e.y+Math.sin(b)*r*1.7,r*.26,0,TAU);c.fill();}}
+  /* à bout (ripe, g2.js : il s'avale au contact) : le corps clignote, pâle une tranche de 8 images sur deux */
   const fl=e.flash>0;
-  shapePath(c,e.t,e.x,e.y,r,a);c.strokeStyle=e.elite||wu?'#ffffff':EDK;c.lineWidth=e.elite||wu?Math.max(3,r*.24):Math.max(2,r*.18);c.stroke();c.fillStyle=fl?(G.t-(e.crit||-99)<6?COL.gd:'#ffffff'):col;c.fill();
+  shapePath(c,e.t,e.x,e.y,r,a);c.strokeStyle=e.elite||wu?'#ffffff':EDK;c.lineWidth=e.elite||wu?Math.max(3,r*.24):Math.max(2,r*.18);c.stroke();c.fillStyle=fl?(G.t-(e.crit||-99)<6?COL.gd:'#ffffff'):ripe(e)&&(FRAME>>3)&1?pale(col):col;c.fill();
   if(!fl){c.globalAlpha=.3;shapePath(c,e.t,e.x-r*.18,e.y-r*.22,r*.5,a);c.fillStyle='#ffffff';c.fill();c.globalAlpha=1;}
   c.fillStyle=EDK;
   switch(e.t){

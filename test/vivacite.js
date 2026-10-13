@@ -34,6 +34,13 @@
          tire une aiguille ≥ 13 u/pas ; un critique pendant l'annonce l'annule ; dessin : bouches blanches, visée blanche, aiguilles ;
      V10. LOURDS : un tir de la bulle détruit un orbe de Pulsar et s'arrête ; la Gatling se plante ≥ 25 pas avant sa rafale ; le
          Pulsar ne pulse qu'à ≤ 380 u, ≤ 10 orbes après une inspiration ; l'Orbiteur tire deux coups courbes à 8 pas d'écart.
+     V11. MORTS : une Épine abattue projette 4 piquants (tirs cyan de la bulle) qui touchent ses voisines, une Gatling 6 éclats ;
+         un Pulsar abattu meurt dans une onde de 120 u (tirs ennemis effacés, voisin blessé) ; un Porteur se fend en 3 Mites avec
+         parent ; Mite, Tireur, Tireur d'élite, Orbiteur : rien.
+     V12. ABSORB : un ennemi à bout (< 20 %, < 40 % avec Appétit) et plus petit s'avale au contact sans coûter de segment, et
+         clignote ; gonflée, la bulle aspire une Mite à 200 u (pas un plus gros) et file ×1,15 ; frôler un tir remplit la jauge
+         de ,006 × gGain, une fois ; une proie ne fuit qu'à < 220 u, à ≤ ,55 × la vitesse de la bulle, s'avale à +10 ; ,35 × n
+         proies par vague ; Digestion : un segment toutes les 20 absorptions.
 
    node test/vivacite.js                arbre de travail
    node test/vivacite.js --ref=<commit> code d'un commit (379e0fb : tous les critères ECHOUENT)
@@ -591,6 +598,131 @@ check('V10 l’Orbiteur (cd 0) tire deux coups courbes (rot ± ,009, même sens)
     const ndl = bl.filter(x => x === 's ' + col + '/3/1' || x === 's #ffffff/1.2/1').length, img = bl.filter(x => x === 'i').length, orb = bl.filter(x => x === 's #ffffff/1.5/0.7').length;
     const ok = sp.includes(5) && se.includes(7) && sn.includes('s #ffffff/3.5/0.9') && !sv.includes('s #ffffff/3.5/0.9') && ndl === 2 && img === 3 && orb === 1 && ga.includes(3);
     return { ok, detail: 'bouches blanches : ' + (sp.filter(n => n > 1).join('/') || '0') + ' (élite ' + (se.filter(n => n > 1).join('/') || '0') + ') ; visée verrouillée : ' + (sn.filter(x => x[0] === 's').join(' ') || 'aucun trait') + ' ; 3 aiguilles + 3 orbes : ' + ndl + ' trait(s) d’aiguille, ' + img + ' sprite(s), ' + orb + ' trait(s) de cercle ; Gatling en montée : canons blancs ' + (ga.filter(n => n > 1).join('/') || '0') };
+  });
+}
+
+/* ================= V11 : MORTS =================
+   des morts qui comptent : l'Épine abattue projette 4 piquants, la Gatling 6 éclats (des tirs de la BULLE, cyan : ils se lisent
+   comme les tiens) ; le Pulsar meurt dans une onde (120 u : pousse, blesse, efface les tirs ennemis) ; le Porteur se fend en
+   3 Mites (parent posé : l'observateur de headless.js les reconnaît). Mite, Tireur, Tireur d'élite, Orbiteur : rien. */
+check('V11 une Épine abattue projette 4 piquants cyan : deux Épines à 60 u (dans l’axe) sont touchées en ≤ 10 pas ; un conseil la première fois', () => {
+  const H = arene(4290), z = zone(H, 300, 300);
+  if (!z) return { ok: false, detail: 'aucune zone libre' };
+  const cx = z[0] + 150, cy = z[1] + 150;
+  const r0 = J(H, `(()=>{const P=G.p;P.x=${z[0] + 30};P.y=${z[1] + 30};P.vx=P.vy=0;G.cx=P.x;G.cy=P.y;G.toasts=[];G.pb=[];
+    const o={spawn:0,age:0,cd:1e9},a=mkEnemy('spike',${cx + 60},${cy},o),b=mkEnemy('spike',${cx},${cy + 60},o);a.hp=a.mhp=b.hp=b.mhp=100;window.__N=[a,b];
+    const e=mkEnemy('spike',${cx},${cy},{spawn:0,age:0,cd:1e9,wob:0});killEnemy(e);
+    return JSON.stringify({n:G.pb.filter(q=>q.shard).length,c:[...new Set(G.pb.map(q=>q.col))],cy:COL.cy});})()`);
+  let n = 0; for (; n < 10 && !H.call('window.__N.every(q=>q.hp<100)'); n++) H.steps(1);
+  const hp = J(H, 'JSON.stringify(window.__N.map(q=>+q.hp.toFixed(2)))'), conseil = H.call('G.toasts.some(t=>/Épine abattue/.test(t.s))');
+  return { ok: r0.n === 4 && r0.c.length === 1 && r0.c[0] === r0.cy && hp.every(v => v < 100) && conseil,
+    detail: r0.n + ' piquant(s) (' + r0.c.join(' ') + ') ; voisines : PV ' + hp.join(' / ') + ' sur 100 après ' + n + ' pas ; conseil ' + (conseil ? 'affiché' : 'absent') };
+});
+check('V11 une Gatling abattue lance 6 éclats cyan (dégâts 1,5 ×) ; Mite, Tireur, Tireur d’élite, Orbiteur : rien', () => {
+  const H = arene(4291);
+  const r = J(H, `(()=>{const P=G.p,o={spawn:0,age:0,cd:1e9},out={};
+    for(const t of ['gatling','mite','spread','sniper','orbit']){G.pb=[];const n0=G.en.filter(q=>!q.dead).length;killEnemy(mkEnemy(t,P.x+200,P.y,o));
+      out[t]={n:G.pb.length,sh:G.pb.filter(q=>q.shard&&q.col===COL.cy&&Math.abs(q.dmg-1.5*P.dmg)<1e-9).length,en:G.en.filter(q=>!q.dead).length-n0};}
+    return JSON.stringify(out);})()`);
+  const rien = ['mite', 'spread', 'sniper', 'orbit'].every(t => r[t].n === 0 && r[t].en === 0);
+  return { ok: r.gatling.n === 6 && r.gatling.sh === 6 && rien, detail: Object.keys(r).map(t => t + ' : ' + r[t].n + ' tir(s)' + (t === 'gatling' ? ' (' + r[t].sh + ' éclats cyan à 1,5 ×)' : '') + (r[t].en ? ', +' + r[t].en + ' ennemi(s)' : '')).join(' ; ') };
+});
+check('V11 un Pulsar abattu : onde de 120 u, tous les tirs ennemis à < 120 u effacés (ceux à 160 u restent), un voisin à 80 u blessé', () => {
+  const H = arene(4292), z = zone(H, 400, 400);
+  if (!z) return { ok: false, detail: 'aucune zone libre' };
+  const cx = z[0] + 200, cy = z[1] + 200;
+  const r = J(H, `(()=>{const P=G.p,cx=${cx},cy=${cy};P.x=${z[0] + 20};P.y=${z[1] + 20};G.eb=[];
+    for(let i=0;i<8;i++){const a=i*TAU/8,d=40+i*10;ebul(cx+Math.cos(a)*d,cy+Math.sin(a)*d,a,0,4.5);}
+    for(let i=0;i<4;i++){const a=i*TAU/4+.4;ebul(cx+Math.cos(a)*160,cy+Math.sin(a)*160,a,0,4.5);}
+    const v=mkEnemy('spike',cx+80,cy,{spawn:0,age:0,cd:1e9});v.hp=v.mhp=100;
+    killEnemy(mkEnemy('ring',cx,cy,{spawn:0,age:0,cd:1e9}));
+    let pres=0,loin=0;for(const b of G.eb){if(Math.hypot(b.x-cx,b.y-cy)<120)pres++;else loin++;}
+    return JSON.stringify({pres,loin,hp:+v.hp.toFixed(2),vx:+v.vx.toFixed(2)});})()`);
+  return { ok: r.pres === 0 && r.loin === 4 && r.hp < 100, detail: 'tirs à < 120 u restants : ' + r.pres + ' (sur 8), à 160 u : ' + r.loin + ' (sur 4) ; voisin à 80 u : PV ' + r.hp + '/100, poussé à ' + r.vx + ' u/pas' };
+});
+check('V11 un Porteur abattu à l’îlot 8 se fend en exactement 3 Mites, chacune avec son parent (pas des proies)', () => {
+  const H = arene(4293);
+  const r = J(H, `(()=>{G.isl=8;const P=G.p,e=mkEnemy('spawner',P.x+250,P.y,{spawn:0,age:0,cd:1e9});const m0=G.en.filter(q=>!q.dead&&q.t==='mite').length;
+    killEnemy(e);const m=G.en.filter(q=>!q.dead&&q.t==='mite');
+    return JSON.stringify({n:m.length-m0,par:m.filter(q=>q.parent===e).length,proie:m.filter(q=>q.prey).length,spawn:[...new Set(m.map(q=>q.spawn))]});})()`);
+  return { ok: r.n === 3 && r.par === 3 && r.proie === 0, detail: '+' + r.n + ' Mite(s), ' + r.par + ' avec parent, ' + r.proie + ' proie(s), éclosion ' + r.spawn.join('/') + ' pas' };
+});
+
+/* ================= V12 : ABSORB =================
+   avaler en plein combat : un ennemi à bout (≤ 20 % de vie, 40 % avec Appétit) et plus petit que toi s'avale au contact ; gonflé,
+   tu aspires ce qui est plus petit que toi (240 u) et tu files ×1,15 ; frôler un tir remplit la jauge ; une proie ne fuit qu'à
+   moins de 220 u, moins vite (,55 × ta vitesse), et s'avale de plus loin (+10). Digestion : un segment toutes les 20 absorptions. */
+check('V12 un Tireur à 15 % de vie au contact de la bulle (sans Appétit) est avalé (G.eats + 1, aucun segment perdu) ; un conseil la première fois', () => {
+  const H = arene(4294);
+  const r = J(H, `(()=>{const P=G.p;P.appetit=0;G.toasts=[];const e=mkEnemy('spread',P.x+20,P.y,{spawn:0,age:0,cd:1e9});hurtEnemy(e,e.mhp*.85,0,0,true,false);
+    const t=G.toasts.some(q=>/à bout/.test(q.s));window.__E=e;window.__e0=G.eats;window.__s0=P.seg;P.inv=0;return JSON.stringify({t,hp:+(e.hp/e.mhp).toFixed(3)});})()`);
+  H.steps(1);
+  const s = J(H, 'JSON.stringify({m:window.__E.dead,e:G.eats-window.__e0,s:window.__s0-G.p.seg})');
+  return { ok: s.m && s.e === 1 && s.s === 0 && r.t, detail: 'vie ' + Math.round(r.hp * 100) + ' % : ' + (s.m ? 'avalé' : 'vivant') + ', G.eats +' + s.e + ', segments perdus ' + s.s + ' ; conseil ' + (r.t ? 'affiché' : 'absent') };
+});
+check('V12 à 30 % de vie, un Tireur au contact ne s’avale qu’avec Appétit (texte de la carte : « 40 % »)', () => {
+  const H = arene(4295);
+  const essai = ap => { H.call(`(()=>{const P=G.p;P.appetit=${ap};G.en=[];const e=mkEnemy('spread',P.x+20,P.y,{spawn:0,age:0,cd:1e9});e.hp=e.mhp*.3;window.__E=e;window.__e0=G.eats;})()`); H.steps(1); return J(H, 'JSON.stringify({m:window.__E.dead,e:G.eats-window.__e0})'); };
+  const a = essai(0), b = essai(1), txt = H.call('CARDS.appetit.u.d');
+  return { ok: !a.m && a.e === 0 && b.m && b.e === 1 && /40\s%/.test(txt), detail: 'sans Appétit : ' + (a.m ? 'avalé' : 'pas avalé') + ' ; avec : ' + (b.m ? 'avalé' : 'pas avalé') + ' ; carte : « ' + txt + ' »' };
+});
+check('V12 gonflée (sans Trou noir), la bulle aspire une Mite à 200 u (≥ 40 u en 30 pas), pas un ennemi plus gros qu’elle ; elle file ×1,15', () => {
+  const H = arene(4296), z = zone(H, 560, 420);
+  if (!z) return { ok: false, detail: 'aucune zone libre' };
+  /* ennemis sonnés (stun) : ils ne marchent pas d'eux-mêmes, seule l'aspiration les déplace */
+  const r = J(H, `(()=>{const P=G.p;P.hole=false;P.x=${z[0] + 280};P.y=${z[1] + 210};P.vx=P.vy=0;G.cx=P.x;G.cy=P.y;P.gauge=1;tryGonfle();
+    const o={spawn:0,age:0,cd:1e9,stun:1e9};window.__M=mkEnemy('mite',P.x+200,P.y,o);window.__B=mkEnemy('spawner',P.x-200,P.y,Object.assign({},o,{age:-1}));
+    window.__d=q=>Math.hypot(q.x-G.p.x,q.y-G.p.y);return JSON.stringify({m:window.__d(window.__M),b:window.__d(window.__B),rb:+window.__B.r.toFixed(1)});})()`);
+  H.steps(30);
+  const s = J(H, 'JSON.stringify({m:window.__d(window.__M),b:window.__d(window.__B),r:+G.p.r.toFixed(1)})');
+  /* vitesse : 40 pas à droite à plat, puis 40 pas gonflée */
+  const H2 = arene(4297), z2 = zone(H2, 560, 420);
+  H2.call(`(()=>{const P=G.p;P.x=${z2[0] + 40};P.y=${z2[1] + 210};P.vx=P.vy=0;window.__SIM_INPUT=function(){G.inX=1;G.inY=0;G.aimMan=false;};})()`);
+  H2.steps(40); const v0 = H2.call('G.p.vx'); H2.call('G.p.gauge=1;tryGonfle()'); H2.steps(40); const v1 = H2.call('G.p.vx');
+  const k = v1 / v0;
+  return { ok: r.m - s.m >= 40 && s.b >= r.b - .5 && k > 1.14 && k < 1.16,
+    detail: 'Mite : ' + r.m.toFixed(0) + ' → ' + s.m.toFixed(0) + ' u ; Porteur (r ' + r.rb + ', bulle r ' + s.r + ') : ' + r.b.toFixed(0) + ' → ' + s.b.toFixed(0) + ' u ; vitesse ' + v0.toFixed(2) + ' → ' + v1.toFixed(2) + ' u/pas (×' + k.toFixed(3) + ')' };
+});
+check('V12 un tir qui frôle la bulle (10 u de son bord) remplit la jauge d’exactement ,006 × gGain, une seule fois', () => {
+  const H = arene(4298), z = zone(H, 300, 120);
+  if (!z) return { ok: false, detail: 'aucune zone libre' };
+  const r = J(H, `(()=>{const P=G.p;P.x=${z[0] + 150};P.y=${z[1] + 60};P.vx=P.vy=0;P.gauge=0;P.gGain=1.25;G.eb=[];window.__sc=G.score;
+    window.__b=ebul(${z[0] + 10},P.y+P.r+10,0,4,4.5);return JSON.stringify({rs:P.r*.72+4.5,d:P.r+10});})()`);
+  let g = []; for (let i = 0; i < 70; i++) { H.steps(1); g.push(H.call('G.p.gauge')); }
+  const fin = g[g.length - 1], pas = new Set(g).size - (g[0] === 0 ? 1 : 0), att = .006 * 1.25, sc = H.call('G.score-window.__sc');
+  return { ok: Math.abs(fin - att) < 1e-12 && pas === 1 && H.call('G.eb.length') === 1, detail: 'tir à ' + r.d + ' u du centre (touche sous ' + r.rs.toFixed(1) + ') : jauge 0 → ' + fin + ' (attendu ' + att + '), ' + pas + ' palier(s) ; score +' + sc };
+});
+check('V12 proies : une proie à 300 u ne fuit pas ; à 150 u elle fuit à ≤ ,55 × la vitesse de la bulle ; elle s’avale à +10 ; ,35 × n proies par vague', () => {
+  const H = arene(4299), z = zone(H, 560, 420);
+  if (!z) return { ok: false, detail: 'aucune zone libre' };
+  const fuite = d => { H.call(`(()=>{const P=G.p;G.en=[];P.x=${z[0] + 60};P.y=${z[1] + 210};P.vx=P.vy=0;window.__Q=mkEnemy('mite',P.x+${d},P.y,{spawn:0,age:2});window.__v=0;})()`);
+    const d0 = H.call('Math.hypot(window.__Q.x-G.p.x,window.__Q.y-G.p.y)'); for (let i = 0; i < 30; i++) { H.steps(1); H.call('window.__v=Math.max(window.__v,Math.hypot(window.__Q.vx,window.__Q.vy))'); }
+    return { dd: H.call('Math.hypot(window.__Q.x-G.p.x,window.__Q.y-G.p.y)') - d0, v: H.call('window.__v') }; };
+  const loin = fuite(300), pres = fuite(150), spd = H.call('G.p.spd');
+  /* avalée de plus loin : au bord + 8 (après son premier pas de fuite, ≤ ,3 u) */
+  const av = J(H, `(()=>{const P=G.p;G.en=[];const q=mkEnemy('mite',0,0,{spawn:0,age:2});q.x=P.x+P.r+q.r+8;q.y=P.y;const e0=G.eats;step();return JSON.stringify({m:q.dead,e:G.eats-e0});})()`);
+  const np = J(H, `(()=>{G.isl=3;G.marks=[];G.en=[];waveStart(1);const n=G.wq.n,p=G.wq.prey+G.marks.filter(m=>m.prey).reduce((s,m)=>s+m.n,0);G.marks=[];G.en=[];G.wq=null;G.ph='pause';G.phT=-1e9;return JSON.stringify({n,p});})()`);
+  const ok = loin.dd < 30 && pres.dd > 30 && pres.v <= .55 * spd + 1e-9 && av.m && np.p === Math.round(np.n * .35);
+  return { ok, detail: 'à 300 u : ' + loin.dd.toFixed(1) + ' u en 30 pas ; à 150 u : ' + pres.dd.toFixed(1) + ' u, vitesse max ' + pres.v.toFixed(2) + ' (,55 × ' + spd + ' = ' + (.55 * spd).toFixed(2) + ') ; au bord + 8 : ' + (av.m ? 'avalée' : 'pas avalée') + ' ; îlot 3, vague 1 : ' + np.p + ' proies pour ' + np.n + ' ennemis' };
+});
+check('V12 Digestion : un segment revient à la 20e absorption, pas avant (texte de la carte : « 20 absorptions »)', () => {
+  const H = arene(4300);
+  const r = J(H, `(()=>{const P=G.p;P.digest=1;P.digN=0;P.seg=P.segMax-2;const s0=P.seg,s=[];for(let i=1;i<=20;i++){absorb(mkEnemy('mite',P.x+300,P.y,{spawn:0,age:2}));s.push(P.seg-s0);}
+    return JSON.stringify({s19:s[18],s20:s[19],prem:s.indexOf(1)+1,txt:CARDS.digest.u.d});})()`);
+  return { ok: r.s19 === 0 && r.s20 === 1 && /20 absorptions/.test(r.txt), detail: 'premier segment rendu à l’absorption ' + r.prem + ' ; carte : « ' + r.txt + ' »' };
+});
+{
+  /* contexte 2D qui journalise les fill (couleur) pendant drawEnemy */
+  let LOG = null;
+  const jrn = () => { const base = L.mkCtx(); return new Proxy({}, { get: (t, p) => (LOG && p === 'fill' ? () => { LOG.push(base.fillStyle); } : base[p]), set: (t, p, v) => { base[p] = v; return true; } }); };
+  check('V12 dessin : un ennemi à bout clignote (corps pâle une image sur deux tranches de 8) ; un ennemi en pleine forme non', () => {
+    const H = arene(4301, { mkCtx: jrn });
+    H.call('render(1,16.7)');
+    const d = (f, fr) => { H.call(`window.__D=mkEnemy('spread',G.p.x+150,G.p.y,{spawn:0,age:0,cd:1e9});window.__D.hp=window.__D.mhp*${f};FRAME=${fr};`); LOG = []; H.call('drawEnemy(window.__D)'); const l = LOG; LOG = null; return l; };
+    const col = H.call('ET.spread.col'), pl = H.call('pale(ET.spread.col)');
+    const a = d(.15, 8), b = d(.15, 16), c = d(1, 8);
+    const ok = a.includes(pl) && !a.includes(col) && b.includes(col) && !b.includes(pl) && c.includes(col) && !c.includes(pl);
+    return { ok, detail: 'à 15 %, FRAME 8 : ' + (a.includes(pl) ? 'pâle' : 'plein') + ' ; FRAME 16 : ' + (b.includes(pl) ? 'pâle' : 'plein') + ' ; pleine vie, FRAME 8 : ' + (c.includes(pl) ? 'pâle' : 'plein') };
   });
 }
 

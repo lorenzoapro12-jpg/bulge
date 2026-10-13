@@ -1261,7 +1261,7 @@ function updIslet(){
    (vivants + annoncés) ; 4 marques au sol au plus ; plafond de vivants 6+⌈1,6k⌉ (8 à l'îlot 1, 19 au 8 ; avant 7 à 17). */
 function waveStart(w){
   const k=G.isl,n=4+4*w+k;G.wave=w;G.ph='wave';G.phT=0;
-  G.wq={left:n,n,el:Math.ceil(n*.55),eld:false,prey:k>=PREYA+1?Math.round(n*.5):0,nextT:Math.round(rr(30,55)),th:R()*TAU,gi:0,lastS:0,hit:0};
+  G.wq={left:n,n,el:Math.ceil(n*.55),eld:false,prey:k>=PREYA+1?Math.round(n*.35):0,nextT:Math.round(rr(30,55)),th:R()*TAU,gi:0,lastS:0,hit:0};
   G.wbn={w,t:0};SFX.wave();spawnGroup();spawnGroup();
   if(w===2&&k===1&&G.tutOn)toast(inp.touch?'Bouton ⚡ : dash, invulnérable. Frôle un tir en dash : esquive parfaite.':'Espace ou Maj : dash, invulnérable. Frôle un tir en dash : esquive parfaite.');
 }
@@ -1360,6 +1360,7 @@ function hurtEnemy(e,dmg,kx,ky,quiet,cr){
   if((c||dmg>=.25*e.mhp)&&windup(e)){e.st=0;e.tele=0;e.cd=Math.max(e.cd,30);ringFX(e.x,e.y,e.r,e.r*1.8,'#ffffff',10,2);}
   if(e.stun>0)dmg*=2;
   e.hp-=dmg;e.flash=c?6:4;
+  if(e.hp>0&&!G.tut.ripe&&ripe(e)){G.tut.ripe=1;toast('Un ennemi à bout clignote : fonce dessus pour l’avaler !');}
   if(kx&&!(e.t==='spike'&&e.st===2)){const m=e.r>20?.35:1;e.vx+=kx*m;e.vy+=ky*m;}
   if(!quiet)SFX.hit(Math.max(0,e.hp/e.mhp));
   if(e.hp<=0)killEnemy(e);
@@ -1370,6 +1371,7 @@ function killEnemy(e){
   if(e.dead)return;e.dead=true;if(e.parent&&!e.parent.dead)e.parent.kids--;
   const P=G.p;G.kills++;G.score+=Math.round(e.d.sc*(e.elite?4:1)*(e.prey?.5:1)*comboUp(e));gain(e.elite?.12:e.prey?.02:.05);
   if(e.elite){dropPU(e.x,e.y);if(P.luck&&R()<.3*P.luck)dropPU(e.x,e.y);if(P.trophy&&P.seg<P.segMax){P.seg++;SFX.seg();}}
+  if(!e.prey&&!(e.egg>0))deathFx(e);
   /* halo de mort : plus petit (×3,2, ×4,5 pour un gros ou une élite ; avant ×7) et un au plus toutes les 4 images */
   if(G.t-G.l4>=4){G.l4=G.t;FX({ty:4,x:e.x,y:e.y,vx:0,vy:0,r:e.r*(e.elite||e.r>=20?4.5:3.2),life:14,max:14,col:e.col});}
   shards(e.x,e.y,e.col,6+Math.floor(e.r/3),3+e.r*.08,e.r);sparks(e.x,e.y,e.col,8,4);ringFX(e.x,e.y,e.r,e.r*2.4,e.col,18,3);
@@ -1378,24 +1380,44 @@ function killEnemy(e){
   const big=e.r>=20,mid=e.d.hp>=4||e.elite;SFX.pop(big,G.combo);kick(e.x,e.y,e.elite?7:big?5:mid?3:1.5);if(big||e.elite)shake(.25);
   if(mid&&!e.prey&&G.t-G.lastFz>8){G.freeze=Math.max(G.freeze,e.elite?3:big?2:1);G.lastFz=G.t;}
 }
+/* MORTS (08/10/2026, « les ennemis ne sont pas intéressants ») : une mort qui compte. L'Épine abattue projette 4 piquants (dans
+   l'axe où elle est dessinée, comme eAng), la Gatling 6 éclats : des tirs de la BULLE (sans col : cyan, ils se lisent comme les
+   tiens, pas comme un tir ennemi) ; le Pulsar meurt dans une onde (120 u : pousse, blesse, efface les tirs ennemis) ; le Porteur se
+   fend en 3 Mites (parent posé : elles ont l'âge de leur parent, l'observateur de headless.js les reconnaît). Mite, Tireur, Tireur
+   d'élite, Orbiteur : rien, de la chair à canon. Chaînes bornées : l'onde saute ce qui éclot (spawn > 0, les Mites naissent à 10) ;
+   les éclats poussés pendant la boucle à rebours d'updBullets tombent après i et n'y sont pas vus ce pas-ci. */
+function deathFx(e){const P=G.p;
+  switch(e.t){
+    case 'spike':{const a0=e.st===2?e.ca:e.wob*2;for(let k=0;k<4;k++)pbul(e.x,e.y,a0+k*Math.PI/2,{dmg:P.dmg*2,r:4,life:16,shard:true,pierce:1,split:0,rico:0,home:0,hit:[e]});
+      if(!G.tut.spk){G.tut.spk=1;toast('Une Épine abattue projette ses piquants : abats-la au milieu des autres.');}break;}
+    case 'gatling':for(let k=0;k<6;k++)pbul(e.x,e.y,k*TAU/6+e.wob,{dmg:P.dmg*1.5,r:4,life:20,shard:true,pierce:1,split:0,rico:0,home:0,hit:[e]});break;
+    case 'ring':shockwave(e.x,e.y,120,P.dmg*3,true);break;
+    case 'spawner':if(G.en.length<40)for(let k=0;k<3;k++){const a=k*TAU/3+e.wob;mkEnemy('mite',e.x+Math.cos(a)*e.r,e.y+Math.sin(a)*e.r,{age:0,spawn:10,parent:e,cd:rr(30,50)});}break;
+  }}
 /* COMBO : chaque ennemi abattu ou avalé moins de 1,5 s après le précédent fait monter la série ; le score est
    multiplié (×1 puis +0,5 toutes les 5, jusqu'à ×3). Affiché sous le score (g3.js drawHUD), annoncé à 10, 25, 50, 100. */
 function comboUp(e){const P=G.p;G.combo=G.t-G.comboT<=90?G.combo+1:1;G.comboT=G.t;if(G.combo>G.comboMx)G.comboMx=G.combo;
   if(G.combo===10||G.combo===25||G.combo===50||G.combo===100){ftext(P.x,P.y-P.r-26,'Série ×'+G.combo+' !',COL.gd,18);SFX.evo();}
   return 1+Math.min(4,Math.floor(G.combo/5))*.5;}
-/* avaler : une proie (ou n'importe quel ennemi plus petit que toi quand tu es gonflé) */
+/* ABSORB (08/10/2026, « on ne se sent pas récompensé ») : avaler en plein combat. À bout (moins de 20 % de vie, 40 % avec Appétit)
+   et plus petit que toi (×1,1), un ennemi s'avale au contact au lieu de te blesser ; il clignote (g3.js drawEnemy). À son îlot :
+   Épine, Tireur, Tireur d'élite, Orbiteur, Gatling ; le Pulsar et le Porteur, seulement quand tu es gonflé. */
+function ripe(e){const P=G.p;return !e.prey&&!(e.egg>0)&&e.hp<e.mhp*(P.appetit?.4:.2)&&e.r<P.r*1.1;}
+/* avaler : une proie, un ennemi à bout (ripe), ou n'importe quel ennemi plus petit que toi quand tu es gonflé.
+   Digestion : un segment toutes les 20 absorptions (12 avant : on avale bien plus souvent) */
 function absorb(e){
   if(e.dead)return;e.dead=true;if(e.parent&&!e.parent.dead)e.parent.kids--;const P=G.p;
   G.eats++;G.score+=Math.round((e.prey?25:e.d.sc)*comboUp(e));gain((e.prey?.075:.04)*(1+.4*P.glouton));
-  if(P.digest&&++P.digN>=12){P.digN=0;if(P.seg<P.segMax){P.seg++;SFX.seg();ftext(P.x,P.y-P.r-14,'+1 segment',COL.cy,15);}}
+  if(P.digest&&++P.digN>=20){P.digN=0;if(P.seg<P.segMax){P.seg++;SFX.seg();ftext(P.x,P.y-P.r-14,'+1 segment',COL.cy,15);}}
   if(e.elite)dropPU(e.x,e.y);
   FX({ty:5,x:e.x,y:e.y,vx:(P.x-e.x)/12,vy:(P.y-e.y)/12,r:e.r,life:12,max:12,col:e.col});
   SFX.absorb();P.glow=Math.min(1,P.glow+.25);
 }
-/* proie : erre, puis fuit dès que tu approches (moins vite que toi) */
+/* proie : erre, puis fuit quand tu approches (moins vite que toi). À 220 u et ,55 × ta vitesse (360 et ,7 avant : on la
+   poursuivait à travers l'îlot) ; elle s'avale à +10 de ton bord (+6) */
 function preyMove(e,tf){
   const P=G.p,dx=e.x-P.x,dy=e.y-P.y,d=Math.hypot(dx,dy)||1;e.wob+=.05;let tx,ty,sp;
-  if(d<360){tx=dx/d+Math.cos(e.wob)*.35;ty=dy/d+Math.sin(e.wob)*.35;sp=P.spd*.7;}
+  if(d<220){tx=dx/d+Math.cos(e.wob)*.35;ty=dy/d+Math.sin(e.wob)*.35;sp=P.spd*.55;}
   else{e.wa+=rr(-.1,.1);tx=Math.cos(e.wa);ty=Math.sin(e.wa);sp=.8;}
   const tl=Math.hypot(tx,ty)||1;e.vx=lerp(e.vx,tx/tl*sp,.1);e.vy=lerp(e.vy,ty/tl*sp,.1);
   if(P.glouton&&d<P.r+e.r+90*P.glouton){e.vx-=dx/d*1.1;e.vy-=dy/d*1.1;}
@@ -1513,13 +1535,14 @@ function updEnemies(){
     if(d2<rs*rs&&d2>.01){const d=Math.sqrt(d2),o=(rs-d)*.5/d;a.x-=dx*o;a.y-=dy*o;b.x+=dx*o;b.y+=dy*o;}}}
   /* givre (Glacier) : la traînée du dash glissé ralentit les ennemis qui la traversent */
   if(D.givre.length)for(const e of G.en){if(e.dead||e.spawn>0)continue;for(const q of D.givre)if(dist2(e.x,e.y,q.x,q.y)<(q.r+e.r)**2){if(e.frostT<=G.t)sparks(e.x,e.y,'#b5f3ff',3,2,14);e.frostT=G.t+90;break;}}
-  /* Trou noir : gonflé, tu aspires les ennemis proches */
-  if(P.gon>0&&P.hole)for(const e of G.en){if(e.dead||e.spawn>0)continue;const dx=P.x-e.x,dy=P.y-e.y,d=Math.hypot(dx,dy)||1;if(d<340){e.vx+=dx/d*.7;e.vy+=dy/d*.7;e.x+=dx/d*1.6;e.y+=dy/d*1.6;}}
+  /* gonflée, la bulle aspire ce qui est plus petit qu'elle à moins de 240 u (×,64) : l'avaler devient le but du gonflement
+     (2,7 ennemis par gonflement à l'îlot 3 avant). Trou noir : tout, plus gros compris, à 340 u et à pleine force */
+  if(P.gon>0)for(const e of G.en){if(e.dead||e.spawn>0||!P.hole&&e.r>=P.r)continue;const dx=P.x-e.x,dy=P.y-e.y,d=Math.hypot(dx,dy)||1,R0=P.hole?340:240,k=P.hole?1:.64;if(d<R0){e.vx+=dx/d*.7*k;e.vy+=dy/d*.7*k;e.x+=dx/d*1.6*k;e.y+=dy/d*1.6*k;}}
   if(G.state==='play'&&!P.dead)for(const e of G.en){if(e.dead||e.spawn>0||e.fall>0)continue;const d2=dist2(e.x,e.y,P.x,P.y);
-    if(e.prey||e.egg>0){if(d2<(P.r+e.r+6+30*P.glouton)**2)absorb(e);continue;}
+    if(e.prey||e.egg>0){if(d2<(P.r+e.r+10+30*P.glouton)**2)absorb(e);continue;}
     const rs=e.r+P.r*.85;if(d2>=rs*rs)continue;
     if(P.gon>0&&e.r<P.r){absorb(e);continue;}
-    if(P.appetit&&e.hp<e.mhp*.3&&e.r<P.r*1.1){absorb(e);continue;}
+    if(ripe(e)){absorb(e);continue;}
     const dx=P.x-e.x,dy=P.y-e.y,d=Math.sqrt(d2)||1,o=rs-d;
     if(e.stun>0){e.x-=dx/d*o;e.y-=dy/d*o;continue;}
     if(P.gon>0||P.pu.inv>0){if(e.ivT<=G.t){e.ivT=G.t+8;hurtEnemy(e,P.dmg*4,-dx/d*3,-dy/d*3,true);}e.x-=dx/d*o;e.y-=dy/d*o;continue;}
@@ -1575,7 +1598,7 @@ function updPlayer(){
     if(P.ghost&&G.t%3===0)G.trails.push({x:P.x,y:P.y,r:P.r*1.15,life:70});
     if(P.dashDmg>0)for(const e of G.en){if(e.dead||e.spawn>0||P.dashHit.includes(e))continue;if(dist2(e.x,e.y,P.x,P.y)<(e.r+P.r+6)**2){P.dashHit.push(e);hurtEnemy(e,P.dashDmg*P.dmg,P.dvx*.5,P.dvy*.5);}}
     if(P.dashing===0){P.vx*=.35;P.vy*=.35;if(P.mines)layMine(P.x,P.y);}
-  }else{const m=porte()?CUR_K:1;P.vx=lerp(P.vx,G.inX*P.spd*m,.24);P.vy=lerp(P.vy,G.inY*P.spd*m,.24);}
+  }else{const m=(porte()?CUR_K:1)*(P.gon>0?1.15:1);P.vx=lerp(P.vx,G.inX*P.spd*m,.24);P.vy=lerp(P.vy,G.inY*P.spd*m,.24);}
   P.x+=P.vx;P.y+=P.vy;
   const oh=collideCircle(P,P.r*.92);if(oh){const vn=P.vx*oh[0]+P.vy*oh[1];if(vn<0){P.vx-=vn*oh[0];P.vy-=vn*oh[1];}}
   const cn=confine(P,P.r);if(cn){const vn=P.vx*cn[0]+P.vy*cn[1];if(vn>0){P.vx-=vn*cn[0]*1.6;P.vy-=vn*cn[1]*1.6;}}
@@ -1739,6 +1762,8 @@ function relais(e){if(G.biome!=='core')return null;const cx=Math.floor(e.x/CH),c
   return best;}
 
 /* ---------- projectiles ---------- */
+/* frôler un tir ennemi (à moins de 16 u de la zone de touche, une fois par tir) : score, jauge (GRZ_G × gGain), deux traits blancs, un son */
+const GRZ_G=.006;
 function updBullets(){
   const P=G.p,bg=BIGS(),B=G.boss;let nsh=0;for(const q of G.eb)if(q.sh)nsh++;
   for(let i=G.pb.length-1;i>=0;i--){const b=G.pb[i];if(!b)continue;
@@ -1792,7 +1817,7 @@ function updBullets(){
     const rs=P.r*(big?1:.72)+b.r,d2=dist2(b.x,b.y,P.x,P.y);
     if(d2<rs*rs){if(P.dashing>0){perfect(b.x,b.y);continue;}if(big||P.pu.inv>0){sparks(b.x,b.y,COL.wh,3,2,10);G.eb.splice(i,1);continue;}
       sparks(b.x,b.y,b.col,8,3);G.eb.splice(i,1);hurtPlayer(b.x,b.y);continue;}
-    if(!b.gz&&d2<(rs+16)**2){b.gz=true;G.score+=2;}
+    if(!b.gz&&d2<(rs+16)**2){b.gz=true;G.score+=5*G.isl;gain(GRZ_G);lineSparks(b.x,b.y,Math.atan2(b.y-P.y,b.x-P.x),2,'#ffffff');SFX.graze();if(!G.tut.gz){G.tut.gz=1;toast('Frôler un tir remplit la jauge.');}}
   }
 }
 
@@ -1931,10 +1956,10 @@ const BON=[
   {id:'trophy',n:'Trophée',d:'Chaque élite abattue rend 1 segment.',c:'Corps',ic:'♛',max:1,f:p=>{p.trophy=1;}},
   {id:'echo',n:'Écho',d:'Ton dash efface les tirs ennemis autour de toi.',c:'Corps',ic:'◎',max:1,f:p=>{p.echo=1;}},
   {id:'glouton',n:'Glouton',d:'Tu avales les proies de plus loin, et elles remplissent davantage la jauge.',c:'Absorption',ic:'◉',max:2,f:p=>{p.glouton++;}},
-  {id:'digest',n:'Digestion',d:'Toutes les 12 absorptions, 1 segment revient.',c:'Absorption',ic:'❂',max:1,f:p=>{p.digest=1;}},
+  {id:'digest',n:'Digestion',d:'Toutes les 20 absorptions, 1 segment revient.',c:'Absorption',ic:'❂',max:1,f:p=>{p.digest=1;}},
   {id:'gfast',n:'Gonflement rapide',d:'La jauge de gonflement se remplit 40 % plus vite.',c:'Absorption',ic:'⇡',max:2,f:p=>{p.gGain*=1.4;}},
   {id:'ggiant',n:'Gonflement géant',d:'Gonflé, tu es plus gros et tu le restes plus longtemps.',c:'Absorption',ic:'⬤',max:2,f:p=>{p.gScale+=.45;p.gDur=Math.round(p.gDur*1.3);}},
-  {id:'appetit',n:'Appétit',d:'Un ennemi blessé sous 30 % de sa vie s’avale au contact.',c:'Absorption',ic:'◐',max:1,f:p=>{p.appetit=1;}},
+  {id:'appetit',n:'Appétit',d:'Les ennemis blessés s’avalent dès 40 % de vie (20 % sans ce bonus).',c:'Absorption',ic:'◐',max:1,f:p=>{p.appetit=1;}},
   {id:'prolong',n:'Prolongation',d:'Power-ups : +50 % de durée.',c:'Power-ups',ic:'⧗',max:2,f:p=>{p.puDur*=1.5;}},
   {id:'lucky',n:'Chanceux',d:'Power-ups plus fréquents.',c:'Power-ups',ic:'✦',max:2,f:p=>{p.luck++;}},
   {id:'magnet',n:'Aimant',d:'Les power-ups viennent à toi.',c:'Power-ups',ic:'⊙',max:1,f:p=>{p.magnet=1;}},
@@ -1950,7 +1975,7 @@ const FUS=[
   {id:'ghost',n:'Fantôme',d:'Dash deux fois plus fréquent, qui laisse une traînée mortelle.',ic:'◐',a:'spur',b:'dashc',f:p=>{p.dashMax*=.5;p.ghost=true;}},
   {id:'prism',n:'Prisme',d:'Chaque impact se fragmente, les tirs traversent +2.',ic:'◇',a:'split',b:'rail',f:p=>{p.split+=2;p.pierce+=2;}},
   {id:'vortex',n:'Vortex',d:'Les tirs ennemis ralentissent près de toi.',ic:'@',a:'speed',b:'magnet',f:p=>{p.vortex=true;}},
-  {id:'hole',n:'Trou noir',d:'Gonflé, tu aspires les ennemis proches.',ic:'●',a:'glouton',b:'ggiant',f:p=>{p.hole=true;}},
+  {id:'hole',n:'Trou noir',d:'Gonflé, tu aspires de plus loin, même les plus gros.',ic:'●',a:'glouton',b:'ggiant',f:p=>{p.hole=true;}},
 ];
 /* pactes : à partir de l'îlot 3, un pouvoir fort contre un prix */
 const PAC=[
@@ -2774,8 +2799,9 @@ function drawEnemy(e){
   /* Tireur d'élite : visée de sa couleur qui s'épaissit, puis blanche et épaisse les 12 pas où elle est verrouillée */
   if(e.t==='sniper'&&e.tele>0){const f=1-e.tele/SNP_AIM,lk=e.tele<=12;c.globalAlpha=lk?.9:.15+.7*f;c.strokeStyle=lk?'#ffffff':col;c.lineWidth=lk?3.5:1+f*2.5;c.beginPath();c.moveTo(e.x,e.y);c.lineTo(e.x+Math.cos(e.ta)*1500,e.y+Math.sin(e.ta)*1500);c.stroke();c.globalAlpha=1;}
   if(e.t==='orbit'){c.fillStyle=col;for(let k=0;k<2;k++){const b=e.wob*5+k*Math.PI;c.beginPath();c.arc(e.x+Math.cos(b)*r*1.7,e.y+Math.sin(b)*r*1.7,r*.26,0,TAU);c.fill();}}
+  /* à bout (ripe, g2.js : il s'avale au contact) : le corps clignote, pâle une tranche de 8 images sur deux */
   const fl=e.flash>0;
-  shapePath(c,e.t,e.x,e.y,r,a);c.strokeStyle=e.elite||wu?'#ffffff':EDK;c.lineWidth=e.elite||wu?Math.max(3,r*.24):Math.max(2,r*.18);c.stroke();c.fillStyle=fl?(G.t-(e.crit||-99)<6?COL.gd:'#ffffff'):col;c.fill();
+  shapePath(c,e.t,e.x,e.y,r,a);c.strokeStyle=e.elite||wu?'#ffffff':EDK;c.lineWidth=e.elite||wu?Math.max(3,r*.24):Math.max(2,r*.18);c.stroke();c.fillStyle=fl?(G.t-(e.crit||-99)<6?COL.gd:'#ffffff'):ripe(e)&&(FRAME>>3)&1?pale(col):col;c.fill();
   if(!fl){c.globalAlpha=.3;shapePath(c,e.t,e.x-r*.18,e.y-r*.22,r*.5,a);c.fillStyle='#ffffff';c.fill();c.globalAlpha=1;}
   c.fillStyle=EDK;
   switch(e.t){

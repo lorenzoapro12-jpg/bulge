@@ -160,7 +160,7 @@ function mkGame(opts = {}) {
 
 /* ---------- IA de test, écrite DANS le realm du jeu ----------
    Un joueur prudent : esquive les tirs (en anticipant leur trajectoire) et les zones annoncées (traits, bandes,
-   arcs), garde ses distances avec ce qui n'est pas une proie, avale les proies, ramasse les power-ups, va
+   arcs), garde ses distances avec ce qui n'est pas une proie, avale les proies (et les ennemis à bout tout proches), ramasse les power-ups, va
    chercher ce qu'il ne voit pas (le tir automatique ne vise que l'écran), dash quand deux tirs le serrent (ou de côté
    quand une Mite bondit, qu'une Épine charge sur lui ; il sort du trait d'une Épine qui vise, de la ligne verrouillée d'un
    Tireur d'élite),
@@ -178,7 +178,9 @@ window.__SIM_INPUT = function(){
     else if (q.ty === 'arc') { const dx = P.x - q.x, dy = P.y - q.y, d = Math.hypot(dx, dy) || 1; if (d < q.r) { vx -= dy / d * 2; vy += dx / d * 2; } } }
   let tgt = null, td = 1e18;
   for (const e of G.en) { if (e.dead || e.spawn > 0) continue; const dx = P.x - e.x, dy = P.y - e.y, d = Math.hypot(dx, dy) || 1;
-    if (e.prey || e.egg > 0 || (P.gon > 0 && e.r < P.r)) { if (d < td) { td = d; tgt = e; } continue; }
+    /* ABSORB : un ennemi à bout (ripe) à moins de 200 u se traite comme une proie (on fonce dessus, sans s'en écarter) ;
+       typeof : sur un code plus ancien, ripe n'existe pas */
+    if (e.prey || e.egg > 0 || (P.gon > 0 && e.r < P.r) || typeof ripe === 'function' && ripe(e) && d < 200) { if (d < td) { td = d; tgt = e; } continue; }
     const R = e.r + P.r + 150; if (d < R) { vx += dx / d * (R - d) / R * 2.5; vy += dy / d * (R - d) / R * 2.5; }
     /* mêlée (MELEE, 08/10/2026) : hors du trait d'une Épine qui vise (st 1). Pas d'écart devant une Mite qui s'apprête à bondir :
        elle vise le point de rencontre, un pas de côté régulier est justement ce qu'elle anticipe (le dash, plus bas, l'esquive).
