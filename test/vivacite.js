@@ -28,37 +28,51 @@
          ≥ 4 ennemis hostiles à l'écran à l'îlot 3 (~3 avant) ;
      V8. MÊLÉE : une Mite à 200 u touche la bulle qui file droit à angle droit (elle s'annonce ≥ 10 pas à l'arrêt, puis bondit
          ≥ 190 u) ; l'Épine verrouille sa visée les 10 derniers pas et charge ≥ 320 u ; contre un rocher, elle reste sonnée
-         (≥ 50 pas), sans danger au contact, et prend ×2 ; le dessin annonce tout cela (trait blanc, trait plein, points dorés).
+         (≥ 50 pas), sans danger au contact, et prend ×2 ; sonnée au bord, elle reste dans l'îlot ; le dessin annonce tout cela
+         (trait blanc, trait plein, points dorés).
      V9. TIREURS : à l'îlot 3, le Tireur se plante ≥ 20 pas puis tire un éventail de 5, dans sa couleur, plus vite que la bulle ;
          il ne tire pas dans un rocher massif (il se décale ≥ 80 u) ; le Tireur d'élite verrouille sa visée les 12 derniers pas et
-         tire une aiguille ≥ 13 u/pas ; un critique pendant l'annonce l'annule ; dessin : bouches blanches, visée blanche, aiguilles ;
+         tire une aiguille ≥ 13 u/pas ; un critique pendant l'annonce l'annule ; dessin : bouches blanches, visée blanche, aiguilles,
+         orbes du Pulsar cerclés de blanc dans leur sprite (aucun trait par image) ;
      V10. LOURDS : un tir de la bulle détruit un orbe de Pulsar et s'arrête ; la Gatling se plante ≥ 25 pas avant sa rafale ; le
-         Pulsar ne pulse qu'à ≤ 380 u, ≤ 10 orbes après une inspiration ; l'Orbiteur tire deux coups courbes à 8 pas d'écart.
+         Pulsar ne pulse qu'à ≤ 380 u, ≤ 10 orbes après une inspiration, tournés vers la bulle (brèche derrière lui), les quatre de
+         devant se refermant en pince sur elle ; un critique ne coupe pas l'annonce d'un lourd ; Gatling et Pulsar attaquent dans la
+         seconde qui suit leur éclosion (Tireur d'élite : recharge ≤ 30) ; l'Orbiteur tire deux coups courbes à 8 pas d'écart.
      V11. MORTS : une Épine abattue projette 4 piquants (tirs cyan de la bulle) qui touchent ses voisines, une Gatling 6 éclats ;
          un Pulsar abattu meurt dans une onde de 120 u (tirs ennemis effacés, voisin blessé) ; un Porteur se fend en 3 Mites avec
          parent ; Mite, Tireur, Tireur d'élite, Orbiteur : rien.
      V12. ABSORB : un ennemi à bout (< 20 %, < 40 % avec Appétit) et plus petit s'avale au contact sans coûter de segment, et
          clignote ; gonflée, la bulle aspire une Mite à 200 u (pas un plus gros) et file ×1,15 ; frôler un tir remplit la jauge
-         de ,006 × gGain, une fois ; une proie ne fuit qu'à < 220 u, à ≤ ,55 × la vitesse de la bulle, s'avale à +10 ; ,35 × n
+         de ,006 × gGain, une fois, et jamais pour un tir qui touche ; une proie ne fuit qu'à < 220 u, à ≤ ,55 × la vitesse de la bulle, s'avale à +10 ; ,35 × n
          proies par vague ; Digestion : un segment toutes les 20 absorptions.
      V13. SÉRIE : dix kills à 120 pas d'écart font une série de 10 (fenêtre 2,5 s) ; une esquive parfaite ou un obstacle cassé la
-         prolongent sans compter ; à 15 en vague, un power-up d'arme (rien en combat de boss), à 40, jauge +20 % ; Emballement :
+         prolongent sans compter ; à 15 en vague, un power-up d'arme (rien en combat de boss), sur un sol libre, même au plafond de
+         8 power-ups ; à 40, jauge +20 % ; Emballement :
          une série de 12 donne ≥ 1,2 × la cadence, des traînées plus longues, des canons blancs ; la série s'affiche sous la bulle ;
      V14. CŒUR : le boss d'un îlot 1 à 7 laisse un cœur qui vole vers la bulle (avalé en ≤ 100 pas) : la dernière carte bonus
-         monte d'un niveau (G.picks inchangé), ou la jauge se remplit ; vague sans une égratignure : jauge + ,15 ; le bonus
+         monte d'un niveau (G.picks inchangé), ou la jauge se remplit ; vague sans une égratignure : jauge + ,15 ; les textes
+         « jauge + » disent le vrai gain (rien gonflée, ×gGain, plafond) ; le bonus
          d'îlot nettoyé s'affiche ; dessin du cœur : 2 sprites.
      V15. ÉLITES : un modificateur (vive, blindée, volatile ; ≥ 20 % chacun) au lieu de ×3,2 PV, son nom à l'éclosion ; vive : ×1,5
          plus rapide, recharge ×1,6 ; blindée : ,2 × un tir de face, 1,5 × de dos, pas « à découvert » pour la visée ; volatile :
          sa mort arme une explosion de 110 u, 36 pas plus tard (bulle, ennemis voisins ; dash au travers : esquive parfaite) ;
+         conseils justes (la vive « attaque » plus vite, la Contre-attaque dure « un instant ») ;
      V16. COURBE : le type d'âge 1 naît à FODA de sa vie, se tue en ≤ ,7 × ses tirs de base d'avant (1,1 ×) ; l'ennemi touché
          dégonfle ; allure (pilote invulnérable, premier bonus, graines 1 à 3) : îlot 1 en ≤ 50 s, îlot 4 en ≤ 120 s, ≥ 1,2 kill
          par seconde de vague à l'îlot 4, ≥ 50 % des kills à ×2 et un power-up actif ≥ 25 % du temps sur chaque îlot 1 à 6.
-         --long : la passe d'équilibrage (pilote naturel, 12 graines, 40 min au plus) : ≤ 6 victoires, 12345 perdue, aucune mort
-         aux îlots 1-2 dans ≥ 10 graines, ≥ 2 touches par minute de vague aux îlots 3-4.
+         --long : la passe d'équilibrage (pilote naturel, 40 min au plus par partie), jugée sur DEUX jeux de 48 graines (1-48, et
+         49-96, jamais utilisé pour régler) : ≤ 50 % de victoires sur chacun, aucune mort aux îlots 1-2 dans ≥ 83 % des graines de
+         chacun, ≥ 2 touches par minute de vague aux îlots 3-4, les îlots 7-8 coûtent au moins autant de touches que les îlots 3-4 aux
+         parties qui les atteignent, ≥ 50 % des Gatlings de l'îlot 6 et des Pulsars de l'îlot 7 tirent avant de mourir ; et la graine
+         12345 (la partie « naturelle » de headless.js) perdue. Revue du 13/10/2026 : l'ancien jeu de 12 graines (1-11 et 12345) avait
+         servi à régler la difficulté ; il passait à 4 sur 12 quand les autres graines gagnaient à ~55 %.
 
    node test/vivacite.js                arbre de travail
-   node test/vivacite.js --ref=<commit> code d'un commit (379e0fb : tous les critères ECHOUENT)
-   node test/vivacite.js --long         en plus, la passe d'équilibrage de COURBE (~5 min ; hors GARDES de headless.js)
+   node test/vivacite.js --ref=<commit> code d'un commit (379e0fb : tous les critères ECHOUENT, sauf « V12 un tir de face qui
+                                        TOUCHE… », un défaut né sur la branche : il échoue sur ccfa15b)
+   node test/vivacite.js --long         en plus, la passe d'équilibrage de COURBE (97 parties, en parallèle sur les cœurs ; ~5 à
+                                        10 min ; hors GARDES de headless.js)
+   node test/vivacite.js --partie=<g>   une seule partie naturelle (graine g), en une ligne « PARTIE {json} » : ce que --long lance
    node test/vivacite.js --seul=V9      mise au point : seuls les critères dont le nom commence ainsi
    Code de sortie : 0 si tout passe, 1 sinon.
    ========================================================= */
@@ -76,6 +90,24 @@ function arene(seed, opts) {
   return H;
 }
 const J = (H, e) => JSON.parse(H.call(e));
+
+/* ---------- une partie NATURELLE (--partie=<graine>) : le pilote sans aide, bonus au hasard (comme la partie « naturelle » de
+   headless.js, que la graine 12345 rejoue à l'identique), 40 min de jeu au plus. hu : touches en vague par îlot ; ht : touches
+   (tout l'îlot, boss compris) ; w : pas de vague par îlot ; lr : lourds à leur îlot (Gatling 6, Pulsar 7, Tireur d'élite 4), [morts,
+   morts après avoir tiré]. Une touche : un coup qui porte (segment ou bouclier perdu). ---------- */
+function partie(seed) {
+  const H = L.mkGame({ ref: REF, seed }); let fin = null;
+  H.win.__SIM_PICK = c => c[Math.floor(H.call('Math.random()') * c.length)]; H.win.__SIM_END = w => { fin = w; };
+  H.ai(false); H.start();
+  H.call(`window.__HU={};window.__HT={};window.__LR={};(function(){const _h=hurtPlayer;hurtPlayer=function(x,y){const P=G.p;if(G.state==='play'&&!P.dead&&!(P.inv>0)&&!(P.dashing>0)&&!(P.gon>0)&&!(P.pu.inv>0)){const k=G.isl;window.__HT[k]=(window.__HT[k]||0)+1;if(G.ph==='wave')window.__HU[k]=(window.__HU[k]||0)+1;}return _h(x,y);};
+    if(typeof ebulE==='function'){const _b=ebulE;ebulE=function(e){e.__f=1;return _b.apply(this,arguments);};}
+    const lr=(e)=>{if(e.dead||e.prey||e.age!==0)return;const k=e.t==='gatling'&&G.isl===6?'g6':e.t==='ring'&&G.isl===7?'r7':e.t==='sniper'&&G.isl===4?'s4':null;if(!k)return;const a=window.__LR[k]||(window.__LR[k]=[0,0]);a[0]++;if(e.__f)a[1]++;};
+    const _k=killEnemy;killEnemy=function(e){lr(e);return _k.apply(this,arguments);};if(typeof absorb==='function'){const _a=absorb;absorb=function(e){lr(e);return _a.apply(this,arguments);};}})();`);
+  const W = {}, wv = H.call("(function(){return G.state==='play'&&G.ph==='wave'?G.isl:0;})"); let n = 0;
+  for (; n < 60 * 60 * 40 && fin === null; n++) { H.STEP(); H.advance(1000 / 60); const k = wv(); if (k) W[k] = (W[k] || 0) + 1; }
+  return { seed, fin, isl: H.call('G.isl'), min: n / 3600, hu: J(H, 'JSON.stringify(window.__HU)'), ht: J(H, 'JSON.stringify(window.__HT)'), w: W, lr: J(H, 'JSON.stringify(window.__LR)'), picks: H.call('G.picks.join(",")') };
+}
+if (L.ARG('partie')) { console.log('PARTIE ' + JSON.stringify(partie(+L.ARG('partie')))); process.exit(0); }
 
 /* ================= V1 : IMPACT ================= */
 check('V1 un kill d’Épine pèse : arrêt sur image ≥ 1 pas et coup de caméra ≥ 2,5', () => {
@@ -459,6 +491,22 @@ check('V8 une Épine qui charge dans un rocher massif reste sonnée (≥ 50 pas)
   const d = J(H, 'JSON.stringify((()=>{const e=window.__S;e.hp=e.mhp=100;let h=e.hp;hurtEnemy(e,1,0,0,true,false);const dS=h-e.hp;e.stun=0;h=e.hp;hurtEnemy(e,1,0,0,true,false);return{dS,dN:h-e.hp};})())');
   return { ok: stun >= 50 && perte === 0 && d.dN > 0 && d.dS === 2 * d.dN, detail: 'îlot ' + r.k + ', rocher R ' + r.R + ' atteint en ' + n + ' pas : sonnée ' + stun + ' pas ; contact sonnée : ' + perte + ' segment(s) perdu(s) ; coup ' + d.dS + ' sonnée contre ' + d.dN + ' sinon' };
 });
+check('V8 une Épine dont la charge finit dans le bord reste dans l’îlot pendant qu’elle est sonnée (≤ 1 u au-delà de PR − r), sur ≥ 3 caps dégagés', () => {
+  /* revue du 13/10/2026 : sonnée, elle gardait son élan de 8,5 u/pas sans confine ni collideCircle et sortait de ~48 u */
+  const H = arene(4277), R = [];
+  for (let i = 0; i < 24 && R.length < 6; i++) {
+    const ok = H.call(`(()=>{const u=${i}*TAU/24,ux=Math.cos(u),uy=Math.sin(u);for(let s=PR-260;s<=PR;s+=12)if(pointHit(ux*s,uy*s,24)||wallNear(ux*s,uy*s,24))return false;
+      G.en=[];G.eb=[];const P=G.p;P.x=-ux*200;P.y=-uy*200;P.vx=P.vy=0;G.cx=ux*(PR-200);G.cy=uy*(PR-200);
+      window.__S=mkEnemy('spike',ux*(PR-230),uy*(PR-230),{spawn:0,age:0,cd:1e9});Object.assign(window.__S,{st:2,st2:40,ca:u});return true;})()`);
+    if (!ok) continue;
+    let n = 0; for (; n < 45 && !H.call('window.__S.stun>0'); n++) H.steps(1);
+    if (!H.call('window.__S.stun>0')) { R.push({ i, stun: false }); continue; }
+    let mx = -1e9, k = 0; for (; k < 70 && H.call('window.__S.stun>0'); k++) { H.steps(1); mx = Math.max(mx, H.call('Math.hypot(window.__S.x,window.__S.y)-(PR-window.__S.r)')); }
+    R.push({ i, stun: true, mx, k });
+  }
+  const S = R.filter(r => r.stun);
+  return { ok: S.length >= 3 && S.every(r => r.mx <= 1), detail: S.length + ' cap(s) sonné(s) au bord sur ' + R.length + ' : dépassement max ' + (S.length ? Math.max(...S.map(r => r.mx)).toFixed(1) : '-') + ' u (' + S.map(r => r.mx.toFixed(1)).join(', ') + ')' };
+});
 
 {
   /* contexte 2D qui journalise stroke (couleur/épaisseur), fillRect (couleur) et setLineDash pendant drawEnemy */
@@ -576,6 +624,14 @@ check('V10 une Gatling (cd 0) à 250 u se plante ≥ 25 pas (montée en régime)
   for (; n < 90; n++) { H.steps(1); const s = J(H, 'JSON.stringify({v:Math.hypot(window.__T.vx,window.__T.vy),b:window.__neufs().length})'); if (s.b) { b = s.b; break; } if (s.v < .2) fixe++; else fixe = 0; }
   return { ok: b > 0 && fixe >= 25, detail: b ? 'plantée ' + fixe + ' pas, première balle au pas ' + (n + 1) : 'aucune balle en 90 pas' };
 });
+check('V10 un lourd attaque tôt : une Gatling ou un Pulsar naît avec une recharge ≤ 20 (montée ou inspiration dans la seconde qui suit l’éclosion), un Tireur d’élite ≤ 30 ; les autres gardent 30-80', () => {
+  /* revue du 13/10/2026 : avec cd 30-80 (plus l'éclosion et l'annonce), 60 % des Gatlings de l'îlot 6, 67 % des Pulsars de l'îlot 7
+     et 47 % des Tireurs d'élite de l'îlot 4 mouraient sans avoir tiré : leur attaque, celle qui les distingue, ne se voyait pas */
+  const H = arene(4329);
+  const r = J(H, `(()=>{const o={};for(const t of ['gatling','ring','sniper','spread','orbit']){let m=0,n=1e9;for(let i=0;i<40;i++){const e=mkEnemy(t,G.p.x+300,G.p.y,{age:0});m=Math.max(m,e.cd);n=Math.min(n,e.cd);}o[t]=[+n.toFixed(1),+m.toFixed(1)];}G.en=[];return JSON.stringify(o);})()`);
+  const ok = r.gatling[1] <= 20 && r.ring[1] <= 20 && r.sniper[1] <= 30 && r.spread[0] >= 30 && r.orbit[0] >= 30;
+  return { ok, detail: Object.keys(r).map(t => t + ' ' + r[t][0] + '-' + r[t][1]).join(', ') };
+});
 check('V10 un Pulsar à 500 u (à l’écran) ne pulse pas en 300 pas ; à 300 u, il inspire ≥ 18 pas puis souffle au plus 10 orbes (r 8, destructibles)', () => {
   /* en biais (,88 ; ,475) : à 500 u, il tient dans la vue du banc (480 × 360 u de demi-largeur × demi-hauteur) */
   const H = arene(4285);
@@ -591,6 +647,27 @@ check('V10 un Pulsar à 500 u (à l’écran) ne pulse pas en 300 pas ; à 300 u
   }
   const ok = vue && loin === 0 && P.length >= 1 && P.every(p => p.n <= 10 && p.insp >= 18 && p.ok);
   return { ok, detail: 'à 500 u (' + (vue ? 'à l’écran' : 'HORS de l’écran') + ') : ' + loin + ' pulsation(s) ; à 300 u : ' + P.length + ' pulsation(s), ' + P.map(p => p.n + ' orbes après ' + p.insp + ' pas d’inspiration' + (p.ok ? '' : ' (pas des orbes r 8)')).join(', ') };
+});
+check('V10 le Pulsar souffle VERS la bulle : brèche derrière lui, les quatre orbes de devant (deux de chaque côté) se referment en pince sur sa position (≤ 12 u de la zone de touche), puis filent droit ; un critique ne coupe plus l’inspiration d’un lourd', () => {
+  /* revue du 13/10/2026 : l'anneau partait au hasard, l'orbe qui venait vers la bulle descendait sa ligne de tir et crevait ; aux
+     îlots 7-8, aucun des ~540 orbes mesurés n'approchait la bulle à moins de 40 u : l'îlot 7 était devenu le plus facile du jeu.
+     Ici, la bulle s'écarte de 220 u dès le souffle : les orbes visent sa position d'alors, s'y referment, puis vont droit. */
+  const H = arene(4291), z = zone(H, 560, 420);
+  if (!z) return { ok: false, detail: 'aucune zone libre' };
+  const [gx, gy] = z, X = gx + 40, Y = gy + 210, pin = `{const e=window.__T;e.x=${gx + 340};e.y=${Y};e.vx=e.vy=0;G.p.vx=G.p.vy=0;}`;
+  H.call(NEUFS + `(()=>{const P=G.p;P.orbs=0;P.x=${X};P.y=${Y};P.vx=P.vy=0;G.cx=P.x+150;G.cy=P.y;window.__T=mkEnemy('ring',${gx + 340},${Y},{spawn:0,age:0,cd:0});})()`);
+  let O = null, n = 0;
+  for (; n < 60 && !O; n++) { H.call(pin); H.steps(1); const b = J(H, 'JSON.stringify(window.__neufs().map(b=>{b.__i=window.__c=(window.__c||0)+1;return[Math.atan2(b.vy,b.vx),b.rot||0,b.__i];}))'); if (b.length) O = b; }
+  if (!O) return { ok: false, detail: 'aucun souffle en 60 pas' };
+  H.call(`G.p.y=${Y}-220;`);
+  const dev = a => Math.abs(((a - Math.PI) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI), dos = O.filter(o => dev(o[0]) > Math.PI - .5).length, cv = O.filter(o => o[1]);
+  const ids = JSON.stringify(cv.map(o => o[2])), md = {}, dr = {};
+  for (let k = 0; k < 70; k++) { H.call(pin); H.steps(1);
+    for (const [i, d, r] of J(H, `JSON.stringify(G.eb.filter(b=>${ids}.includes(b.__i)).map(b=>[b.__i,Math.hypot(b.x-(${X}),b.y-(${Y}))-(G.p.r*.72+b.r),b.rot]))`)) { md[i] = Math.min(md[i] == null ? 1e9 : md[i], d); if (!r && dr[i] == null) dr[i] = k; } }
+  const pres = cv.map(o => md[o[2]]), droit = cv.every(o => dr[o[2]] != null);
+  const cr = J(H, `(()=>{const e=mkEnemy('ring',G.p.x+300,G.p.y,{spawn:0,age:0});e.st=12;e.hp=e.mhp=1000;hurtEnemy(e,1,0,0,true,true);const g=mkEnemy('gatling',G.p.x+300,G.p.y,{spawn:0,age:0});g.st=-12;g.hp=g.mhp=1000;hurtEnemy(g,1,0,0,true,true);const o=[e.st,g.st];G.en=[];return JSON.stringify(o);})()`);
+  const ok = O.length <= 10 && dos === 0 && cv.length === 4 && cv.filter(o => o[1] > 0).length === 2 && pres.every(d => d != null && d <= 12) && droit && cr[0] > 0 && cr[1] < 0;
+  return { ok, detail: O.length + ' orbes au pas ' + n + ', ' + dos + ' dans la brèche (dos), ' + cv.length + ' qui se referment (rot ' + cv.map(o => o[1].toFixed(4)).join(' / ') + '), au plus près de la zone de touche (position du souffle) : ' + pres.map(d => d == null ? 'perdu' : d.toFixed(1) + ' u').join(', ') + ' ; droits ensuite : ' + cv.map(o => dr[o[2]] == null ? 'NON' : 'au pas ' + dr[o[2]]).join(', ') + ' ; critique pendant l’inspiration : Pulsar st ' + cr[0] + ', Gatling st ' + cr[1] };
 });
 check('V10 l’Orbiteur (cd 0) tire deux coups courbes (rot ± ,009, même sens) à 8 pas d’écart', () => {
   const H = arene(4287), z = zone(H, 560, 420);
@@ -609,17 +686,22 @@ check('V10 l’Orbiteur (cd 0) tire deux coups courbes (rot ± ,009, même sens)
   const jrn = () => { const base = L.mkCtx(); return new Proxy({}, { get: (t, p) => (LOG && (p === 'beginPath' || p === 'arc' || p === 'fill' || p === 'stroke' || p === 'drawImage') ? () => { LOG.push(p === 'beginPath' ? 'b' : p === 'arc' ? 'a' : p === 'fill' ? 'f ' + base.fillStyle : p === 'stroke' ? 's ' + base.strokeStyle + '/' + base.lineWidth + '/' + base.globalAlpha : 'i'); } : base[p]), set: (t, p, v) => { base[p] = v; return true; } }); };
   /* nombre d'arcs du chemin rempli de la couleur col, pour chaque fill */
   const arcs = (l, col) => { const r = []; let n = 0; for (const x of l) { if (x === 'b') n = 0; else if (x === 'a') n++; else if (x === 'f ' + col) r.push(n); } return r; };
-  check('V9-V10 dessin : Tireur qui s’annonce = 5 bouches blanches (7 élite) ; visée verrouillée du Tireur d’élite blanche ; aiguilles en deux traits groupés ; orbes cerclés en un trait ; Gatling en montée = canons blancs', () => {
+  check('V9-V10 dessin : Tireur qui s’annonce = 5 bouches blanches (7 élite) ; visée verrouillée du Tireur d’élite blanche ; aiguilles en deux traits groupés ; orbes cerclés de blanc DANS leur sprite (orbSpr : aucun trait par image) ; Gatling en montée = canons blancs', () => {
     const H = arene(4288, { mkCtx: jrn });
     H.call('render(1,16.7)');
     const d = (t, o) => { H.call(`window.__D=mkEnemy(${JSON.stringify(t)},G.p.x+150,G.p.y,{spawn:0,age:0,cd:1e9});Object.assign(window.__D,${JSON.stringify(o)});`); LOG = []; H.call('drawEnemy(window.__D)'); const l = LOG; LOG = null; return l; };
     const w = '#ffffff', sp = arcs(d('spread', { st: 10, ca: 1 }), w), se = arcs(d('spread', { st: 10, ca: 1, elite: 1 }), w), sn = d('sniper', { tele: 8, ta: 1 }), sv = d('sniper', { tele: 30, ta: 1 }), ga = arcs(d('gatling', { st: -12, ca: 1 }), w);
     const col = H.call('ET.sniper.col');
     H.call(`G.eb=[];for(let i=0;i<3;i++){const b=ebul(G.p.x+60+i*30,G.p.y+20,0,13,4.5,ET.sniper.col);b.ndl=1;}for(let i=0;i<3;i++){const b=ebul(G.p.x+60+i*30,G.p.y-40,0,3,8,ET.ring.col);b.sh=1;}`);
-    LOG = []; H.call('drawBullets()'); const bl = LOG; LOG = null;
-    const ndl = bl.filter(x => x === 's ' + col + '/3/1' || x === 's #ffffff/1.2/1').length, img = bl.filter(x => x === 'i').length, orb = bl.filter(x => x === 's #ffffff/1.5/0.7').length;
-    const ok = sp.includes(5) && se.includes(7) && sn.includes('s #ffffff/3.5/0.9') && !sv.includes('s #ffffff/3.5/0.9') && ndl === 2 && img === 3 && orb === 1 && ga.includes(3);
-    return { ok, detail: 'bouches blanches : ' + (sp.filter(n => n > 1).join('/') || '0') + ' (élite ' + (se.filter(n => n > 1).join('/') || '0') + ') ; visée verrouillée : ' + (sn.filter(x => x[0] === 's').join(' ') || 'aucun trait') + ' ; 3 aiguilles + 3 orbes : ' + ndl + ' trait(s) d’aiguille, ' + img + ' sprite(s), ' + orb + ' trait(s) de cercle ; Gatling en montée : canons blancs ' + (ga.filter(n => n > 1).join('/') || '0') };
+    /* revue du 13/10/2026 : le cercle blanc des orbes, tracé à chaque image (un stroke groupé), coûtait ~17 µs par orbe en canevas
+       logiciel (3 à 4 × le sprite) : il est cuit une fois dans le sprite de l'orbe (orbSpr), posé comme les autres tirs ennemis */
+    LOG = []; const osp = H.call('typeof orbSpr==="function"&&!!orbSpr(ET.ring.col)'), cuit = LOG; LOG = null;
+    H.call('window.__no=0;if(typeof orbSpr==="function"){const __os=orbSpr;orbSpr=function(){window.__no++;return __os.apply(this,arguments);};}drawBullets();');
+    LOG = []; H.call('drawBullets()'); const bl = LOG; LOG = null; const no = H.call('window.__no');
+    const ndl = bl.filter(x => x === 's ' + col + '/3/1' || x === 's #ffffff/1.2/1').length, img = bl.filter(x => x === 'i').length, orb = bl.filter(x => /^s #ffffff\/1\.5\//.test(x)).length;
+    const ring = cuit.includes('a') && cuit.some(x => /^s #ffffff\/[\d.]+\/0\.7$/.test(x));
+    const ok = sp.includes(5) && se.includes(7) && sn.includes('s #ffffff/3.5/0.9') && !sv.includes('s #ffffff/3.5/0.9') && ndl === 2 && img === 3 && orb === 0 && osp && ring && no === 6 && ga.includes(3);
+    return { ok, detail: 'bouches blanches : ' + (sp.filter(n => n > 1).join('/') || '0') + ' (élite ' + (se.filter(n => n > 1).join('/') || '0') + ') ; visée verrouillée : ' + (sn.filter(x => x[0] === 's').join(' ') || 'aucun trait') + ' ; 3 aiguilles + 3 orbes : ' + ndl + ' trait(s) d’aiguille, ' + img + ' sprite(s), ' + orb + ' trait(s) de cercle par image ; sprite d’orbe ' + (osp ? (ring ? 'cerclé de blanc' : 'SANS cercle blanc') : 'absent') + ', ' + no + ' appel(s) sur deux images ; Gatling en montée : canons blancs ' + (ga.filter(n => n > 1).join('/') || '0') };
   });
 }
 
@@ -714,6 +796,19 @@ check('V12 un tir qui frôle la bulle (10 u de son bord) remplit la jauge d’ex
   const fin = g[g.length - 1], pas = new Set(g).size - (g[0] === 0 ? 1 : 0), att = .006 * 1.25, sc = H.call('G.score-window.__sc');
   return { ok: Math.abs(fin - att) < 1e-12 && pas === 1 && H.call('G.eb.length') === 1, detail: 'tir à ' + r.d + ' u du centre (touche sous ' + r.rs.toFixed(1) + ') : jauge 0 → ' + fin + ' (attendu ' + att + '), ' + pas + ' palier(s) ; score +' + sc };
 });
+check('V12 un tir de face qui TOUCHE la bulle ne paie pas le frôlement (ni jauge, ni son, ni conseil), à 3, 5, 8 et 11 u/pas', () => {
+  /* revue du 13/10/2026 : le tir traversait l'anneau des 16 u un pas avant de toucher, chaque touche jouait le son du frôlement */
+  const H = arene(4320), z = zone(H, 300, 120);
+  if (!z) return { ok: false, detail: 'aucune zone libre' };
+  H.call('window.__gz=0;const __sg=SFX.graze;SFX.graze=function(){window.__gz++;return __sg.apply(this,arguments);};');
+  const R = [3, 5, 8, 11].map(v => {
+    J(H, `(()=>{const P=G.p;P.x=${z[0] + 40};P.y=${z[1] + 60};P.vx=P.vy=0;P.inv=0;P.dashing=0;P.gon=0;P.pu={};P.seg=P.segMax;P.gauge=0;P.gGain=1;G.tut.gz=0;G.eb=[];window.__gz=0;window.__h0=G.hits;
+      ebul(P.x+220,P.y,Math.PI,${v},5);return '1';})()`);
+    let n = 0; for (; n < 120 && H.call('G.hits===window.__h0'); n++) H.steps(1);
+    return Object.assign({ v }, J(H, 'JSON.stringify({h:G.hits-window.__h0,g:G.p.gauge,gz:window.__gz,tut:!!G.tut.gz})'));
+  });
+  return { ok: R.every(r => r.h === 1 && r.g === 0 && r.gz === 0 && !r.tut), detail: R.map(r => r.v + ' u/pas : ' + r.h + ' touche, jauge ' + r.g + ', ' + r.gz + ' son(s) de frôlement' + (r.tut ? ', conseil' : '')).join(' ; ') };
+});
 check('V12 proies : une proie à 300 u ne fuit pas ; à 150 u elle fuit à ≤ ,55 × la vitesse de la bulle ; elle s’avale à +10 ; ,35 × n proies par vague', () => {
   const H = arene(4299), z = zone(H, 560, 420);
   if (!z) return { ok: false, detail: 'aucune zone libre' };
@@ -768,6 +863,23 @@ check('V13 cadeau : 15 en vague → un power-up (Tir rapide, Tir triple, Perfora
   const ok = r.w.c === 15 && r.w.q.length === 1 && arme.includes(r.w.q[0][0]) && r.w.q[0][1] === 720 && r.w.t.some(s => /cadeau/.test(s)) && r.b.q.length === 0
     && Math.abs(r.w40.g - .25) < 1e-9 && Math.abs(r.b40.g - .05) < 1e-9 && r.w40.t.some(s => /jauge/.test(s));
   return { ok, detail: 'vague, 15 : ' + JSON.stringify(r.w.q) + ' « ' + r.w.t.join(' | ') + ' » ; boss, 15 : ' + r.b.q.length + ' power-up ; jauge après le 40ᵉ kill : vague ' + r.w40.g + ', boss ' + r.b40.g + ' (un kill seul : ,05)' };
+});
+check('V13 cadeau contre un rocher (la bulle le regarde) : le power-up tombe sur un sol libre, jamais dans l’obstacle ; avec 8 power-ups au sol, le cadeau annoncé existe quand même', () => {
+  /* revue du 13/10/2026 : posé à 70 u devant la bulle sans regarder, il pouvait tomber dans un rocher ou une falaise (impossible à
+     ramasser pendant ses 12 s) ; et au plafond de 8, « cadeau ! » s'affichait sans power-up */
+  const H = arene(4321);
+  const r = J(H, `(()=>{const P=G.p,arme=['rapid','triple','pierce','wave'],out=[];
+    const k=()=>{G.ph='wave';G.tx=[];G.combo=14;G.comboT=G.t;killEnemy(mkEnemy('mite',P.x+250,P.y,{spawn:0}));G.ph='pause';G.phT=-1e9;};
+    for(let isl=1;isl<=8&&out.length<6;isl++){if(isl>1){genIslet(G.seed,isl);G.isl=isl;G.pickIsl=isl;islStart();G.en=[];G.eb=[];G.marks=[];G.wq=null;G.ph='pause';G.phT=-1e9;}
+      for(let cx=-3;cx<=3&&out.length<6;cx++)for(let cy=-3;cy<=3&&out.length<6;cy++){const c=getChunk(cx,cy);if(!c)continue;
+        for(const o of c.obs){if(o.brk||o.gone||o.k!==0||o.r<40)continue;const u=Math.atan2(-o.y,-o.x),ux=Math.cos(u),uy=Math.sin(u),x=o.x+ux*(o.r+P.r+1),y=o.y+uy*(o.r+P.r+1);
+          if(Math.hypot(x,y)>PR-80||pointHit(x,y,P.r))continue;
+          P.x=x;P.y=y;P.vx=P.vy=0;P.ang=u+Math.PI;G.pus=[];k();const q=G.pus[0];out.push({isl,r:Math.round(o.r),n:G.pus.length,dans:q?!!pointHit(q.x,q.y,8):null,kind:q&&q.k});if(out.length>=6)break;}}}
+    G.pus=[];for(let i=0;i<8;i++)G.pus.push({x:P.x+40,y:P.y,vx:0,vy:0,k:'repair',life:500,ph:0});k();
+    const cap={n:G.pus.length,g:G.pus.filter(q=>arme.includes(q.k)&&q.life===720).length,t:G.tx.map(t=>t.s).filter(s=>/cadeau/.test(s)).length};
+    return JSON.stringify({out,cap});})()`);
+  const ok = r.out.length >= 3 && r.out.every(o => o.n === 1 && o.dans === false) && r.cap.g === 1 && r.cap.n === 8 && r.cap.t === 1;
+  return { ok, detail: r.out.length + ' rocher(s) : ' + r.out.map(o => 'îlot ' + o.isl + ' r ' + o.r + (o.n ? (o.dans ? ' DANS le rocher' : ' sol libre') : ' aucun power-up')).join(', ') + ' ; 8 au sol : ' + r.cap.g + ' cadeau (' + r.cap.n + ' au sol, ' + r.cap.t + ' texte)' };
 });
 check('V13 Emballement : une série de 12 entretenue → cadence ≥ 1,2 × sur une cible tenue, traînées ≥ 1,4 × plus longues, un conseil la première fois', () => {
   const H = cible(4304), per = () => { const t = J(H, 'JSON.stringify(window.__B.map(b=>b.__t))'); return t.length > 1 ? (t[t.length - 1] - t[0]) / (t.length - 1) : 1e9; };
@@ -844,6 +956,18 @@ check('V14 vague sans une égratignure : jauge + ,15 et un texte ; un coup encai
   const a = v(0), b = v(1);
   return { ok: Math.abs(a.g - .15) < 1e-9 && a.t.length === 1 && a.ph === 'pause' && b.hit === 1 && b.g === 0 && b.t.length === 0,
     detail: 'sans coup : jauge ' + a.g + ' « ' + a.t.join('') + ' » (' + a.ph + ') ; avec un coup : marque ' + b.hit + ', jauge ' + b.g };
+});
+check('V14 les textes « jauge + » disent le vrai gain : rien gonflée (la jauge ne bouge pas), « +21 % » avec Gonflement rapide (×1,4), « +10 % » à 90 % ; idem pour la série de 40', () => {
+  /* revue du 13/10/2026 : le texte promettait +15 % / +20 % quoi qu'il arrive (gonflée : rien ; ×1,4 : 21 %) */
+  const H = arene(4322);
+  const v = (gon, gg, g0, ser) => J(H, `(()=>{const P=G.p;G.en=[];G.marks=[];P.gauge=${g0};P.gGain=${gg};P.gon=${gon};G.wave=1;G.ph='wave';G.phT=0;G.tx=[];
+    if(${ser}){G.combo=39;G.comboT=G.t;comboUp(null);}else{G.wq={left:0,n:8,el:5,eld:true,prey:0,nextT:1e9,th:0,gi:2,lastS:0,hit:0};waveTick();}
+    const o={g:+(P.gauge-${g0}).toFixed(6),t:G.tx.map(t=>t.s).filter(s=>/jauge/.test(s))};P.gon=0;G.wq=null;G.ph='pause';G.phT=-1e9;return JSON.stringify(o);})()`);
+  const R = [[120, 1, .3, 0], [0, 1.4, .3, 0], [0, 1, .9, 0], [120, 1, .3, 1], [0, 1.4, .3, 1], [0, 1, .9, 1]].map(a => v(...a));
+  const tx = (o, s) => o.t.length === 1 && o.t[0].endsWith(s);
+  const ok = R[0].g === 0 && R[0].t.length === 0 && Math.abs(R[1].g - .21) < 1e-9 && tx(R[1], '+21 %') && Math.abs(R[2].g - .1) < 1e-9 && tx(R[2], '+10 %')
+    && R[3].g === 0 && R[3].t.length === 0 && Math.abs(R[4].g - .28) < 1e-9 && tx(R[4], '+28 %') && Math.abs(R[5].g - .1) < 1e-9 && tx(R[5], '+10 %');
+  return { ok, detail: ['vague gonflée', 'vague ×1,4', 'vague à 90 %', 'série gonflée', 'série ×1,4', 'série à 90 %'].map((n, i) => n + ' : +' + R[i].g + ' « ' + R[i].t.join(' | ') + ' »').join(' ; ') };
 });
 check('V14 îlot nettoyé : le bonus s’affiche au 40ᵉ pas (« +1 500 » à l’îlot 1 sans une égratignure, « +500 » sinon)', () => {
   const H = arene(4314);
@@ -923,6 +1047,14 @@ check('V15 Élite vive : ×1,5 plus rapide, sa recharge fond ×1,6, une traîné
     for(let i=0;i<10;i++){updEnemy(v);updEnemy(n);}const o={k:+(sv/sn).toFixed(3),dv:+(1000-v.cd).toFixed(3),dn:+(1000-n.cd).toFixed(3),tr:G.fx.filter(f=>f.ty===3&&f.col===v.col).length};G.en=[];return JSON.stringify(o);})()`);
   return { ok: r.k >= 1.4 && r.k <= 1.6 && Math.abs(r.dv / r.dn - 1.6) < 1e-6 && r.tr >= 10, detail: 'vitesse ×' + r.k + ' ; recharge en 10 pas : ' + r.dv + ' contre ' + r.dn + ' ; traînée ' + r.tr + ' FX' };
 });
+check('V15 conseils justes : l’Élite vive « attaque » plus vite (aux îlots 1-2 ce sont des Mites et des Épines, qui ne tirent pas) ; la Contre-attaque dure « un instant » (75 pas)', () => {
+  /* revue du 13/10/2026 : « elle court et tire plus vite » sur une Mite ; « tous tes tirs sont critiques » lu comme permanent */
+  const H = arene(4328);
+  const r = J(H, `(()=>{const P=G.p;G.toasts=[];G.tut={};const T=[],_t=toast;toast=function(s){T.push(s);return _t.apply(this,arguments);};
+    eliteIn(Object.assign(mkEnemy('mite',P.x+200,P.y,{spawn:0,age:0}),{mod:'vif'}));P.dashing=0;P.perf=0;perfect(P.x+20,P.y);toast=_t;G.en=[];return JSON.stringify(T);})()`);
+  const v = r.find(s => /Élite vive/.test(s)) || '', c = r.find(s => /Contre-attaque/.test(s)) || '';
+  return { ok: /attaque plus vite/.test(v) && !/tire/.test(v) && /un instant/.test(c) && c.length <= 80, detail: '« ' + v + ' » ; « ' + c + ' » (' + c.length + ' caractères)' };
+});
 {
   /* contexte 2D qui journalise stroke (couleur/épaisseur), arc (rayon) et fill */
   let LOG = null;
@@ -991,35 +1123,43 @@ check('V16 îlots 1 à 6 : un power-up chronométré actif ≥ 25 % du temps de 
   });
 }
 
-if (LONG && (!SEUL || 'V16 équilibre'.startsWith(SEUL.slice(0, 14)))) {
-  /* PASSE D'ÉQUILIBRAGE (COURBE, la plus risquée : tout le plan s'y juge) : le pilote NATUREL (sans aide ; bonus au hasard, comme la
-     partie « naturelle » de headless.js, que la graine 12345 rejoue à l'identique), douze graines, 40 min de jeu au plus chacune.
-     Touche : un coup qui porte (segment ou bouclier perdu), compté en vague. Échelle de réglage si le pilote gagne trop : FODA
-     ,6 → ,7, puis la pente de HPM ,08 → ,12, puis EBK ; elle n’a pas suffi (13/10/2026 : 9 à 12 victoires sur 12), le réglage
-     retenu est décrit dans g2.js (PRAD). */
-  const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12345];
-  const R = SEEDS.map(seed => {
-    const H = L.mkGame({ ref: REF, seed }); let fin = null;
-    H.win.__SIM_PICK = c => c[Math.floor(H.call('Math.random()') * c.length)]; H.win.__SIM_END = w => { fin = w; };
-    H.ai(false); H.start();
-    H.call(`window.__HU={};(function(){const _h=hurtPlayer;hurtPlayer=function(x,y){const P=G.p;if(G.state==='play'&&G.ph==='wave'&&!P.dead&&!(P.inv>0)&&!(P.dashing>0)&&!(P.gon>0)&&!(P.pu.inv>0)){const k=G.isl;window.__HU[k]=(window.__HU[k]||0)+1;}return _h(x,y);};})();`);
-    const W = {}, wv = H.call("(function(){return G.state==='play'&&G.ph==='wave'?G.isl:0;})"); let n = 0;
-    for (; n < 60 * 60 * 40 && fin === null; n++) { H.STEP(); H.advance(1000 / 60); const k = wv(); if (k) W[k] = (W[k] || 0) + 1; }
-    const r = { seed, fin, isl: H.call('G.isl'), min: n / 3600, hu: J(H, 'JSON.stringify(window.__HU)'), w: W, picks: H.call('G.picks.join(",")') };
-    console.log('  graine ' + String(seed).padStart(5) + ' : ' + (fin === true ? 'VICTOIRE' : fin === false ? 'défaite à l’îlot ' + r.isl : 'coupée (40 min) à l’îlot ' + r.isl) + ', ' + r.min.toFixed(1) + ' min ; touches en vague ' +
-      [1, 2, 3, 4, 5, 6, 7, 8].map(k => (r.hu[k] || 0) + '/' + ((W[k] || 0) / 3600).toFixed(1)).join(' ') + ' (touches/min par îlot)');
-    return r;
-  });
-  const win = R.filter(r => r.fin === true).length, tot = R.find(r => r.seed === 12345), tot12 = R.filter(r => !(r.fin === false && r.isl <= 2)).length;
-  const h34 = R.reduce((s, r) => s + (r.hu[3] || 0) + (r.hu[4] || 0), 0), w34 = R.reduce((s, r) => s + (r.w[3] || 0) + (r.w[4] || 0), 0) / 3600;
-  check('V16 équilibre (--long, pilote naturel, 12 graines) : ≤ 6 victoires sur 12', () => ({ ok: win <= 6, detail: win + ' / 12 (graines gagnées : ' + (R.filter(r => r.fin === true).map(r => r.seed).join(', ') || 'aucune') + ')' }));
-  check('V16 équilibre : la graine 12345 (la partie « naturelle » de headless.js) est perdue', () => ({ ok: tot.fin === false, detail: tot.fin === false ? 'défaite à l’îlot ' + tot.isl : tot.fin ? 'VICTOIRE' : 'coupée à 40 min' }));
-  check('V16 équilibre : aucune mort aux îlots 1 et 2 dans ≥ 10 graines sur 12', () => ({ ok: tot12 >= 10, detail: tot12 + ' / 12 (morts aux îlots 1-2 : ' + (R.filter(r => r.fin === false && r.isl <= 2).map(r => r.seed + ' à l’îlot ' + r.isl).join(', ') || 'aucune') + ')' }));
+/* PASSE D'ÉQUILIBRAGE (COURBE, la plus risquée : tout le plan s'y juge) : le pilote NATUREL (partie(), ci-dessus), 40 min de jeu au
+   plus par partie, chacune dans son processus (--partie=), autant à la fois que de cœurs. Deux jeux de 48 graines : 1-48 (celui
+   sur lequel on règle) et 49-96 (TENU À L'ÉCART : on ne règle pas dessus) ; chacun doit tenir le seuil. Revue du 13/10/2026 : les
+   12 graines d'avant (1-11 et 12345) avaient servi à régler EBK, ECD, WV3, HPM et la pente des boss jusqu'à passer (4 sur 12), quand
+   les graines 12 à 103 gagnaient à 55-58 % ; la graine 12345 n'est qu'UN tirage (une défaite à ~45 % de chances avec ce réglage-là) :
+   ne jamais régler une constante du jeu pour la seule faire basculer. */
+async function longue() {
+  const os = require('os'), cp = require('child_process'), A = [...Array(48)].map((_, i) => i + 1), B = A.map(g => g + 48), S = A.concat(B, [12345]);
+  const une = seed => new Promise(ok => { let o = '';
+    const c = cp.spawn(process.execPath, [__filename, '--partie=' + seed].concat(REF ? ['--ref=' + REF] : []), { stdio: ['ignore', 'pipe', 'inherit'] });
+    c.stdout.on('data', d => { o += d; }); c.on('close', () => { const l = o.split('\n').find(x => x.startsWith('PARTIE ')); ok(l ? JSON.parse(l.slice(7)) : { seed, fin: null, isl: 0, min: 0, hu: {}, ht: {}, w: {}, lr: {}, err: 1 }); }); });
+  const R = {}; let q = 0;
+  await Promise.all([...Array(Math.max(1, os.cpus().length))].map(async () => { while (q < S.length) { const seed = S[q++]; const r = R[seed] = await une(seed);
+    console.log('  graine ' + String(seed).padStart(5) + ' : ' + (r.fin === true ? 'VICTOIRE' : r.fin === false ? 'défaite à l’îlot ' + r.isl : 'coupée (40 min) à l’îlot ' + r.isl) + ', ' + r.min.toFixed(1) + ' min ; touches (vague/îlot) ' +
+      [1, 2, 3, 4, 5, 6, 7, 8].map(k => (r.hu[k] || 0) + '/' + (r.ht[k] || 0)).join(' ')); } }));
+  const jeu = (G, nom) => { const L2 = G.map(g => R[g]), win = L2.filter(r => r.fin === true).length, ok12 = L2.filter(r => !(r.fin === false && r.isl <= 2)).length;
+    check('V16 équilibre (--long, pilote naturel, graines ' + nom + ') : ≤ 50 % de victoires', () => ({ ok: win <= G.length / 2, detail: win + ' / ' + G.length + ' (' + Math.round(100 * win / G.length) + ' %)' }));
+    check('V16 équilibre (graines ' + nom + ') : aucune mort aux îlots 1 et 2 dans ≥ 83 % des graines', () => ({ ok: ok12 >= .83 * G.length, detail: ok12 + ' / ' + G.length + ' (morts aux îlots 1-2 : ' + (L2.filter(r => r.fin === false && r.isl <= 2).map(r => r.seed + ' à l’îlot ' + r.isl).join(', ') || 'aucune') + ')' })); };
+  jeu(A, '1 à 48'); jeu(B, '49 à 96, tenues à l’écart');
+  const T = A.concat(B).map(g => R[g]), tot = R[12345];
+  check('V16 équilibre : la graine 12345 (la partie « naturelle » de headless.js) est perdue — un tirage, pas une garantie', () => ({ ok: tot.fin === false, detail: tot.fin === false ? 'défaite à l’îlot ' + tot.isl : tot.fin ? 'VICTOIRE' : 'coupée à 40 min' }));
+  const h34 = T.reduce((s, r) => s + (r.hu[3] || 0) + (r.hu[4] || 0), 0), w34 = T.reduce((s, r) => s + (r.w[3] || 0) + (r.w[4] || 0), 0) / 3600;
   check('V16 équilibre : ≥ 2 touches par minute de vague aux îlots 3 et 4', () => ({ ok: w34 > 0 && h34 / w34 >= 2, detail: h34 + ' touches en ' + w34.toFixed(1) + ' min de vague : ' + (w34 ? (h34 / w34).toFixed(2) : '-') + '/min' }));
+  /* revue du 13/10/2026 : l'îlot 7 (Pulsar) était devenu le plus facile du jeu (,30 touche par partie, contre 1,15 à 1,67 aux îlots
+     3 à 5) et 45 des 46 parties qui l'atteignaient gagnaient : la fin de la courbe doit rester une montée */
+  const T7 = T.filter(r => r.isl >= 7), m = (L2, ks) => L2.length ? L2.reduce((s, r) => s + ks.reduce((t, k) => t + (r.ht[k] || 0), 0), 0) / L2.length : 0, a78 = m(T7, [7, 8]), a34 = m(T7, [3, 4]);
+  check('V16 équilibre : les parties qui atteignent l’îlot 7 y prennent, aux îlots 7-8, au moins autant de touches qu’aux îlots 3-4', () => ({ ok: T7.length >= 10 && a78 >= a34, detail: T7.length + ' parties : ' + a78.toFixed(2) + ' touches par partie aux îlots 7-8, ' + a34.toFixed(2) + ' aux îlots 3-4 (par îlot : ' + [3, 4, 5, 6, 7, 8].map(k => k + ' ' + m(T7, [k]).toFixed(2)).join(', ') + ')' }));
+  /* revue du 13/10/2026 : 60 % des Gatlings de l'îlot 6 et 67 % des Pulsars de l'îlot 7 mouraient sans avoir tiré */
+  const lr = k => T.reduce((s, r) => { const a = r.lr[k] || [0, 0]; return [s[0] + a[0], s[1] + a[1]]; }, [0, 0]), g6 = lr('g6'), r7 = lr('r7'), s4 = lr('s4'), pc = a => a[0] ? Math.round(100 * a[1] / a[0]) + ' %' : '-';
+  check('V16 équilibre : ≥ 50 % des Gatlings (îlot 6) et des Pulsars (îlot 7) tirent avant de mourir', () => ({ ok: g6[0] >= 20 && r7[0] >= 20 && g6[1] >= g6[0] / 2 && r7[1] >= r7[0] / 2, detail: 'Gatlings ' + g6[1] + ' / ' + g6[0] + ' (' + pc(g6) + '), Pulsars ' + r7[1] + ' / ' + r7[0] + ' (' + pc(r7) + ') ; Tireurs d’élite (îlot 4) ' + s4[1] + ' / ' + s4[0] + ' (' + pc(s4) + ')' }));
 }
 
+(async () => {
+if (LONG && (!SEUL || 'V16 équilibre'.startsWith(SEUL.slice(0, 14)))) await longue();
 console.log('test/vivacite.js — ' + (REF ? 'code ' + REF : 'arbre de travail') + (SEUL ? ' — SEULS les critères « ' + SEUL + '… »' : ''));
 for (const c of checks) console.log((c.ok ? '  OK    ' : '  ECHEC ') + c.name + '\n         ' + c.detail);
 const all = checks.every(c => c.ok);
 console.log(all ? 'VIVACITÉ : TOUT PASSE' : 'VIVACITÉ : ECHEC');
 process.exit(all ? 0 : 1);
+})();

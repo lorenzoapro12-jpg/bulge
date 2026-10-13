@@ -143,10 +143,16 @@ Outils complémentaires :
   explosion de 110 u 36 pas après sa mort, `G.vol`, annoncée par un cercle rouge) ; une courbe qui se joue (`FODA` : l'ancien
   type garde 60 % de sa vie ; l'ennemi touché se dégonfle, sa touche reste `e.r` ; allure par îlot, part des kills en série,
   power-up actif ≥ 25 % du temps). Chaque changement du plan y ajoute ses critères, vus en ECHEC avec `--ref=379e0fb` ;
-  `--long` est réservé à la passe d'équilibrage (pilote naturel, 12 graines, 40 min simulées : ≤ 6 victoires, 12345
-  perdue, aucune mort aux îlots 1-2 dans ≥ 10 parties, ≥ 2 touches par minute de vague aux îlots 3-4 ; réglages dans
-  `g2.js`, `EBK`/`ECD`/`WV3`/`HPM`), `--seul=V9` (mise au point) ne lance que les critères dont le nom commence ainsi.
-  Appelé par headless.js.
+  `--long` est réservé à la passe d'équilibrage (pilote naturel, 40 min simulées au plus, une partie par processus
+  `--partie=<graine>`, en parallèle sur les cœurs, ~8 min) jugée sur DEUX jeux de 48 graines, 1-48 et 49-96 : ≤ 50 % de
+  victoires sur chacun, aucune mort aux îlots 1-2 dans ≥ 83 % de chacun, ≥ 2 touches par minute de vague aux îlots 3-4,
+  îlots 7-8 au moins aussi coûteux que les îlots 3-4 pour les parties qui les atteignent, ≥ 50 % des Gatlings (îlot 6) et
+  des Pulsars (îlot 7) qui tirent avant de mourir, 12345 perdue ; réglages dans `g2.js`, `EBK`/`ECD`/`WV3`/`HPM` et le
+  renfort des îlots 6-8 dans `waveStart` (13/10/2026 : ~44 % de victoires, mesuré aussi sur les graines 97-192). L'ancien
+  jeu de 12 graines avait servi à régler la difficulté : il passait à 4 sur 12 quand les autres graines gagnaient à ~55 %.
+  ⚠️ La défaite de la graine 12345 (`headless.js`, partie « naturelle ») n'est qu'UN tirage, pas une garantie
+  d'équilibre : ne jamais régler une constante du jeu pour la seule faire basculer. `--seul=V9` (mise au point) ne lance
+  que les critères dont le nom commence ainsi. Appelé par headless.js.
 - `node test/unused.js` — recensement du code mort (identifiants, `SFX`, `id` HTML,
   classes CSS, médias). À lancer avant d'affirmer qu'un symbole est utilisé.
 - `node test/compteur.js` — garde-fou du compteur de diagnostic (`meta.fps`) : chaque ligne doit

@@ -112,9 +112,10 @@ const BOSSAI=[
     else if(B.st===1){if(--B.st2<=0){B.st=2;B.st2=72;}}
     else if(B.st===2){const f=1-B.st2/72;if(B.st2%3===0){bossShot(B,B.ca-.9+1.8*f,3.6,null,6);if(p2)bossShot(B,B.ca+.9-1.8*f,3.6,null,6);}if(B.st2%12===0)SFX.eshot();if(--B.st2<=0)B.st=0;}
     if(B.t%110===55)bossRing(B,10,2,null,R()*TAU);},
-  /* 7 Pulsar Majeur : anneaux à brèche ; phase 2, anneaux tournants alternés */
+  /* 7 Pulsar Majeur : anneaux à brèche, la brèche à ,7-1,5 rad de toi, d'un côté ou de l'autre : il faut aller la chercher (avant,
+     à ±,6 rad, tu y étais déjà 7 fois sur 10 : ,07 touche par combat, revue du 13/10/2026) ; phase 2, anneaux tournants alternés */
   (B,P,aP)=>{const p2=B.phase>1;drift(B,Math.cos(B.t*.005)*150,Math.sin(B.t*.007)*150,.7);
-    if(B.t%(p2?72:100)===0){B.dir*=-1;bossRing(B,34,2,aP+rr(-.6,.6),R()*TAU,p2?B.dir*.006:0);}},
+    if(B.t%(p2?72:100)===0){B.dir*=-1;bossRing(B,34,2,aP+(R()<.5?1:-1)*rr(.7,1.5),R()*TAU,p2?B.dir*.006:0);}},
   /* 8 L'Hypernoyau : 3 phases, nœuds orbitaux qui le protègent ; en phase 2, il appelle des Mites d'âge 0 (parent : lui, comme
      les petits d'un Porteur ; sans parent, l'observateur de headless.js les prenait pour un type resté 7 îlots trop longtemps) */
   (B,P,aP)=>{const f=B.hp/B.mhp;

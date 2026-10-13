@@ -71,7 +71,10 @@ function playRun(name, seed, maxSteps, o = {}) {
 }
 if (!ONLY_SCN) {
   console.log('\n=== PARTIES COMPLÈTES ===');
-  /* naturelle : l'IA de test joue pour de vrai (elle finit par éclater, ou la partie est coupée à 40 min de jeu) */
+  /* naturelle : l'IA de test joue pour de vrai (elle finit par éclater, ou la partie est coupée à 40 min de jeu). La défaite de la
+     graine 12345 n'est qu'UN tirage, pas une garantie d'équilibre (13/10/2026 : le pilote naturel gagne ~44 % de ses parties,
+     mesuré sur 192 graines) ; l'équilibre se juge sur 96 graines (node test/vivacite.js --long). Ne jamais régler une constante du jeu
+     pour la seule faire basculer. */
   const r1 = playRun('naturelle', 12345, 60 * 60 * 40);
   /* assistées : membrane entretenue et dégâts ×4 — couvrent le déroulé COMPLET des 8 îlots jusqu'à la victoire */
   const r2 = playRun('assistee', 999, 60 * 60 * 60, { god: true, boost: 4 });
