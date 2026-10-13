@@ -18,6 +18,8 @@ relique est l'îlot que tu viens de quitter, en miniature.
 - **Série** : des kills (ou des proies avalées) à moins de 2,5 s d'écart forment une série, affichée sous la bulle ;
   à partir de 5, le score est multiplié (jusqu'à ×3), et ton tir accélère avec elle. À 15 en vague, un power-up en cadeau.
 - **Gardien** : le boss abattu laisse son cœur ; avale-le, ta dernière carte bonus monte d'un niveau.
+- **Élites** (couronne dorée) : *vive* (elle court et tire plus vite), *blindée* (son bouclier encaisse de face : prends-la
+  de dos), *volatile* (elle explose un instant après sa mort : écarte-toi, ou traverse l'explosion en dash).
 - **Power-ups** (losanges vert-jaune, quelques secondes) : invincibilité 6 s, tir rapide, tir triple,
   perforant, ralenti, bouclier, onde, réparation.
 - **Commandes** : ZQSD ou flèches pour bouger (codes physiques, AZERTY comme QWERTY), le tir vise seul

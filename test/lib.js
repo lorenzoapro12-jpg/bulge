@@ -160,7 +160,7 @@ function mkGame(opts = {}) {
 
 /* ---------- IA de test, écrite DANS le realm du jeu ----------
    Un joueur prudent : esquive les tirs (en anticipant leur trajectoire) et les zones annoncées (traits, bandes,
-   arcs), garde ses distances avec ce qui n'est pas une proie, avale les proies (et les ennemis à bout tout proches), ramasse les power-ups, va
+   arcs, explosions d'une élite volatile), garde ses distances avec ce qui n'est pas une proie, avale les proies (et les ennemis à bout tout proches), ramasse les power-ups, va
    chercher ce qu'il ne voit pas (le tir automatique ne vise que l'écran), dash quand deux tirs le serrent (ou de côté
    quand une Mite bondit, qu'une Épine charge sur lui ; il sort du trait d'une Épine qui vise, de la ligne verrouillée d'un
    Tireur d'élite),
@@ -176,6 +176,8 @@ window.__SIM_INPUT = function(){
   for (const b of G.eb) { const px = b.x + b.vx * 10, py = b.y + b.vy * 10, dx = P.x - px, dy = P.y - py, d = Math.hypot(dx, dy) || 1; if (d < 170) { const w = (170 - d) / 170; vx += dx / d * w * 3; vy += dy / d * w * 3; } }
   for (const q of G.tele) { if (q.ty === 'beam' || q.ty === 'path') { const ux = Math.cos(q.a), uy = Math.sin(q.a), px = P.x - q.x, py = P.y - q.y, s = px * ux + py * uy; if (s < -40) continue; const n = -px * uy + py * ux, w = (q.w || 30) / 2 + P.r + 50; if (Math.abs(n) < w) { const sg = n >= 0 ? 1 : -1; vx += -uy * sg * 4; vy += ux * sg * 4; } }
     else if (q.ty === 'arc') { const dx = P.x - q.x, dy = P.y - q.y, d = Math.hypot(dx, dy) || 1; if (d < q.r) { vx -= dy / d * 2; vy += dx / d * 2; } } }
+  /* ÉLITES : hors d'une explosion armée par une Volatile (G.vol ; absent d'un code plus ancien) */
+  for (const v of (G.vol || [])) { const dx = P.x - v.x, dy = P.y - v.y, d = Math.hypot(dx, dy) || 1; if (d < v.r + P.r + 30) { vx += dx / d * 3; vy += dy / d * 3; } }
   let tgt = null, td = 1e18;
   for (const e of G.en) { if (e.dead || e.spawn > 0) continue; const dx = P.x - e.x, dy = P.y - e.y, d = Math.hypot(dx, dy) || 1;
     /* ABSORB : un ennemi à bout (ripe) à moins de 200 u se traite comme une proie (on fonce dessus, sans s'en écarter) ;

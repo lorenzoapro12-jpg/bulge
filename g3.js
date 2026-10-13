@@ -138,7 +138,7 @@ function render(A,dt){
   /* ambiance lointaine + halos */
   lowBegin();if(QL>=3&&!TRX){lowScreen();drawFar(mix);LOWN++;}lowWorld();if(sk<2&&!TRX&&QL>=2)drawLowGlows();lowEnd();
   worldTf();drawEdges();if(inGame)drawTerrain();drawObstacles();
-  if(inGame){drawSpawns();drawTele();drawPUs();drawShadows(mix);if(!TRX&&QL>=2)drawMarks();drawTrails();drawMines();if(DEC==='sky')drawFalls();drawEnemies();if(DEC==='floral'||DEC==='urban')drawDecFX();drawBoss();if(G.heart)drawHeart();drawPlayer();drawBullets();drawFX();}
+  if(inGame){drawSpawns();drawTele();if(G.vol&&G.vol.length)drawVol();drawPUs();drawShadows(mix);if(!TRX&&QL>=2)drawMarks();drawTrails();drawMines();if(DEC==='sky')drawFalls();drawEnemies();if(DEC==='floral'||DEC==='urban')drawDecFX();drawBoss();if(G.heart)drawHeart();drawPlayer();drawBullets();drawFX();}
   screenTf();if(sk<1&&!TRX&&QL>=2)drawWeather(mix);
   if(inGame){if(G.state==='trans')drawTrSnap();else if(sk<1)drawIndicators();drawTexts();}
   postFX();
@@ -494,6 +494,13 @@ function drawTele(){const c=ctx;
       c.globalAlpha=.45+.45*f;c.strokeStyle=col;c.lineWidth=2.5;c.stroke();
       const s=q.a-q.sp+2*q.sp*f;c.lineWidth=4;c.beginPath();c.moveTo(q.x,q.y);c.lineTo(q.x+Math.cos(s)*q.r,q.y+Math.sin(s)*q.r);c.stroke();}}
   c.globalAlpha=1;}
+/* explosion armée par une élite volatile (g2.js updVol) : un anneau de 110 u qui s'épaissit et bat (6 images sur 12), un cercle qui
+   grandit jusqu'à lui ; deux arcs tracés, jamais remplis (un disque de 220 u coûterait ~150 000 px en logiciel) */
+function drawVol(){const c=ctx;c.strokeStyle=COL.rd;
+  for(const v of G.vol){if(!vis(v.x,v.y,v.r))continue;const f=1-v.t/36;
+    c.globalAlpha=(36-v.t)%12<6?.9:.4;c.lineWidth=2+3*f;c.beginPath();c.arc(v.x,v.y,v.r,0,TAU);c.stroke();
+    c.globalAlpha=.6;c.lineWidth=2;c.beginPath();c.arc(v.x,v.y,v.r*f,0,TAU);c.stroke();}
+  c.globalAlpha=1;}
 /* ---------- annonces d'apparition (G.marks, g2.js) : un cercle au sol, la silhouette du type au centre ; or = élite ---------- */
 function drawSpawns(){const c=ctx;
   for(const m of G.marks){if(!vis(m.x,m.y,90))continue;const f=m.t/m.max,col=m.prey?pale(m.col):m.col,r=(m.prey?22:34)+(m.n>1?16:0)+(m.el?14:0);
@@ -612,6 +619,8 @@ function drawEnemy(e){
   if(e.flash>0)r*=1+.018*e.flash;
   /* Pulsar qui inspire (st > 0, 20 pas) : il rétrécit jusqu'à 80 % avant de souffler ses orbes (tracés seuls) */
   if(e.t==='ring'&&e.st>0)r*=1-.2*(1-e.st/20);
+  /* COURBE : touché, il dégonfle à vue (jusqu'à 85 % ; tracés seuls, sa zone de touche reste e.r) */
+  r*=.85+.15*Math.max(0,e.hp/e.mhp);
   /* annonces propres au type : Mite qui s'apprête à bondir (gonflée de 18 %, cernée de blanc, trait blanc qui s'allonge vers
      où elle bondira), visée de l'Épine (pointillée, puis blanche et pleine les 10 pas où elle est verrouillée), trait du Tireur */
   const wu=e.t==='mite'&&e.st===3;
@@ -622,7 +631,8 @@ function drawEnemy(e){
   if(e.t==='orbit'){c.fillStyle=col;for(let k=0;k<2;k++){const b=e.wob*5+k*Math.PI;c.beginPath();c.arc(e.x+Math.cos(b)*r*1.7,e.y+Math.sin(b)*r*1.7,r*.26,0,TAU);c.fill();}}
   /* à bout (ripe, g2.js : il s'avale au contact) : le corps clignote, pâle une tranche de 8 images sur deux */
   const fl=e.flash>0;
-  shapePath(c,e.t,e.x,e.y,r,a);c.strokeStyle=e.elite||wu?'#ffffff':EDK;c.lineWidth=e.elite||wu?Math.max(3,r*.24):Math.max(2,r*.18);c.stroke();c.fillStyle=fl?(G.t-(e.crit||-99)<6?COL.gd:'#ffffff'):ripe(e)&&(FRAME>>3)&1?pale(col):col;c.fill();
+  /* élite : cernée de blanc ; la Volatile, de rouge et de blanc en alternance (8 images) */
+  shapePath(c,e.t,e.x,e.y,r,a);c.strokeStyle=e.elite||wu?(e.mod==='volatil'&&(FRAME>>3)&1?COL.rd:'#ffffff'):EDK;c.lineWidth=e.elite||wu?Math.max(3,r*.24):Math.max(2,r*.18);c.stroke();c.fillStyle=fl?(G.t-(e.crit||-99)<6?COL.gd:'#ffffff'):ripe(e)&&(FRAME>>3)&1?pale(col):col;c.fill();
   if(!fl){c.globalAlpha=.3;shapePath(c,e.t,e.x-r*.18,e.y-r*.22,r*.5,a);c.fillStyle='#ffffff';c.fill();c.globalAlpha=1;}
   c.fillStyle=EDK;
   switch(e.t){
@@ -638,6 +648,8 @@ function drawEnemy(e){
     c.fillStyle='#ffffff';c.beginPath();c.arc(ex,ey,er,0,TAU);c.fill();c.fillStyle='#0c0412';c.beginPath();c.arc(ex+Math.cos(b)*er*.4,ey+Math.sin(b)*er*.4,er*.52,0,TAU);c.fill();}
   if(e.elite){c.fillStyle=COL.gd;c.beginPath();for(let k=-1;k<=1;k++){const b=-Math.PI/2+k*.55,x=e.x+Math.cos(b)*(r+4),y=e.y+Math.sin(b)*(r+4);
     c.moveTo(x+Math.cos(b+1.6)*5,y+Math.sin(b+1.6)*5);c.lineTo(x+Math.cos(b)*12,y+Math.sin(b)*12);c.lineTo(x+Math.cos(b-1.6)*5,y+Math.sin(b-1.6)*5);}c.fill();}
+  /* Blindée : son bouclier, un arc blanc épais sur ±1,05 rad autour de e.sa (le côté qui encaisse) */
+  if(e.mod==='blinde'){c.strokeStyle='#ffffff';c.lineWidth=4;c.beginPath();c.arc(e.x,e.y,e.r+6,e.sa-1.05,e.sa+1.05);c.stroke();}
   if(e.stun>0){c.fillStyle=COL.gd;for(let k=0;k<3;k++){const b=RT*.2+k*TAU/3;c.fillRect(e.x+Math.cos(b)*(r+6)-1.5,e.y+Math.sin(b)*(r+6)-1.5,3,3);}}
   if(e.frostT>G.t){c.strokeStyle='#b5f3ff';c.lineWidth=2;c.beginPath();c.arc(e.x,e.y,r+5,0,TAU);c.stroke();}
   if(e.alarmT>G.t&&(FRAME>>3)%2){c.fillStyle=COL.mg;c.fillRect(e.x-1.5,e.y-r-18,3,9);c.fillRect(e.x-1.5,e.y-r-7,3,3);}

@@ -47,10 +47,18 @@
      V14. CŒUR : le boss d'un îlot 1 à 7 laisse un cœur qui vole vers la bulle (avalé en ≤ 100 pas) : la dernière carte bonus
          monte d'un niveau (G.picks inchangé), ou la jauge se remplit ; vague sans une égratignure : jauge + ,15 ; le bonus
          d'îlot nettoyé s'affiche ; dessin du cœur : 2 sprites.
+     V15. ÉLITES : un modificateur (vive, blindée, volatile ; ≥ 20 % chacun) au lieu de ×3,2 PV, son nom à l'éclosion ; vive : ×1,5
+         plus rapide, recharge ×1,6 ; blindée : ,2 × un tir de face, 1,5 × de dos, pas « à découvert » pour la visée ; volatile :
+         sa mort arme une explosion de 110 u, 36 pas plus tard (bulle, ennemis voisins ; dash au travers : esquive parfaite) ;
+     V16. COURBE : le type d'âge 1 naît à FODA de sa vie, se tue en ≤ ,7 × ses tirs de base d'avant (1,1 ×) ; l'ennemi touché
+         dégonfle ; allure (pilote invulnérable, premier bonus, graines 1 à 3) : îlot 1 en ≤ 50 s, îlot 4 en ≤ 120 s, ≥ 1,2 kill
+         par seconde de vague à l'îlot 4, ≥ 50 % des kills à ×2 et un power-up actif ≥ 25 % du temps sur chaque îlot 1 à 6.
+         --long : la passe d'équilibrage (pilote naturel, 12 graines, 40 min au plus) : ≤ 6 victoires, 12345 perdue, aucune mort
+         aux îlots 1-2 dans ≥ 10 graines, ≥ 2 touches par minute de vague aux îlots 3-4.
 
    node test/vivacite.js                arbre de travail
    node test/vivacite.js --ref=<commit> code d'un commit (379e0fb : tous les critères ECHOUENT)
-   node test/vivacite.js --long         en plus, la passe d'équilibrage (réservée à COURBE ; hors GARDES de headless.js)
+   node test/vivacite.js --long         en plus, la passe d'équilibrage de COURBE (~5 min ; hors GARDES de headless.js)
    node test/vivacite.js --seul=V9      mise au point : seuls les critères dont le nom commence ainsi
    Code de sortie : 0 si tout passe, 1 sinon.
    ========================================================= */
@@ -349,14 +357,22 @@ check('V7 un groupe paraît à l’écran (vue rétrécie de 40) dans ≥ 90 % d
    ennemis hostiles éclos à l'écran (îlot 3), sur les pas de vague. Six graines et non trois : d'une graine à l'autre, l'îlot 3
    va de 3,3 à 6 ennemis à l'écran (le pilote court après les proies) ; sur trois, la moyenne bouge de ± 0,5. */
 let FLUX = null;
+/* COURBE (V16) : les graines 1 à 3 vont jusqu'au bout de l'îlot 6 ; par îlot, pas de jeu (play), pas sous un power-up chronométré
+   (pu ; le bouclier attend un coup, il ne compte pas), kills en vague (wk), et par kill le multiplicateur de série (comboUp enveloppé :
+   M[îlot] = {n, x2}). Le relevé ne tire aucun nombre : les îlots 1 à 3 sont les mêmes parties que pour V7. */
 const flux = () => FLUX || (FLUX = [1, 2, 3, 4, 5, 6].map(seed => {
   const H = L.mkGame({ ref: REF, seed }); H.win.__SIM_PICK = c => c[0]; H.win.__SIM_END = () => {};
-  H.ai(true); H.start(); const S = {};
-  H.steps(60 * 60 * 20, () => {
-    const s = H.call(`(()=>{if(G.state!=='play'||G.ph!=='wave')return '';const hw=W/2/G.zoom,hh=H/2/G.zoom;let n=0;for(const e of G.en)if(!e.dead&&!e.prey&&e.spawn<=0&&!(e.egg>0)&&Math.abs(e.x-G.cx)<=hw&&Math.abs(e.y-G.cy)<=hh)n++;return G.isl+':'+(G.tgt?1:0)+':'+n;})()`);
-    if (s) { const [k, t, n] = s.split(':').map(Number); const q = S[k] || (S[k] = { w: 0, nul: 0, on: 0 }); q.w++; if (!t) q.nul++; q.on += n; }
-    return H.call("G.isl>3||G.state==='end'");
+  H.ai(true); H.start(); const S = {}, KM = seed <= 3 ? 6 : 3;
+  H.call(`window.__M={};(function(){const _c=comboUp;comboUp=function(e){const m=_c(e),q=window.__M[G.isl]||(window.__M[G.isl]={n:0,x2:0});q.n++;if(m>=2)q.x2++;return m;};})();`);
+  H.steps(60 * 60 * 30, () => {
+    const s = H.call(`(()=>{if(G.state!=='play')return '';let pu=0;for(const k in G.p.pu)if(G.p.pu[k]>0&&k!=='shield')pu=1;const w=G.ph==='wave';let n=0;
+      if(w){const hw=W/2/G.zoom,hh=H/2/G.zoom;for(const e of G.en)if(!e.dead&&!e.prey&&e.spawn<=0&&!(e.egg>0)&&Math.abs(e.x-G.cx)<=hw&&Math.abs(e.y-G.cy)<=hh)n++;}
+      return [G.isl,w?1:0,G.tgt?1:0,n,G.kills,pu].join(':');})()`);
+    if (s) { const [k, w, t, n, ki, pu] = s.split(':').map(Number); const q = S[k] || (S[k] = { w: 0, nul: 0, on: 0, play: 0, pu: 0, wk: 0, lk: ki });
+      q.play++; if (pu) q.pu++; if (w) { q.w++; if (!t) q.nul++; q.on += n; q.wk += ki - q.lk; } q.lk = ki; }
+    return H.call(`G.isl>${KM}||G.state==='end'`);
   });
+  S.M = J(H, 'JSON.stringify(window.__M)');
   return S;
 }));
 check('V7 îlot 1, pilote invulnérable, graines 1 à 6 : la visée reste sans cible ≤ 22 % du temps de vague', () => {
@@ -847,7 +863,160 @@ check('V14 îlot nettoyé : le bonus s’affiche au 40ᵉ pas (« +1 500 » à l
   });
 }
 
-if (LONG) { /* réservé : passe d'équilibrage de COURBE */ }
+
+/* ================= V15 : ÉLITES =================
+   une élite n'est plus une éponge (×3,2 PV, même comportement) : elle porte un modificateur, annoncé à l'éclosion.
+   VIVE (×2 PV) : ×1,5 plus rapide, sa recharge fond ×1,6, une traînée ; BLINDÉE (×2,4) : un bouclier qui se tourne lentement vers
+   toi (,2 × les tirs de face, 1,5 × de dos ; le tir automatique ne la compte pas « à découvert ») ; VOLATILE (×2,4) : sa mort arme
+   une explosion de 110 u qui part 36 pas plus tard (elle blesse la bulle et les ennemis, ,6 × leur vie). Abattue : jauge + ,12 et
+   un power-up, comme avant. */
+const MODS = { vif: 'Élite vive', blinde: 'Élite blindée', volatil: 'Élite volatile' };
+check('V15 sur 300 élites, chaque modificateur (vive, blindée, volatile) ≥ 20 % ; vive ×2 PV, blindée et volatile ×2,4, rayon ×1,3 ; son nom s’affiche à l’éclosion ; abattue : jauge + ,12 et un power-up', () => {
+  const H = arene(4320);
+  const r = J(H, `(()=>{const P=G.p,o={vif:0,blinde:0,volatil:0,autre:0,hp:{},r:0};const b=mkEnemy('spread',P.x+200,P.y,{spawn:0,age:0,cd:1e9}),hp0=b.hp,r0=b.r;G.en=[];
+    for(let i=0;i<300;i++){const e=mkEnemy('spread',P.x+200,P.y,{spawn:0,age:0,cd:1e9,elite:1});if(e.mod in o)o[e.mod]++;else o.autre++;o.hp[e.mod]=+(e.hp/hp0).toFixed(3);o.r=+(e.r/r0).toFixed(3);}G.en=[];
+    G.tx=[];G.marks=[{x:P.x+200,y:P.y,t:29,max:30,t2:'spread',n:2,prey:false,el:1,col:ET.spread.col}];updMarks();const el=G.en.find(e=>e.elite);o.mod=el?el.mod:null;o.tx=G.tx.map(t=>t.s);G.en=[];
+    G.pus=[];P.gauge=0;P.gGain=1;killEnemy(mkEnemy('spread',P.x+200,P.y,{spawn:0,age:0,cd:1e9,elite:1}));o.g=+P.gauge.toFixed(6);o.pu=G.pus.length;G.pus=[];G.vol=[];G.freeze=0;
+    return JSON.stringify(o);})()`);
+  const lab = r.mod && r.tx.includes(MODS[r.mod]);
+  const ok = r.vif >= 60 && r.blinde >= 60 && r.volatil >= 60 && !r.autre && r.hp.vif === 2 && r.hp.blinde === 2.4 && r.hp.volatil === 2.4 && r.r === 1.3 && lab && r.g === .12 && r.pu >= 1;
+  return { ok, detail: 'vive ' + r.vif + ', blindée ' + r.blinde + ', volatile ' + r.volatil + ', sans modificateur ' + r.autre + ' ; PV ×' + JSON.stringify(r.hp) + ', rayon ×' + r.r + ' ; éclosion (' + r.mod + ') : « ' + r.tx.join(' | ') + ' » ; abattue : jauge ' + r.g + ', ' + r.pu + ' power-up' };
+});
+/* une Blindée (un Tireur élite, cd gelé) à 200 u à l'est de la bulle, bouclier vers elle ; un tir de base (1 dégât, sans critique) posé
+   juste devant elle, côté bulle (de face) ou côté opposé (de dos) */
+function blindee(seed, dos) {
+  const H = arene(seed), z = zone(H, 560, 420);
+  if (!z) return null;
+  H.call(`(()=>{const P=G.p;P.x=${z[0] + 120};P.y=${z[1] + 210};G.cx=P.x;G.cy=P.y;const e=mkEnemy('spread',P.x+200,P.y,{spawn:0,age:0,cd:1e9,elite:1});e.mod='blinde';e.sa=Math.PI;e.hp=e.mhp=100;
+    G.fx=[];pbul(e.x${dos ? '+' : '-'}(e.r+8),e.y,${dos ? 'Math.PI' : '0'},{dmg:1,crit:false,pierce:0,split:0,rico:0,home:0});window.__E=e;})()`);
+  H.steps(2);
+  return J(H, `JSON.stringify({d:+(100-window.__E.hp).toFixed(4),bl:G.fx.filter(f=>f.ty===7&&f.col==='#ffffff').length,pb:G.pb.length})`);
+}
+check('V15 Élite blindée : un tir de face (bouclier tourné vers la bulle) fait ×0,2 et lance des étincelles blanches ; un tir dans le dos ×1,5', () => {
+  const a = blindee(4321, false), b = blindee(4322, true);
+  if (!a || !b) return { ok: false, detail: 'aucune zone libre' };
+  return { ok: Math.abs(a.d - .2) < 1e-9 && a.bl >= 3 && Math.abs(b.d - 1.5) < 1e-9 && b.bl === 0, detail: 'de face : ' + a.d + ' dégât (étincelles blanches ' + a.bl + ') ; de dos : ' + b.d + ' (étincelles blanches ' + b.bl + ')' };
+});
+check('V15 visée : une Blindée bouclier face à la bulle (150 u) n’est pas « à découvert » : le tir automatique lui préfère un Tireur à 300 u ; seule, elle reste visée', () => {
+  const H = arene(4323), z = zone(H, 560, 420);
+  if (!z) return { ok: false, detail: 'aucune zone libre' };
+  const r = J(H, `(()=>{const P=G.p;P.x=${z[0] + 310};P.y=${z[1] + 210};G.cx=P.x;G.cy=P.y;const b=mkEnemy('spread',P.x+150,P.y,{spawn:0,age:0,cd:1e9,elite:1});b.mod='blinde';b.sa=Math.PI;
+    const t=mkEnemy('spread',P.x-300,P.y,{spawn:0,age:0,cd:1e9});const a=findTarget(P.x,P.y,700,true);G.en=[b];const s=findTarget(P.x,P.y,700,true);b.sa=0;G.en=[b,t];const d=findTarget(P.x,P.y,700,true);G.en=[];
+    return JSON.stringify({a:a===t?'Tireur':a===b?'Blindée':'rien',s:s===b?'Blindée':'rien',d:d===b?'Blindée':d===t?'Tireur':'rien'});})()`);
+  return { ok: r.a === 'Tireur' && r.s === 'Blindée' && r.d === 'Blindée', detail: 'avec le Tireur : ' + r.a + ' ; seule : ' + r.s + ' ; bouclier tourné ailleurs : ' + r.d };
+});
+check('V15 Élite volatile : sa mort arme une explosion (110 u) qui blesse la bulle à 80 u au 36ᵉ pas, pas avant, et un voisin (,6 × sa vie) ; à 200 u, rien ; un dash au bon moment : esquive parfaite', () => {
+  const pose = (seed, d) => { const H = arene(seed); H.call(`(()=>{const P=G.p;P.inv=0;P.dashing=0;const e=mkEnemy('spread',P.x+${d},P.y,{spawn:0,age:0,cd:1e9,elite:1});e.mod='volatil';
+    window.__F=mkEnemy('spread',P.x+${d},P.y+60,{spawn:0,age:0,cd:1e9,stun:1e9});window.__s0=P.seg;G.perfs=0;killEnemy(e);G.freeze=0;G.pus=[];})()`); return H; };
+  const etat = H => J(H, 'JSON.stringify({s:window.__s0-G.p.seg,v:(G.vol||[]).length,f:+(window.__F.hp/window.__F.mhp).toFixed(3),p:G.perfs||0})');
+  const H = pose(4324, 80); H.steps(35); const a = etat(H); H.steps(1); const b = etat(H);
+  const H2 = pose(4325, 200); H2.steps(40); const c = etat(H2);
+  const H3 = pose(4326, 80); H3.steps(35); H3.call('G.p.perf=0;G.p.dashing=5;G.p.dvx=G.p.dvy=0;'); H3.steps(1); const d = etat(H3);
+  const ok = a.s === 0 && a.v === 1 && a.f === 1 && b.s === 1 && b.v === 0 && Math.abs(b.f - .4) < .001 && c.s === 0 && c.v === 0 && d.s === 0 && d.p === 1;
+  return { ok, detail: 'à 80 u : pas 35 ' + a.s + ' segment perdu (' + a.v + ' explosion armée), pas 36 ' + b.s + ' (voisin à ' + b.f + ' de sa vie) ; à 200 u : ' + c.s + ' ; dash au pas 36 : ' + d.s + ' segment, ' + d.p + ' esquive parfaite' };
+});
+check('V15 Élite vive : ×1,5 plus rapide, sa recharge fond ×1,6, une traînée (FX ty 3)', () => {
+  const H = arene(4327), z = zone(H, 560, 420);
+  if (!z) return { ok: false, detail: 'aucune zone libre' };
+  const r = J(H, `(()=>{const P=G.p;P.x=${z[0] + 280};P.y=${z[1] + 210};G.cx=P.x;G.cy=P.y;G.fx=[];const v=mkEnemy('spread',P.x+250,P.y,{spawn:0,age:0,cd:1e9,elite:1});v.mod='vif';const n=mkEnemy('spread',P.x-250,P.y,{spawn:0,age:0,cd:1e9});
+    for(let i=0;i<60;i++){G.t++;updEnemy(v);updEnemy(n);}const sv=Math.hypot(v.vx,v.vy),sn=Math.hypot(n.vx,n.vy);v.cd=n.cd=1000;v.st=n.st=0;
+    for(let i=0;i<10;i++){updEnemy(v);updEnemy(n);}const o={k:+(sv/sn).toFixed(3),dv:+(1000-v.cd).toFixed(3),dn:+(1000-n.cd).toFixed(3),tr:G.fx.filter(f=>f.ty===3&&f.col===v.col).length};G.en=[];return JSON.stringify(o);})()`);
+  return { ok: r.k >= 1.4 && r.k <= 1.6 && Math.abs(r.dv / r.dn - 1.6) < 1e-6 && r.tr >= 10, detail: 'vitesse ×' + r.k + ' ; recharge en 10 pas : ' + r.dv + ' contre ' + r.dn + ' ; traînée ' + r.tr + ' FX' };
+});
+{
+  /* contexte 2D qui journalise stroke (couleur/épaisseur), arc (rayon) et fill */
+  let LOG = null;
+  const jrn = () => { const base = L.mkCtx(); return new Proxy({}, { get: (t, p) => (LOG && (p === 'stroke' || p === 'arc' || p === 'fill') ? (...a) => { LOG.push(p === 'stroke' ? 's ' + base.strokeStyle + '/' + base.lineWidth : p === 'arc' ? 'a ' + Math.round(a[2]) : 'f'); } : base[p]), set: (t, p, v) => { base[p] = v; return true; } }); };
+  check('V15 dessin : la Blindée porte un arc blanc (épaisseur 4) ; la Volatile est cernée de rouge et de blanc en alternance (8 images) ; l’explosion annoncée : deux arcs rouges, jamais remplie', () => {
+    const H = arene(4328, { mkCtx: jrn });
+    H.call('render(1,16.7)');
+    const d = (mod, fr) => { H.call(`window.__D=mkEnemy('spread',G.p.x+150,G.p.y,{spawn:0,age:0,cd:1e9,elite:1});window.__D.mod='${mod}';FRAME=${fr};`); LOG = []; H.call('drawEnemy(window.__D)'); const l = LOG; LOG = null; return l; };
+    const rd = H.call('COL.rd'), bl = d('blinde', 16), vi = d('vif', 16), v8 = d('volatil', 8), v16 = d('volatil', 16);
+    const bouclier = l => l.includes('s #ffffff/4'), rouge = l => l.some(x => x.startsWith('s ' + rd + '/'));
+    H.call('G.vol=[{x:G.p.x+100,y:G.p.y,t:20,r:110}];'); LOG = []; H.call('drawVol()'); const vo = LOG; LOG = null;
+    const ok = bouclier(bl) && !bouclier(vi) && rouge(v8) && !rouge(v16) && vo.filter(x => x[0] === 'a').length === 2 && vo.filter(x => x[0] === 's').length === 2 && vo.every(x => x[0] !== 's' || x.startsWith('s ' + rd)) && !vo.includes('f');
+    return { ok, detail: 'Blindée : ' + (bouclier(bl) ? 'bouclier' : 'pas de bouclier') + ', Vive : ' + (bouclier(vi) ? 'bouclier' : 'rien') + ' ; Volatile image 8 : ' + (rouge(v8) ? 'rouge' : 'blanche') + ', image 16 : ' + (rouge(v16) ? 'rouge' : 'blanche') + ' ; explosion : ' + vo.join(' ') };
+  });
+}
+
+/* ================= V16 : COURBE =================
+   tu dépasses tes ennemis : le type de l'îlot d'avant (âge 1, encore hostile) naît à FODA de sa vie (il demandait ~10 % de tirs EN
+   PLUS qu'à ses débuts) ; lourds allégés (Gatling 7, Pulsar 7,5, Porteur 12) ; un ennemi touché dégonfle à vue (sa zone de touche
+   reste e.r). La pente de vie (+8 %/îlot) et celle des boss (+10 %) que proposait COURBE sont devenues +12 % et +18 % avec la passe
+   d'équilibrage (voir g2.js, PRAD). Allure intégrée : pilote invulnérable, premier bonus, graines 1 à 3 (les parties de V7, menées
+   jusqu'au bout de l'îlot 6). */
+check('V16 îlot 4 : un type d’âge 1 naît à FODA (≤ ,7) de la vie de base (d.hp × HPM), le type de l’îlot à 1', () => {
+  const H = arene(4330);
+  const r = J(H, `(()=>{const k0=G.isl;G.isl=4;const a=mkEnemy(ETL[2],0,0,{spawn:0}),b=mkEnemy(ETL[3],0,0,{spawn:0});
+    const o={a:a.hp/(a.d.hp*HPM()),b:b.hp/(b.d.hp*HPM()),age:[a.age,b.age],f:typeof FODA==='number'?FODA:null};G.en=[];G.isl=k0;return JSON.stringify(o);})()`);
+  return { ok: r.f != null && r.f <= .7 && Math.abs(r.a - r.f) <= .01 && Math.abs(r.b - 1) < 1e-9, detail: 'FODA ' + r.f + ' ; Tireur (âge ' + r.age[0] + ') ' + r.a.toFixed(3) + ', Tireur d’élite (âge ' + r.age[1] + ') ' + r.b.toFixed(3) };
+});
+check('V16 chaque type, un îlot plus tard (âge 1), se tue en ≤ ,7 × les tirs de base qu’il demandait à son îlot (1,1 × avant)', () => {
+  const H = arene(4331);
+  const r = J(H, `(()=>{const k0=G.isl,o=[];for(let i=0;i<7;i++){const t=ETL[i],k=ET[t].isl,s=kk=>{G.isl=kk;const e=mkEnemy(t,0,0,{spawn:0});G.en=[];return e.hp/Math.pow(GROWD,kk-1);};
+    const a=s(k),b=s(k+1);o.push([ET[t].n,+a.toFixed(1),+b.toFixed(1),+(b/a).toFixed(3)]);}G.isl=k0;return JSON.stringify(o);})()`);
+  return { ok: r.every(x => x[3] <= .7), detail: r.map(x => x[0] + ' ' + x[1] + ' → ' + x[2] + ' (×' + x[3] + ')').join(', ') + ' tirs de base' };
+});
+/* allure : moyenne des graines 1 à 3, par îlot */
+const allure = () => { const S = flux().slice(0, 3), A = {};
+  for (let k = 1; k <= 6; k++) { const a = A[k] = { n: 0, play: 0, w: 0, wk: 0, pu: 0, m: 0, x2: 0 };
+    for (const q of S) { if (!q[k]) continue; a.n++; a.play += q[k].play; a.w += q[k].w; a.wk += q[k].wk; a.pu += q[k].pu; if (q.M && q.M[k]) { a.m += q.M[k].n; a.x2 += q.M[k].x2; } } }
+  return A; };
+check('V16 allure (pilote invulnérable, premier bonus, graines 1 à 3) : îlot 1 en ≤ 50 s de jeu (~57 avant), îlot 4 en ≤ 120 s (~158)', () => {
+  const A = allure(), t = k => A[k].n === 3 ? A[k].play / 60 / 3 : Infinity;
+  return { ok: t(1) <= 50 && t(4) <= 120, detail: [1, 2, 3, 4, 5, 6].map(k => 'îlot ' + k + ' : ' + (A[k].n === 3 ? t(k).toFixed(1) + ' s' : A[k].n + ' / 3 partie(s)')).join(', ') };
+});
+check('V16 îlot 4 : ≥ 1,2 kill par seconde de vague (~,46 avant)', () => {
+  const A = allure(), v = k => A[k].w ? A[k].wk / (A[k].w / 60) : 0;
+  return { ok: A[4].n === 3 && v(4) >= 1.2, detail: [1, 2, 3, 4, 5, 6].map(k => 'îlot ' + k + ' : ' + v(k).toFixed(2) + '/s').join(', ') };
+});
+check('V16 îlots 1 à 6 : ≥ 50 % des kills à ×2 ou plus (série de 10 et plus ; 2 à 20 % avant), sur chaque îlot', () => {
+  const A = allure(), p = k => A[k].m ? A[k].x2 / A[k].m : 0;
+  return { ok: [1, 2, 3, 4, 5, 6].every(k => A[k].n === 3 && p(k) >= .5), detail: [1, 2, 3, 4, 5, 6].map(k => 'îlot ' + k + ' : ' + (100 * p(k)).toFixed(0) + ' % de ' + A[k].m).join(', ') };
+});
+check('V16 îlots 1 à 6 : un power-up chronométré actif ≥ 25 % du temps de jeu, sur chaque îlot', () => {
+  const A = allure(), p = k => A[k].play ? A[k].pu / A[k].play : 0;
+  return { ok: [1, 2, 3, 4, 5, 6].every(k => A[k].n === 3 && p(k) >= .25), detail: [1, 2, 3, 4, 5, 6].map(k => 'îlot ' + k + ' : ' + (100 * p(k)).toFixed(0) + ' %').join(', ') };
+});
+{
+  /* contexte 2D qui journalise le demi-grand axe des ellipse (le Porteur se trace en ellipse) */
+  let LOG = null;
+  const jrn = () => { const base = L.mkCtx(); return new Proxy({}, { get: (t, p) => (LOG && p === 'ellipse' ? (...a) => { LOG.push(a[2]); } : base[p]), set: (t, p, v) => { base[p] = v; return true; } }); };
+  check('V16 dessin : touché, un ennemi dégonfle (à 10 % de vie, tracé × ,865 ; sa zone de touche reste e.r) ; une proie non', () => {
+    const H = arene(4332, { mkCtx: jrn });
+    H.call('render(1,16.7)');
+    const d = (age, f) => { H.call(`window.__D=mkEnemy('spawner',G.p.x+200,G.p.y,{spawn:0,age:${age},cd:1e9,wob:0});window.__D.hp=window.__D.mhp*${f};RT=0;`); LOG = []; H.call('drawEnemy(window.__D)'); const l = LOG[0]; LOG = null; return { rx: l, r: H.call('window.__D.r') }; };
+    const a = d(0, 1), b = d(0, .1), c = d(2, 1), e = d(2, .1), k = b.rx / a.rx;
+    return { ok: Math.abs(k - .865) < .002 && b.r === a.r && c.rx === e.rx, detail: 'Porteur à 10 % : tracé ×' + k.toFixed(3) + ' (rayon de touche ' + a.r + ' → ' + b.r + ') ; proie : ' + c.rx.toFixed(2) + ' → ' + e.rx.toFixed(2) };
+  });
+}
+
+if (LONG && (!SEUL || 'V16 équilibre'.startsWith(SEUL.slice(0, 14)))) {
+  /* PASSE D'ÉQUILIBRAGE (COURBE, la plus risquée : tout le plan s'y juge) : le pilote NATUREL (sans aide ; bonus au hasard, comme la
+     partie « naturelle » de headless.js, que la graine 12345 rejoue à l'identique), douze graines, 40 min de jeu au plus chacune.
+     Touche : un coup qui porte (segment ou bouclier perdu), compté en vague. Échelle de réglage si le pilote gagne trop : FODA
+     ,6 → ,7, puis la pente de HPM ,08 → ,12, puis EBK ; elle n’a pas suffi (13/10/2026 : 9 à 12 victoires sur 12), le réglage
+     retenu est décrit dans g2.js (PRAD). */
+  const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12345];
+  const R = SEEDS.map(seed => {
+    const H = L.mkGame({ ref: REF, seed }); let fin = null;
+    H.win.__SIM_PICK = c => c[Math.floor(H.call('Math.random()') * c.length)]; H.win.__SIM_END = w => { fin = w; };
+    H.ai(false); H.start();
+    H.call(`window.__HU={};(function(){const _h=hurtPlayer;hurtPlayer=function(x,y){const P=G.p;if(G.state==='play'&&G.ph==='wave'&&!P.dead&&!(P.inv>0)&&!(P.dashing>0)&&!(P.gon>0)&&!(P.pu.inv>0)){const k=G.isl;window.__HU[k]=(window.__HU[k]||0)+1;}return _h(x,y);};})();`);
+    const W = {}, wv = H.call("(function(){return G.state==='play'&&G.ph==='wave'?G.isl:0;})"); let n = 0;
+    for (; n < 60 * 60 * 40 && fin === null; n++) { H.STEP(); H.advance(1000 / 60); const k = wv(); if (k) W[k] = (W[k] || 0) + 1; }
+    const r = { seed, fin, isl: H.call('G.isl'), min: n / 3600, hu: J(H, 'JSON.stringify(window.__HU)'), w: W, picks: H.call('G.picks.join(",")') };
+    console.log('  graine ' + String(seed).padStart(5) + ' : ' + (fin === true ? 'VICTOIRE' : fin === false ? 'défaite à l’îlot ' + r.isl : 'coupée (40 min) à l’îlot ' + r.isl) + ', ' + r.min.toFixed(1) + ' min ; touches en vague ' +
+      [1, 2, 3, 4, 5, 6, 7, 8].map(k => (r.hu[k] || 0) + '/' + ((W[k] || 0) / 3600).toFixed(1)).join(' ') + ' (touches/min par îlot)');
+    return r;
+  });
+  const win = R.filter(r => r.fin === true).length, tot = R.find(r => r.seed === 12345), tot12 = R.filter(r => !(r.fin === false && r.isl <= 2)).length;
+  const h34 = R.reduce((s, r) => s + (r.hu[3] || 0) + (r.hu[4] || 0), 0), w34 = R.reduce((s, r) => s + (r.w[3] || 0) + (r.w[4] || 0), 0) / 3600;
+  check('V16 équilibre (--long, pilote naturel, 12 graines) : ≤ 6 victoires sur 12', () => ({ ok: win <= 6, detail: win + ' / 12 (graines gagnées : ' + (R.filter(r => r.fin === true).map(r => r.seed).join(', ') || 'aucune') + ')' }));
+  check('V16 équilibre : la graine 12345 (la partie « naturelle » de headless.js) est perdue', () => ({ ok: tot.fin === false, detail: tot.fin === false ? 'défaite à l’îlot ' + tot.isl : tot.fin ? 'VICTOIRE' : 'coupée à 40 min' }));
+  check('V16 équilibre : aucune mort aux îlots 1 et 2 dans ≥ 10 graines sur 12', () => ({ ok: tot12 >= 10, detail: tot12 + ' / 12 (morts aux îlots 1-2 : ' + (R.filter(r => r.fin === false && r.isl <= 2).map(r => r.seed + ' à l’îlot ' + r.isl).join(', ') || 'aucune') + ')' }));
+  check('V16 équilibre : ≥ 2 touches par minute de vague aux îlots 3 et 4', () => ({ ok: w34 > 0 && h34 / w34 >= 2, detail: h34 + ' touches en ' + w34.toFixed(1) + ' min de vague : ' + (w34 ? (h34 / w34).toFixed(2) : '-') + '/min' }));
+}
 
 console.log('test/vivacite.js — ' + (REF ? 'code ' + REF : 'arbre de travail') + (SEUL ? ' — SEULS les critères « ' + SEUL + '… »' : ''));
 for (const c of checks) console.log((c.ok ? '  OK    ' : '  ECHEC ') + c.name + '\n         ' + c.detail);
