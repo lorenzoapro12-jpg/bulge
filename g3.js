@@ -16,6 +16,9 @@ function spr(key,size,fn){let s=SPR[key];if(!s){s=mkCanvas(size,size);fn(s.getCo
 function glowSpr(col){return spr('g'+col,64,g=>{const gr=g.createRadialGradient(32,32,0,32,32,32);gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(.18,rgba(col,1));gr.addColorStop(.45,rgba(col,.35));gr.addColorStop(1,rgba(col,0));g.fillStyle=gr;g.fillRect(0,0,64,64);});}
 function softSpr(col){return spr('s'+col,64,g=>{const gr=g.createRadialGradient(32,32,0,32,32,32);gr.addColorStop(0,rgba(col,.9));gr.addColorStop(.5,rgba(col,.32));gr.addColorStop(1,rgba(col,0));g.fillStyle=gr;g.fillRect(0,0,64,64);});}
 function ebSpr(col){return spr('e'+col,64,g=>{const gr=g.createRadialGradient(32,32,0,32,32,32);gr.addColorStop(0,'#fff');gr.addColorStop(.2,'#fff');gr.addColorStop(.3,rgba(col,1));gr.addColorStop(.5,rgba(col,.55));gr.addColorStop(.62,'rgba(0,0,0,.5)');gr.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=gr;g.fillRect(0,0,64,64);});}
+/* orbe du Pulsar (sh) : ebSpr cerclé de blanc, cuit une fois (le cercle tracé à chaque image coûtait ~17 µs par orbe en canevas
+   logiciel, 3 à 4 × le sprite). Posé à s = 2,9 r, r = 8 : le cercle (r + 2) tombe à 10/23,2 du demi-sprite, trait 1,5 à l'échelle */
+function orbSpr(col){return spr('o'+col,64,g=>{g.drawImage(ebSpr(col),0,0);g.strokeStyle='#ffffff';g.globalAlpha=.7;g.lineWidth=1.5*32/23.2;g.beginPath();g.arc(32,32,32*10/23.2,0,TAU);g.stroke();g.globalAlpha=1;});}
 function shadowSpr(){return spr('shd',64,g=>{const gr=g.createRadialGradient(32,32,0,32,32,32);gr.addColorStop(0,'rgba(0,0,0,.6)');gr.addColorStop(.55,'rgba(0,0,0,.28)');gr.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=gr;g.fillRect(0,0,64,64);});}
 function sphSpr(col,big){const S=big?256:96;return spr((big?'B':'b')+col,S,(g,s)=>{const r=s/2;
   let gr=g.createRadialGradient(r*.7,r*.6,r*.04,r,r,r);gr.addColorStop(0,rgba(col,.62));gr.addColorStop(.45,rgba(col,.17));gr.addColorStop(.8,rgba(col,.36));gr.addColorStop(1,rgba(col,1));
@@ -729,11 +732,10 @@ function drawBullets(){
   for(const col in groups){const L=groups[col];c.strokeStyle=col;c.globalAlpha=.5;c.lineWidth=L[0].r*1.1;c.beginPath();for(const b of L){const tl=b.tl||2.2;c.moveTo(b.x-b.vx*tl,b.y-b.vy*tl);c.lineTo(b.x,b.y);}c.stroke();for(const b of L)glow(b.x,b.y,b.r*2.6,col,1);}
   c.globalCompositeOperation='source-over';c.lineCap='butt';c.globalAlpha=1;
   /* tirs ennemis : un sprite (couleur du type) ; l'aiguille du Tireur d'élite (ndl) en trait, groupée : un chemin, deux stroke ;
-     les orbes du Pulsar (sh, destructibles) cerclés de blanc, en un seul stroke */
-  let nn=0,ns=0,nc=null;
-  for(const b of G.eb){if(!vis(b.x,b.y,20))continue;if(b.ndl){nn++;nc=b.col;continue;}if(b.sh)ns++;const s=b.r*2.9;if(TF1)img1(ebSpr(b.col),'e'+b.col,b.x,b.y,s);else c.drawImage(ebSpr(b.col),b.x-s,b.y-s,s*2,s*2);}
+     les orbes du Pulsar (sh, destructibles) : leur sprite cerclé de blanc (orbSpr ; clé de taille naturelle 'o', distincte) */
+  let nn=0,nc=null;
+  for(const b of G.eb){if(!vis(b.x,b.y,20))continue;if(b.ndl){nn++;nc=b.col;continue;}const s=b.r*2.9,S=b.sh?orbSpr(b.col):ebSpr(b.col);if(TF1)img1(S,(b.sh?'o':'e')+b.col,b.x,b.y,s);else c.drawImage(S,b.x-s,b.y-s,s*2,s*2);}
   if(nn){c.beginPath();for(const b of G.eb)if(b.ndl&&vis(b.x,b.y,20)){c.moveTo(b.x-b.vx*1.7,b.y-b.vy*1.7);c.lineTo(b.x,b.y);}c.strokeStyle=nc;c.lineWidth=3;c.stroke();c.strokeStyle='#ffffff';c.lineWidth=1.2;c.stroke();}
-  if(ns){c.beginPath();for(const b of G.eb)if(b.sh&&vis(b.x,b.y,20)){c.moveTo(b.x+b.r+2,b.y);c.arc(b.x,b.y,b.r+2,0,TAU);}c.strokeStyle='#ffffff';c.lineWidth=1.5;c.globalAlpha=.7;c.stroke();c.globalAlpha=1;}
 }
 /* étincelles en trait (FX ty 7, lineSparks) groupées par couleur : un seul stroke par couleur et par image */
 const FX7={};

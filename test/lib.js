@@ -186,7 +186,9 @@ window.__SIM_INPUT = function(){
     const R = e.r + P.r + 150; if (d < R) { vx += dx / d * (R - d) / R * 2.5; vy += dy / d * (R - d) / R * 2.5; }
     /* mêlée (MELEE, 08/10/2026) : hors du trait d'une Épine qui vise (st 1). Pas d'écart devant une Mite qui s'apprête à bondir :
        elle vise le point de rencontre, un pas de côté régulier est justement ce qu'elle anticipe (le dash, plus bas, l'esquive).
-       Sur un code plus ancien, ces champs n'existent pas ou ne prennent pas ces valeurs : rien ne change. */
+       Ces règles agissent aussi sur un code plus ancien (379e0fb a déjà l'Épine st 1/2 et e.ca, le bond de Mite st 1, le e.tele du
+       Tireur d'élite) : une mesure --ref= se fait avec CE pilote des deux côtés, pas avec celui du commit (seuls ripe, G.vol et la
+       Mite st 3 sont absents d'un ancien code). */
     const ux = Math.cos(e.ca || 0), uy = Math.sin(e.ca || 0), sl = -dx * uy + dy * ux, sg = sl >= 0 ? 1 : -1;
     if (e.t === 'spike' && e.st === 1) { const s = dx * ux + dy * uy; if (s > -P.r && s < 340 + P.r && Math.abs(sl) < P.r + 40) { vx += -uy * sg * 3; vy += ux * sg * 3; } }
     /* TIREURS : hors de la ligne d'un Tireur d'élite dont la visée est verrouillée (0 < tele ≤ 12) */
